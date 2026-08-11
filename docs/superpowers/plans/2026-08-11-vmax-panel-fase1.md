@@ -1879,6 +1879,22 @@ Expected: FAIL con `AttributeError: module 'vmaxpanel.layout.loader' has no attr
 
 - [ ] **Step 3: Implementar**
 
+> **⚠️ El código de abajo tiene dos defectos, arreglados en `1098802` y `e11184f`. Mirá
+> `vmaxpanel/layout/loader.py` en el repo, que es la versión buena.**
+>
+> 1. **`_is_default`/`_widget_dict` rompían el round-trip.** Omitían todo campo cuyo valor
+>    coincidiera con el default de su dataclass — incluidos los **obligatorios**. El `color`
+>    del widget `text` valía `#FFFFFF`, igual que el default, así que desaparecía del archivo
+>    guardado y `validate()` lo rechazaba al recargar. Reemplazado por serialización
+>    incondicional de todos los campos; el JSON queda no-mínimo (emite defaults, incluido
+>    `null` en `min`/`max`) a cambio de ser correcto.
+> 2. **`f"{r.value:g}"` rompía los umbrales grandes.** Pasa a notación científica desde 1e6 y
+>    pierde precisión arriba de 6 dígitos significativos, y `schema._RULE_RE` no matchea
+>    exponentes — así que una regla con umbral grande se guardaba y no volvía a cargar. El
+>    arreglo formatea vía `repr()` y, si eso sale exponencial, lo reubica con `Decimal` sin
+>    tocar dígitos significativos. **El regex no se toca**: es el borde de "los layouts son
+>    datos, no expresiones".
+
 `vmaxpanel/layout/loader.py`:
 
 ```python
