@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.superpowers/
+
+daemon/panel.log
+daemon/panel.err
+daemon/panel.pid
+
+# DLLs de terceros: se redistribuyen aparte, con su aviso de licencia
+# (LibreHardwareMonitorLib MPL-2.0, HidSharp MIT)
+daemon/*.dll
+
+# Consolas es de Microsoft: no se redistribuye
+daemon/assets/consola.ttf
+daemon/assets/consolab.ttf
+
+# arte del tema Vitals de LCD Control: no se redistribuye
+daemon/assets/back.png
+
+# evidencia de reversing y transcript de la sesion: no son codigo
+research/
+transcript/
+
+preview*.png
