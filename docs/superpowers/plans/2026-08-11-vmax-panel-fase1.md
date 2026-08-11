@@ -52,10 +52,11 @@ vmaxpanel/
     panel_link.py             autodetección, SN, handshake, brillo, envío, FakeTransport
   engine.py                   loop, cadencias, hot-reload
   cli.py                      python -m vmaxpanel
+  sensors.ps1                 sidecar nuevo: ids canónicos, caps, base clock detectado
+  lib/                        copia de las DLL de terceros que necesita el sidecar
   profiles/
     vitals.json               perfil por defecto, paridad con el panel actual
-daemon/
-  sensors.ps1                 modificado: ids canónicos, caps, base clock detectado
+daemon/                       SIN TOCAR: es la vuelta atrás durante toda la fase 1
 tests/
   test_metrics.py  test_providers.py  test_registry.py  test_schema.py
   test_loader.py  test_fonts.py  test_widgets.py  test_background.py
@@ -650,9 +651,15 @@ git commit -m "feat: capa de providers con resolucion por prioridad y degradado"
 El sidecar actual emite claves propias (`cpu_temp`, `vrm_temp`, `gpu_load`, `disks[]`) y mezcla tres orígenes distintos en un solo objeto plano, con el base clock del i5-12400F quemado. Pasa a emitir **ids canónicos ya namespaceados por provider**, más un bloque `caps` que dice qué funcionó en esta máquina. Así el lado Python no traduce nombres y `probe()` se contesta con un dato real en vez de una adivinanza.
 
 **Files:**
-- Modify: `daemon/sensors.ps1` (reescritura completa)
+- Create: `vmaxpanel/sensors.ps1` (sidecar nuevo; `daemon/sensors.ps1` queda intacto como vuelta atrás)
+- Create: `vmaxpanel/lib/` con copia de `LibreHardwareMonitorLib.dll`, `HidSharp.dll`, `HidLibrary.dll`
 - Create: `vmaxpanel/providers/sidecar.py`, `vmaxpanel/providers/sidecar_providers.py`, `vmaxpanel/providers/msr.py`
 - Test: `tests/test_sidecar.py`
+
+**Por qué un archivo nuevo y no una reescritura:** `daemon/panel.py` lee las claves planas del
+sidecar viejo (`cpu_temp`, `gpu_load`, `disks`). Reescribir `daemon/sensors.ps1` in place lo
+dejaría mostrando `--` en todo el hardware al primer reinicio, y la Definición de Terminado
+exige que el daemon viejo siga siendo una vuelta atrás intacta.
 
 **Interfaces:**
 - Consumes: `Provider` ABC de Task 2.
@@ -663,7 +670,7 @@ El sidecar actual emite claves propias (`cpu_temp`, `vrm_temp`, `gpu_load`, `dis
 
 - [ ] **Step 1: Reescribir el sidecar**
 
-`daemon/sensors.ps1`:
+`vmaxpanel/sensors.ps1` (las DLL se buscan en `$PSScriptRoot\lib\`):
 
 ```powershell
 # Sidecar de sensores para VMax Panel.
@@ -768,7 +775,7 @@ while ($true) {
 
 - [ ] **Step 2: Verificar a mano que el sidecar emite el formato nuevo**
 
-Run: `powershell -NoProfile -ExecutionPolicy Bypass -File daemon\sensors.ps1`
+Run: `powershell -NoProfile -ExecutionPolicy Bypass -File vmaxpanel\sensors.ps1`
 Expected: una línea JSON por segundo con las claves `gsa1`, `pdh`, `lhm`, `caps`; en esta máquina `caps` debe dar `{"gsa1":true,"pdh":true,"lhm":true}`. Cortar con Ctrl+C.
 
 Si `caps.gsa1` sale `false`, el daemon viejo está corriendo y hay contención por WMI: `daemon\stop.ps1` primero.
@@ -1108,7 +1115,7 @@ Expected: PASS, 21 tests
 - [ ] **Step 10: Commit**
 
 ```bash
-git add daemon/sensors.ps1 vmaxpanel/providers/sidecar.py vmaxpanel/providers/sidecar_providers.py vmaxpanel/providers/msr.py tests/test_sidecar.py
+git add vmaxpanel/sensors.ps1 vmaxpanel/providers/sidecar.py vmaxpanel/providers/sidecar_providers.py vmaxpanel/providers/msr.py tests/test_sidecar.py
 git commit -m "feat: sidecar con ids canonicos y capabilities; providers gsa1/pdh/lhm/msr"
 ```
 
@@ -4163,7 +4170,7 @@ from .render.renderer import Renderer
 from .transport.panel_link import PanelLink
 
 HERE = Path(__file__).resolve().parent
-SIDECAR = HERE.parent / "daemon" / "sensors.ps1"
+SIDECAR = HERE / "sensors.ps1"
 
 
 def default_profile_path() -> Path:
@@ -4279,7 +4286,7 @@ En `README.md`, reemplazar la sección **Editar** por la tabla nueva:
 | Fondo | el bloque `background` del perfil |
 | Qué métricas existen | `vmaxpanel/metrics.py` |
 | De dónde sale cada métrica | `vmaxpanel/providers/` |
-| Sensores nuevos del sidecar | `daemon/sensors.ps1` |
+| Sensores nuevos del sidecar | `vmaxpanel/sensors.ps1` |
 
 Y agregar en `CLAUDE.md`, bajo *Lo que no hay que reinvestigar*:
 

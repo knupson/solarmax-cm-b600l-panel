@@ -10,6 +10,7 @@ daemon/panel.pid
 # DLLs de terceros: se redistribuyen aparte, con su aviso de licencia
 # (LibreHardwareMonitorLib MPL-2.0, HidSharp MIT)
 daemon/*.dll
+vmaxpanel/lib/*.dll
 
 # Consolas es de Microsoft: no se redistribuye
 daemon/assets/consola.ttf
