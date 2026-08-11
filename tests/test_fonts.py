@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from PIL import ImageFont
 
 from vmaxpanel.layout.model import Font
@@ -62,6 +64,46 @@ def test_nonexistent_extra_dir_does_not_crash(tmp_path):
     f = r.resolve(Font("Consolas", 20))
     assert f is not None
     assert "consolas" in r.index()
+
+
+def test_unlistable_dir_is_skipped_once_and_index_is_still_cached(tmp_path, monkeypatch):
+    """Un directorio que no se puede listar (permiso denegado, recurso de
+    red caido) no debe impedir que el indice se termine de construir y se
+    cachee. Si el error escapara de _build_index(), self._index nunca se
+    asignaria y CADA resolve() reintentaria reconstruir el indice completo
+    -- en un panel a 1 fps con varios widgets de texto, eso reabre cientos
+    de archivos por segundo, para siempre. Ademas el directorio roto tiene
+    que quedar visible en unreadable_dirs(), igual que missing() deja ver
+    las familias ausentes.
+
+    No hay forma comoda de dejar un directorio real "no listable" en
+    Windows dentro de un test, asi que se simula parcheando Path.iterdir
+    para que ese directorio en particular levante PermissionError.
+    """
+    broken = tmp_path / "roto"
+    broken.mkdir()
+
+    original_iterdir = Path.iterdir
+    calls = []
+
+    def fake_iterdir(self):
+        if self == broken:
+            calls.append(1)
+            raise PermissionError("acceso denegado (simulado)")
+        return original_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", fake_iterdir)
+
+    r = FontResolver(extra_dirs=[broken])
+    idx1 = r.index()
+    assert "consolas" in idx1
+    assert broken in r.unreadable_dirs()
+    assert len(calls) == 1
+
+    idx2 = r.index()
+    assert idx2 is idx1
+    r.resolve(Font("Consolas", 20))
+    assert len(calls) == 1  # no se reintento el directorio roto
 
 
 def test_unreadable_font_file_does_not_break_the_whole_index(tmp_path):

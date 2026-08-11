@@ -50,20 +50,45 @@ class FontResolver:
         self._index: dict[str, dict[str, Path]] | None = None
         self._cache: dict[tuple, ImageFont.FreeTypeFont] = {}
         self._missing: set[str] = set()
+        self._unreadable_dirs: set[Path] = set()
 
     def index(self) -> dict[str, dict[str, Path]]:
         if self._index is None:
             self._index = self._build_index()
         return self._index
 
+    def unreadable_dirs(self) -> set[Path]:
+        """Directorios de _dirs que existen pero no se pudieron listar
+        (permiso denegado, recurso de red caido, etc). No tumba el
+        indexado -- se saltean y el resto del indice se construye igual --
+        pero es una mala configuracion real y por eso queda visible aca,
+        igual que missing() deja ver las familias ausentes.
+        """
+        return set(self._unreadable_dirs)
+
     def _build_index(self) -> dict[str, dict[str, Path]]:
         idx: dict[str, dict[str, Path]] = {}
         for d in self._dirs:
-            if not d.is_dir():
-                # extra_dirs lo puede pasar el caller con cualquier cosa;
-                # un directorio inexistente no debe tumbar el indexado.
+            try:
+                if not d.is_dir():
+                    # extra_dirs lo puede pasar el caller con cualquier
+                    # cosa; un directorio inexistente no debe tumbar el
+                    # indexado.
+                    continue
+                paths = sorted(d.iterdir())
+            except OSError:
+                # permiso denegado, recurso de red caido, etc. Si esto
+                # escapara de _build_index(), self._index nunca se
+                # asignaria y CADA resolve() reintentaria reconstruir el
+                # indice completo (todos los directorios, todos los
+                # archivos) una y otra vez -- en un panel a 1 fps con
+                # varios widgets de texto eso son cientos de aperturas de
+                # archivo por segundo, para siempre. Se saltea el
+                # directorio roto, se anota, y el resto del indice se
+                # sigue construyendo y cachea normalmente.
+                self._unreadable_dirs.add(d)
                 continue
-            for path in sorted(d.iterdir()):
+            for path in paths:
                 if path.suffix.lower() not in _EXTS or not path.is_file():
                     continue
                 family, style = self._names(path)
