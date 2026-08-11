@@ -68,6 +68,12 @@ class Renderer:
     editor para su preview en vivo. Ambos tienen que ver exactamente lo
     mismo, asi que esta clase no puede tener una segunda implementacion en
     otro lado.
+
+    `set_panel_size(panel_size)` cambia solo el tamano real del panel sin
+    tocar el layout activo (recalcula todo delegando en set_layout()); no
+    aparece en la lista de interfaces del brief de esta tarea, pero es API
+    publica igual -- pensada para un editor que deja el layout fijo y
+    prueba distintos tamanos de panel.
     """
 
     def __init__(self, layout, panel_size: Size | None = None, assets_dir=DEFAULT_ASSETS):
@@ -112,13 +118,32 @@ class Renderer:
         self._exact_fit = self._content_size == (self.size.width, self.size.height)
 
         self._bg = BackgroundSource(layout.background, self.size, self.assets_dir)
+        # Fuerza el build del fondo ahora, no en el primer frame(): _build()
+        # es quien agrega los warnings de fondo degradado (asset faltante,
+        # tipo de fase 2, etc), y BackgroundSource los cachea para siempre
+        # despues del primer frame() (ver su docstring). Sin esto,
+        # warnings() llamado antes de cualquier frame() veria una lista de
+        # fondo vacia aunque el fondo SI tenga un problema real. El costo es
+        # un build + una copia de mas por cambio de layout, no por cuadro.
+        self._bg.frame()
+
+        # missing() de FontResolver es diagnostico DEL LAYOUT ACTUAL: una
+        # familia que el layout viejo pedia y no encontraba no puede seguir
+        # apareciendo en warnings() despues de cambiar a un layout que ni
+        # siquiera la nombra -- exactamente el caso que vive el editor de
+        # fase 3, que mantiene un solo Renderer y llama set_layout() en
+        # cada edicion. El indice y la cache de fuentes SI sobreviven
+        # (reset_missing() no los toca): son estado de la maquina, no del
+        # layout, y rehacerlos en cada edicion recorreria de nuevo todos
+        # los directorios de fuente por nada.
+        self._fonts.reset_missing()
 
         # Precalienta el resolver con las fuentes que este layout va a usar,
         # en la escala que este renderer tiene fija. Sin esto, warnings()
         # llamado antes del primer frame() no veria ninguna fuente ausente
-        # todavia -- resolve() es quien las anota en _missing, y hasta ahora
-        # nadie lo habia llamado. Tambien evita pagar la carga de la fuente
-        # dentro del primer frame().
+        # todavia -- resolve() es quien las anota en _missing, y recien se
+        # limpio arriba. Tambien evita pagar la carga de la fuente dentro
+        # del primer frame().
         for font in layout.fonts.values():
             self._fonts.resolve(font, self.scale)
 

@@ -93,3 +93,102 @@ def test_history_ignores_text_metrics():
     h = History()
     h.push({"cpu.name": "INTEL", "cpu.load": 5.0})
     assert "cpu.name" not in h.series()
+
+
+def test_set_layout_forgets_stale_missing_font_warnings():
+    # El editor de fase 3 mantiene un Renderer de larga vida y llama
+    # set_layout() en cada edicion. Una familia ausente en el layout VIEJO
+    # no puede seguir apareciendo en warnings() una vez que el layout nuevo
+    # ni siquiera la nombra -- si sobreviviera, el diagnostico del editor
+    # estaria mintiendo sobre el layout que esta activo ahora.
+    r = Renderer(layout(fonts={"mono-14": {"family": "NoExiste", "size": 14},
+                               "mono-bold-60": {"family": "NoExiste", "size": 60}}))
+    assert any("NoExiste" in w for w in r.warnings())
+
+    r.set_layout(layout())  # MINIMAL, con Consolas: no nombra "NoExiste"
+    assert not any("NoExiste" in w for w in r.warnings())
+
+
+def _full_bleed_layout(dw, dh, color="#3987E5", bg="#0F1218"):
+    """Layout minimo con un solo widget 'bar' que cubre TODO designed_for.
+    _draw_bar dibuja su rectangulo 'track' sin condicion (el valor solo
+    afecta el relleno de progreso encima), asi que con w.track == w.fill un
+    color uniforme marca exactamente donde cae el contenido escalado, sin
+    que texto ni bordes redondeados compliquen la lectura de pixeles.
+    """
+    raw = {
+        "version": 1, "name": "letterbox-test",
+        "designed_for": {"width": dw, "height": dh},
+        "panel": {"rotate": 0, "brightness": 100, "fps": 1, "jpeg_quality": 82},
+        "fonts": {"mono-14": {"family": "Consolas", "size": 14}},
+        "background": {"type": "solid", "color": bg},
+        "widgets": [
+            {"id": "full", "type": "bar", "metric": "cpu.load", "x": 0, "y": 0,
+             "w": dw, "h": dh, "radius": 0, "fill": color, "track": color},
+        ],
+    }
+    assert schema.validate(raw) == []
+    return schema.build(raw)
+
+
+def test_fast_and_slow_paths_agree_at_identity_scale():
+    # scale == 1.0 (panel_size None) toma el camino rapido: dibuja los
+    # widgets directo sobre la copia del fondo, sin la capa RGBA
+    # intermedia que usa el caso con letterbox. Ambos caminos tienen que
+    # producir el mismo frame -- si no coincidieran, el editor de fase 3
+    # (que puede terminar en cualquiera de los dos segun el tamano de
+    # panel que este probando) mostraria una preview distinta de lo que el
+    # servicio manda al hardware. Se fuerza el camino lento a mano en vez
+    # de confiar en que algun panel_size lo dispare, para probar los dos
+    # caminos de verdad y no solo el que sale por default.
+    fast = Renderer(layout())
+    assert fast._exact_fit is True
+    slow = Renderer(layout())
+    slow._exact_fit = False
+
+    a, b = fast.frame(SAMPLE), slow.frame(SAMPLE)
+    assert a.size == b.size == (320, 1480)
+    assert a.tobytes() == b.tobytes()
+
+
+def test_centering_places_content_symmetrically_away_from_both_margins():
+    # designed_for 100x200, panel 100x100: la altura manda la escala
+    # (0.5), el contenido escalado mide 50px de ancho contra un lienzo de
+    # 100 -- 50px de sobrante repartidos 25/25. Si el offset no se
+    # calculara (el bug del brief original), el bloque ocuparia las
+    # columnas 0..49 y no 25..74: se verifica el margen IZQUIERDO
+    # (ausente en ese bug) y no solo que "algo" este centrado.
+    lay = _full_bleed_layout(100, 200)
+    r = Renderer(lay, panel_size=model.Size(100, 100))
+    assert r.scale == 0.5
+    assert r._content_size == (50, 100)
+    assert r._offset == (25, 0)
+
+    im = r.frame({})
+    bg, fg = (15, 18, 24), (57, 135, 229)          # #0F1218, #3987E5
+    assert im.getpixel((0, 50)) == bg              # margen izquierdo
+    assert im.getpixel((24, 50)) == bg             # ultima columna aun sin contenido
+    assert im.getpixel((25, 50)) == fg             # arranca el contenido
+    assert im.getpixel((74, 50)) == fg             # ultima columna de contenido
+    assert im.getpixel((75, 50)) == bg             # margen derecho
+    assert im.getpixel((99, 50)) == bg
+
+
+def test_centering_floor_divides_an_odd_leftover_pixel():
+    # Mismo layout, pero panel 101x100: el sobrante horizontal es 51px
+    # (impar), asi que no se puede repartir igual de los dos lados.
+    # (target.width - content.width) // 2 -- floor, no round -- tiene que
+    # dar 25 a la izquierda y dejar el pixel suelto a la derecha (26), no
+    # partir la diferencia con un redondeo que numeros pares no distinguen.
+    lay = _full_bleed_layout(100, 200)
+    r = Renderer(lay, panel_size=model.Size(101, 100))
+    assert r._content_size == (50, 100)
+    assert r._offset == (25, 0)                    # floor(51/2), no round(51/2)
+
+    im = r.frame({})
+    bg, fg = (15, 18, 24), (57, 135, 229)
+    assert im.getpixel((24, 50)) == bg              # margen izquierdo: 25px (0..24)
+    assert im.getpixel((25, 50)) == fg
+    assert im.getpixel((74, 50)) == fg
+    assert im.getpixel((75, 50)) == bg              # margen derecho: 26px (75..100)
+    assert im.getpixel((100, 50)) == bg

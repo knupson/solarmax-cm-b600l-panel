@@ -117,6 +117,27 @@ def test_unreadable_font_file_does_not_break_the_whole_index(tmp_path):
     assert "consolas" in f.getname()[0].lower()
 
 
+def test_reset_missing_forgets_missing_but_keeps_the_index_and_cache():
+    """reset_missing() es diagnostico por layout, no por maquina: un
+    Renderer de larga vida (el editor de fase 3) reusa un solo FontResolver
+    a traves de varios set_layout() y tiene que poder olvidar una familia
+    que el layout anterior pedia y el nuevo ya no. El indice y la cache de
+    fuentes ya resueltas son estado de la maquina -- que archivos hay, que
+    ImageFont ya se cargo -- y no tienen que rehacerse por eso.
+    """
+    r = FontResolver()
+    r.resolve(Font("NoExisteEstaFuente", 20))
+    assert "NoExisteEstaFuente" in r.missing()
+    idx_before = r.index()
+    cached_before = r.resolve(Font("Consolas", 20))
+
+    r.reset_missing()
+
+    assert not r.missing()
+    assert r.index() is idx_before                    # no se reconstruyo
+    assert r.resolve(Font("Consolas", 20)) is cached_before  # cache intacta
+
+
 def test_filename_bold_hint_does_not_override_explicit_regular_style():
     """Algunos archivos del sistema tienen 'bd' en el nombre por casualidad
     (ERASBD.TTF, webdings.ttf) aunque su estilo real sea Regular. El estilo
