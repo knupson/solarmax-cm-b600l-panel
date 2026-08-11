@@ -104,6 +104,10 @@ def test_format_must_have_exactly_one_field():
     assert any("format" in e for e in fmt("sin campos"))
     assert any("format" in e for e in fmt("{:.0f} {:.0f}"))
     assert any("format" in e for e in fmt("{load}"))
+    # "{0!r:>{1}}" reporta un solo campo de nivel superior para
+    # Formatter().parse(), pero anida un segundo campo en el format_spec que
+    # revienta en .format(valor) con un solo argumento posicional.
+    assert any("format" in e for e in fmt("{0!r:>{1}}"))
 
 
 def test_rule_operator_must_be_a_comparator():
@@ -122,11 +126,33 @@ def test_asset_paths_cannot_escape_the_assets_dir():
         assert schema.safe_asset_path(bad) is None, bad
 
 
+def test_asset_paths_cannot_reveal_a_drive_letter_via_normalization():
+    # un ".." de mas puede consumirse contra un segmento real anterior y
+    # dejar una ruta absoluta de Windows recien expuesta tras normalizar.
+    for bad in ("a/../C:/Windows/win.ini", "x/..\\C:\\Windows\\win.ini",
+                "a/b/../../C:/x.png"):
+        assert schema.safe_asset_path(bad) is None, bad
+
+
 def test_image_widget_with_escaping_src_is_rejected():
     errs = schema.validate(with_widget(
         {"id": "w", "type": "image", "src": "..\\..\\secreto.png",
          "x": 0, "y": 0, "w": 32, "h": 32}))
     assert any("src" in e for e in errs)
+
+
+def test_unknown_widget_key_is_rejected():
+    errs = schema.validate(with_widget(
+        {"id": "w", "type": "label", "text": "x", "x": 0, "y": 0,
+         "font": "mono-14", "color": "#FFFFFF", "algin": "center"}))
+    assert any("algin" in e for e in errs)
+
+
+def test_unknown_panel_key_is_rejected():
+    errs = schema.validate(broken(panel={
+        "rotate": 0, "brightness": 100, "fps": 1, "jpeg_quality": 82,
+        "birghtness": 50}))
+    assert any("birghtness" in e for e in errs)
 
 
 def test_unknown_widget_type_is_rejected():

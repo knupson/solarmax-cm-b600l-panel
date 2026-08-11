@@ -28,6 +28,22 @@ ALIGNS = {"left", "center", "right"}
 FITS = {"cover", "contain", "stretch"}
 ROTATIONS = {0, 90, 180, 270}
 
+PANEL_KEYS = {"rotate", "brightness", "fps", "jpeg_quality"}
+FONT_KEYS = {"family", "size", "bold"}
+
+# claves permitidas por tipo de background. "color" se admite en solid (relleno)
+# y en image/sequence/video (relleno de letterbox); en gradient no la lee el
+# modelo pero build() la acepta sin error, asi que la dejamos pasar en vez de
+# arriesgar un falso rechazo. "procedural" no tiene forma propia todavia: no
+# se restringen sus claves hasta que se defina.
+BACKGROUND_KEYS = {
+    "solid": {"type", "color"},
+    "gradient": {"type", "stops", "angle", "color"},
+    "image": {"type", "src", "fit", "color"},
+    "sequence": {"type", "src", "fit", "color"},
+    "video": {"type", "src", "fit", "color"},
+}
+
 _COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _RULE_RE = re.compile(r"^\s*(>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)\s*$")
 
@@ -47,16 +63,30 @@ def safe_asset_path(src) -> str | None:
 
     El servicio corre como SYSTEM: sin esto, un '..\\..\\' le hace leer
     cualquier archivo de la maquina.
+
+    Las mismas comprobaciones se aplican dos veces: sobre la entrada cruda y
+    sobre el resultado normalizado. Un '..' de mas puede consumirse contra un
+    segmento real anterior (p.ej. 'a/../C:/Windows/win.ini') y la letra de
+    unidad recien queda expuesta despues de normalizar; revisar solo la
+    entrada cruda deja pasar eso.
     """
     if not isinstance(src, str) or not src.strip():
         return None
     s = src.replace("\\", "/")
-    if s.startswith("/") or s.startswith("//") or re.match(r"^[A-Za-z]:", s):
+    if _is_unsafe_normalized_path(s):
         return None
     norm = posixpath.normpath(s)
     if norm == "." or norm == ".." or norm.startswith("../"):
         return None
+    if _is_unsafe_normalized_path(norm):
+        return None
     return norm
+
+
+def _is_unsafe_normalized_path(s: str) -> bool:
+    """True si `s` es absoluta, UNC, o de unidad de Windows (incluye 'C:foo')."""
+    return (s.startswith("/") or s.startswith("//")
+            or re.match(r"^[A-Za-z]:", s) is not None or ":" in s)
 
 
 def _is_int(v):
@@ -76,7 +106,20 @@ def _check_format(errs, where, v):
     if not isinstance(v, str):
         errs.append(f"{where}: format debe ser texto")
         return
-    fields = [f for _, f, _, _ in Formatter().parse(v) if f is not None]
+    try:
+        parsed = list(Formatter().parse(v))
+    except ValueError as e:
+        errs.append(f"{where}: format {v!r} invalido: {e}")
+        return
+    fields = [f for _, f, _, _ in parsed if f is not None]
+    # Formatter().parse() solo reporta el campo de nivel superior: un campo
+    # anidado dentro del format_spec (p.ej. "{0!r:>{1}}") pasaria como "un
+    # solo campo" sin que se note que en realidad referencia un segundo
+    # argumento posicional que .format(valor) no tiene y que revienta en
+    # render, no en validate().
+    if any(spec and "{" in spec for _, _, spec, _ in parsed):
+        errs.append(f"{where}: format {v!r} no puede anidar otro campo de "
+                    f"reemplazo en el format_spec")
     if len(fields) != 1:
         errs.append(f"{where}: format {v!r} debe tener exactamente un campo, "
                     f"tiene {len(fields)}")
@@ -121,6 +164,9 @@ def validate(raw) -> list[str]:
     if not isinstance(p, dict):
         errs.append("panel: falta")
     else:
+        for k in p:
+            if k not in PANEL_KEYS:
+                errs.append(f"panel: clave desconocida {k!r}")
         if p.get("rotate", 0) not in ROTATIONS:
             errs.append(f"panel.rotate: {p.get('rotate')!r} invalido, "
                         f"se espera 0, 90, 180 o 270")
@@ -144,6 +190,10 @@ def validate(raw) -> list[str]:
                 errs.append(f"fonts.{alias}: falta family")
             elif not _is_int(spec.get("size")) or spec["size"] <= 0:
                 errs.append(f"fonts.{alias}: size debe ser entero positivo")
+            if isinstance(spec, dict):
+                for k in spec:
+                    if k not in FONT_KEYS:
+                        errs.append(f"fonts.{alias}: clave desconocida {k!r}")
 
     bg = raw.get("background")
     if not isinstance(bg, dict) or bg.get("type") not in BACKGROUND_TYPES:
@@ -151,6 +201,12 @@ def validate(raw) -> list[str]:
                     f"invalido, se espera uno de {sorted(BACKGROUND_TYPES)}")
     else:
         t = bg["type"]
+        allowed_bg_keys = BACKGROUND_KEYS.get(t)
+        if allowed_bg_keys is not None:
+            for k in bg:
+                if k not in allowed_bg_keys:
+                    errs.append(f"background: clave desconocida {k!r} para "
+                                f"type={t!r}")
         if t == "solid":
             _check_color(errs, "background", bg.get("color"))
         elif t == "gradient":
@@ -201,6 +257,12 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
     if t not in WIDGET_TYPES:
         return errs + [f"{where}: tipo desconocido {t!r}, se espera uno de "
                        f"{sorted(WIDGET_TYPES)}"]
+
+    cls = WIDGET_TYPES[t]
+    allowed_keys = set(cls.__dataclass_fields__)
+    for k in w:
+        if k not in allowed_keys:
+            errs.append(f"{where}: clave desconocida {k!r}")
 
     for k in ("x", "y"):
         if not _is_int(w.get(k)):
