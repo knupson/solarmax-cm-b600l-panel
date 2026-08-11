@@ -1461,6 +1461,24 @@ class Layout:
 
 - [ ] **Step 4: Implementar el validador**
 
+> **⚠️ El código de abajo tiene tres defectos, arreglados en `32cbba5`. No lo copies tal cual —
+> mirá `vmaxpanel/layout/schema.py` en el repo, que es la versión buena.**
+>
+> 1. **`safe_asset_path` tenía un bypass de contención (Critical).** Los chequeos de ruta
+>    absoluta, UNC y letra de unidad corrían solo sobre el string crudo; únicamente el chequeo
+>    de `..` se re-aplicaba al normalizado. Así, `a/../C:/Windows/win.ini` normalizaba a
+>    `C:/Windows/win.ini`, y en Windows `os.path.join` **descarta la base** cuando el componente
+>    trae letra de unidad. Con el servicio de fase 3 corriendo como SYSTEM y layouts que los
+>    usuarios se comparten, eso era lectura arbitraria de archivos. El arreglo aplica las
+>    rechazos también al resultado normalizado.
+> 2. **`_check_format` no veía campos anidados.** `Formatter().parse()` reporta solo el campo de
+>    primer nivel, así que `{0!r:>{1}}` pasaba la validación y después crasheaba al renderizar
+>    con `IndexError`. Y `{` solo hacía explotar `validate()` con un `ValueError` sin atrapar.
+> 3. **Las claves desconocidas se descartaban en silencio.** Un typo en un campo opcional
+>    (`algin` por `align`) no daba ningún error y el widget quedaba con el default, porque
+>    `build()` filtra por `__dataclass_fields__`. El arreglo agrega chequeo de claves cerradas
+>    para widgets, `panel`, `fonts` y `background`.
+
 `vmaxpanel/layout/schema.py`:
 
 ```python
