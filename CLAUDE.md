@@ -17,6 +17,10 @@ mapa de sensores, la causa raíz documentada y la guía de edición.
   son ahora VCORE y VRM. No prometer que vuelven.
 - `ECLReadByte/Word` de GSA1 **no está implementado** en la B760M D3HP.
 - El panel está montado al revés: los frames van **rotados 180°**.
+- `consola.ttf`/`consolab.ttf` son **Consolas, de Microsoft**: no se redistribuyen. Las
+  fuentes se piden por familia; en cualquier Windows están.
+- `daemon/assets/back.png` es arte del tema Vitals de **LCD Control**: no se redistribuye.
+  El fondo del perfil propio (`vmaxpanel/profiles/vitals.json`) es un `gradient`.
 
 ## Operación
 

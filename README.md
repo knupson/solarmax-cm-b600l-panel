@@ -117,20 +117,23 @@ no tener los dos.
 
 ## Editar
 
-No hay exe, no hay build. Se edita y se reinicia.
+Fase 1 (`vmaxpanel/`) reemplaza al `daemon/` original por un motor data-driven: el layout
+vive en JSON, no hardcodeado en Python, y se recarga en caliente al guardar. `daemon/` sigue
+intacto y es lo que corre hoy en producción — el cutover (autostart) todavía no se hizo, ver
+"Estado" en `CLAUDE.md`. Mientras tanto, para probar el motor nuevo sin tocar el panel real:
+`python -m vmaxpanel --save preview.png --no-sensors`.
 
 | Qué querés cambiar | Dónde |
 |---|---|
-| Posición/formato de un valor | `Renderer.frame()` en `panel.py` — una línea por elemento |
-| Qué dato va en cada slot | `collect()` en `panel.py` |
-| Colores | constantes `WHITE`/`BLUE`/`GRAY`/`BAR_FILL`/`BAR_TRACK` |
-| Formato de red | `human_rate()` |
-| Fecha en español | `DIAS` / `MESES` |
-| Diseño del fondo, etiquetas | `assets/back.png` (320x1480) |
-| Sensores | `sensors.ps1` |
+| Posición, formato o color de un valor | `vmaxpanel/profiles/vitals.json` — se recarga en caliente al guardar |
+| Etiquetas de texto | widgets de tipo `label` en el mismo JSON |
+| Fondo | el bloque `background` del perfil |
+| Qué métricas existen | `vmaxpanel/metrics.py` |
+| De dónde sale cada métrica | `vmaxpanel/providers/` |
+| Sensores nuevos del sidecar | `vmaxpanel/sensors.ps1` |
 
-Las coordenadas son las mismas del `Setting.txt` del tema Vitals original, así que mover un
-elemento es cambiar dos números.
+El `daemon/panel.py` viejo (sin motor, todo hardcodeado) se sigue editando como antes: ver el
+historial de este archivo antes de la fase 1 si hace falta esa tabla.
 
 ## Dependencias
 
