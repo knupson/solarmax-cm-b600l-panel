@@ -12,6 +12,7 @@ El puerto NO se hardcodea: se autodetecta por VID/PID, porque en otra maquina no
 es COM3. La geometria sale del propio SN.
 """
 import re
+import sys
 
 from ..layout.model import Size
 
@@ -37,15 +38,37 @@ DEFAULT_GEOMETRY = Size(320, 1480)
 # con los dos SN conocidos (320 y 480, ambos de 3 digitos) sin comerse el
 # prefijo. Es una asuncion sobre el formato, no algo derivado de una
 # especificacion, y NO generaliza de forma segura: un modelo futuro con un
-# ancho de 4 digitos (ej. 1024) no cae al default, matchea igual y trunca a
-# sus ultimos 3 digitos ("024" -> 24). No hay forma de distinguir "prefijo de
-# modelo" de "ancho" en este SN con un regex solo, porque no hay separador
-# entre ambos -- son la misma corrida de digitos. Con la evidencia de los dos
-# SN conocidos, exactamente-3 es la mejor aproximacion disponible; queda
-# como limitacion documentada, no como bug pendiente de arreglar aca. El
-# lado del alto no tiene este problema (nada lo precede sin separador), asi
-# que se deja flexible en 2 a 5 digitos.
+# ancho de 4 digitos (ej. 1024) no cae al default por si solo, matchea igual
+# y trunca a sus ultimos 3 digitos ("024" -> 24). No hay forma de distinguir
+# "prefijo de modelo" de "ancho" en este SN con un regex solo, porque no hay
+# separador entre ambos -- son la misma corrida de digitos.
+#
+# Lo unico confirmado en un dispositivo real es "VMAXA170320*1480S261001155"
+# -> 320x1480. Tambien es ambiguo si el campo es de ancho variable o de 4
+# digitos con cero a la izquierda ("A17"+"0320" vs "A170"+"320" son
+# indistinguibles en esta unica muestra, porque int() descarta el cero
+# inicial en cualquiera de las dos lecturas); \d{3} es la lectura que hace
+# pasar tambien el segundo SN de los tests (sintetico, no verificado en
+# hardware), asi que se prefiere sobre \d{4} sin que eso la vuelva "la"
+# lectura correcta.
+#
+# Lo que hace que un modelo desconocido sea seguro no es que este regex sea
+# demostrablemente correcto -- no lo es, ver arriba -- sino el piso de
+# plausibilidad (_MIN_PLAUSIBLE_DIM en parse_geometry) mas el aviso por
+# stderr: un ancho truncado como 24 se descarta y cae al default en vez de
+# producir un frame corrompido, y alguien mirando la consola se entera de
+# que paso. El lado del alto no tiene el problema del prefijo pegado (nada
+# lo precede sin separador en los dos SN conocidos), asi que se deja
+# flexible en 2 a 5 digitos.
 _GEOM_RE = re.compile(r"(\d{3})\s*\*\s*(\d{2,5})")
+
+# Piso de plausibilidad: ningun panel HL-VMAX conocido (320x1480, 480x1920)
+# tiene un lado menor a 100px, y 100 esta comodo por debajo del mas chico
+# confirmado (320) sin acercarse a valores claramente truncados (24, 80) que
+# aparecen cuando \d{3} le come 1 digito a un ancho real de 4. No pretende
+# ser un limite fisico exacto, solo un corte barato que atrapa el caso de
+# truncamiento documentado arriba.
+_MIN_PLAUSIBLE_DIM = 100
 
 
 class PanelNotFound(Exception):
@@ -59,12 +82,20 @@ def find_panel_ports() -> list[str]:
 
 
 def parse_geometry(sn) -> Size:
-    if isinstance(sn, str):
+    if isinstance(sn, str) and sn:
         m = _GEOM_RE.search(sn)
         if m:
             w, h = int(m.group(1)), int(m.group(2))
-            if w > 0 and h > 0:
+            if w >= _MIN_PLAUSIBLE_DIM and h >= _MIN_PLAUSIBLE_DIM:
                 return Size(w, h)
+        # sn no vino vacio: alguien conecto algo que dio un SN real, pero no
+        # matcheo el patron o dio una geometria implausible (ver el
+        # truncamiento documentado arriba de _GEOM_RE). None/"" no entran
+        # aca -- ese es el caso ordinario de "no hay nada que parsear" y no
+        # amerita aviso.
+        print(f'aviso: no se pudo parsear la geometria del panel desde el SN '
+              f'"{sn}"; usando default {DEFAULT_GEOMETRY.width}x'
+              f'{DEFAULT_GEOMETRY.height}', file=sys.stderr)
     return DEFAULT_GEOMETRY
 
 

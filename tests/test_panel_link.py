@@ -9,13 +9,27 @@ def test_parse_geometry_from_the_real_serial_number():
     assert parse_geometry("VMAXA170320*1480S261001155") == Size(320, 1480)
 
 
-def test_parse_geometry_handles_other_models():
+def test_parse_geometry_handles_a_hypothetical_second_model():
+    # Este SN es sintetico -- no corresponde a ningun dispositivo real
+    # observado, y su ancho de 3 digitos es una suposicion, no un dato
+    # verificado. El unico SN confirmado en hardware real es el de
+    # test_parse_geometry_from_the_real_serial_number. No "proteger" este
+    # valor como si fuera ground truth si algun dia cambia el regex.
     assert parse_geometry("VMAXB99480*1920S000000001") == Size(480, 1920)
 
 
 def test_parse_geometry_falls_back_when_unparseable():
     for sn in ("", "basura", "VMAX***S1", None):
         assert parse_geometry(sn) == Size(320, 1480)
+
+
+def test_parse_geometry_falls_back_when_the_parsed_width_is_implausible():
+    # "...1024*768..." es un ancho hipotetico de 4 digitos: el regex de 3
+    # digitos fijos (ver comentario junto a _GEOM_RE en panel_link.py) lo
+    # trunca a "024" -> 24. 24 no es un ancho plausible para ningun panel
+    # HL-VMAX conocido; el piso de plausibilidad tiene que rechazarlo y caer
+    # al default en vez de propagar el valor truncado.
+    assert parse_geometry("VMAXQ1024*768S1") == Size(320, 1480)
 
 
 def test_brightness_command_frames_the_value():
