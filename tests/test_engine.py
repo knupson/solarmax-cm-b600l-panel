@@ -83,13 +83,25 @@ def test_run_handshakes_and_sets_brightness_once(tmp_path):
 
 
 def test_state_reports_the_panel_and_the_profile(tmp_path):
+    # El estado "ok" solo tiene sentido MIENTRAS el link esta abierto: run()
+    # cierra y descarta el link al volver (por cualquier motivo, ver
+    # test_clean_exit_closes_the_link), asi que state() consultado despues
+    # de run() siempre da "desconectado". Para probar el estado "conectado"
+    # de verdad hay que mirarlo desde adentro del loop, no despues.
     eng, _, _ = engine(tmp_path, iterations=1)
+    captured = {}
+    original = eng._render_once
+
+    def patched():
+        original()
+        captured.update(eng.state())
+
+    eng._render_once = patched
     eng.run()
-    st = eng.state()
-    assert st["panel"] == "ok"
-    assert st["profile"] == "Test"
-    assert st["sn"].startswith("VMAX")
-    assert st["resolution"]["cpu.load"] == "psutil"
+    assert captured["panel"] == "ok"
+    assert captured["profile"] == "Test"
+    assert captured["sn"].startswith("VMAX")
+    assert captured["resolution"]["cpu.load"] == "psutil"
 
 
 def test_state_lists_unavailable_metrics_with_reasons(tmp_path):
@@ -170,11 +182,17 @@ def test_serial_failure_reconnects_with_backoff(tmp_path):
     eng.run()
     assert len(made) == 2
     assert clock.now > start                  # durmio el backoff
-    assert eng.state()["panel"] == "ok"
     # el transporte cuyo handshake fallo tiene que quedar cerrado: si
     # nada lo cierra, el handle recien abierto queda filtrado en cada
     # intento de reconexion en vez de liberarse antes del siguiente intento.
     assert dead.closed is True
+    # "desconectado", no "ok": run() ya termino (se agoto max_iterations
+    # DESPUES de reconectar con exito), asi que nada esta escribiendo en el
+    # panel en este instante. Es el contrato, no un descuido -- el campo es
+    # binario ("ok" | "desconectado") y no existe un tercer estado de
+    # "estuvo conectado pero ya no". Que no se revierta a "ok" creyendo que
+    # es "se conecto bien" cuando en realidad describe el estado ACTUAL.
+    assert eng.state()["panel"] == "desconectado"
 
 
 def test_clean_exit_closes_the_link(tmp_path):
@@ -182,11 +200,16 @@ def test_clean_exit_closes_the_link(tmp_path):
     eng.run()
     # run() termino sin excepcion (se agoto max_iterations): el transporte
     # que quedo abierto tiene que cerrarse igual, no solo cuando hay una
-    # reconexion de por medio. state() sigue reportando "ok" (self._link no
-    # se descarta en la salida limpia), pero el handle de verdad ya esta
-    # liberado.
+    # reconexion de por medio.
     assert made[0].closed is True
-    assert eng.state()["panel"] == "ok"
+    # "desconectado", no "ok": el mismo contrato binario que documenta el
+    # test de arriba. Un link cerrado reportando "ok" seria la misma clase
+    # de status mintiendo que este proyecto entero existe para evitar (LCD
+    # Control mostrando una carga de CPU que no era la real) -- aca aplicado
+    # al campo de conexion en vez de a una metrica. No revertir esto a "ok"
+    # pensando que "el ultimo intento salio bien": state() describe el
+    # presente, no el historial.
+    assert eng.state()["panel"] == "desconectado"
 
 
 def test_stop_ends_the_loop(tmp_path):

@@ -89,20 +89,23 @@ class Engine:
             # Salida limpia (stop() o max_iterations) o una excepcion que se
             # escapa del loop entero (ValueError/RuntimeError de
             # programacion -- a proposito no capturadas arriba, ver
-            # _render_once): en cualquiera de los dos casos hay que cerrar
-            # el transporte que quedo abierto, no confiar en que el
-            # recolector de basura lo haga cuando nada quede referenciando
-            # el objeto. No se pasa por _drop_link() -- que ademas pone
-            # self._link/self._renderer en None -- porque el loop ya
-            # termino y no hay un proximo _connect() que necesite ese
-            # estado limpio; state() sigue pudiendo reportar el ultimo sn y
-            # "ok" despues de que run() retorna (asi lo verifica
-            # test_serial_failure_reconnects_with_backoff).
-            if self._link is not None:
-                try:
-                    self._link.close()
-                except Exception:
-                    pass
+            # _render_once): en cualquiera de los dos casos run() ya no va a
+            # volver a escribir en el panel, asi que hay que cerrar el
+            # transporte Y olvidarse de el -- pasar por _drop_link() en vez
+            # de un close() suelto. Un close() sin poner self._link en None
+            # dejaria state()["panel"] devolviendo "ok" para un link
+            # provablemente cerrado (dead.closed/made[0].closed en los
+            # tests de mas abajo), que es la misma clase de mentira de
+            # estado que este proyecto existe para evitar: LCD Control
+            # reportaba una carga de CPU que no era la real, y un
+            # state()["panel"] == "ok" para un puerto cerrado es un status
+            # field mintiendo por la misma razon, solo que en un campo
+            # distinto. El contrato de este campo es binario -- "ok" o
+            # "desconectado", sin un tercer estado de "estuvo conectado
+            # pero ya no" -- asi que "desconectado" es la unica respuesta
+            # honesta una vez que run() termino, para cualquier motivo por
+            # el que haya terminado.
+            self._drop_link()
 
     def _done(self):
         if self._stop:
