@@ -66,25 +66,19 @@ class FontResolver:
         """
         return set(self._unreadable_dirs)
 
-    def reset_missing(self) -> None:
-        """Olvida que familias se reportaron ausentes hasta ahora.
+    def is_available(self, family: str) -> bool:
+        """True si `family` aparece en el indice de fuentes (empaquetadas o
+        de sistema), sin importar el peso (bold/regular) pedido ni si
+        alguna vez se llamo resolve() para ella.
 
-        missing() es diagnostico DEL LAYOUT ACTUAL: que familia pidio y no
-        encontro. Si un caller (el Renderer) reusa este resolver a traves de
-        varios layouts, una familia ausente en el layout viejo tiene que
-        dejar de aparecer en cuanto ese layout ya no esta activo, o el
-        editor de fase 3 -- que mantiene un Renderer de larga vida y llama
-        set_layout() en cada edicion -- terminaria mostrando advertencias
-        sobre una fuente que el layout actual ni siquiera nombra.
-
-        No toca index(), _cache ni _unreadable_dirs: son estado de la
-        maquina (que archivos hay, en que directorios, ya resueltos a que
-        ImageFont), no del layout. Rehacerlos entero en cada cambio de
-        layout costaria recorrer todos los directorios de fuente otra vez
-        (cientos de archivos) por cada edicion en el editor; conservarlos y
-        limpiar solo missing() da el mismo resultado sin ese costo.
+        A diferencia de missing() -- que solo anota lo que un resolve()
+        anterior efectivamente vio faltar, y por eso se queda calvo en un
+        cache hit -- esto es una funcion pura del indice: se puede llamar
+        antes de resolver nada y da la misma respuesta despues. Es lo que
+        usa Renderer.warnings() para no tener que acumular ni resetear
+        ningun estado propio por layout.
         """
-        self._missing = set()
+        return bool(self.index().get(family.lower()))
 
     def _build_index(self) -> dict[str, dict[str, Path]]:
         idx: dict[str, dict[str, Path]] = {}

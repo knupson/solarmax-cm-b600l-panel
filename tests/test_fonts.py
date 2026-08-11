@@ -117,25 +117,27 @@ def test_unreadable_font_file_does_not_break_the_whole_index(tmp_path):
     assert "consolas" in f.getname()[0].lower()
 
 
-def test_reset_missing_forgets_missing_but_keeps_the_index_and_cache():
-    """reset_missing() es diagnostico por layout, no por maquina: un
-    Renderer de larga vida (el editor de fase 3) reusa un solo FontResolver
-    a traves de varios set_layout() y tiene que poder olvidar una familia
-    que el layout anterior pedia y el nuevo ya no. El indice y la cache de
-    fuentes ya resueltas son estado de la maquina -- que archivos hay, que
-    ImageFont ya se cargo -- y no tienen que rehacerse por eso.
+def test_is_available_is_a_pure_query_independent_of_resolve():
+    """is_available() no depende de haber llamado resolve() antes (a
+    diferencia de missing(), que solo anota lo que un resolve() anterior
+    efectivamente vio faltar). Es la razon por la que Renderer.warnings()
+    la usa en vez de missing(): puede preguntarse antes de resolver nada,
+    despues de resolver, o despues de un cache hit, y da siempre la misma
+    respuesta -- es una funcion del indice, no del historial de llamadas.
     """
     r = FontResolver()
+    assert r.is_available("Consolas") is True
+    assert r.is_available("NoExisteEstaFuente") is False
+
+    # Resolver la fuente ausente (que cachea el fallback) no cambia la
+    # respuesta: sigue sin estar disponible.
     r.resolve(Font("NoExisteEstaFuente", 20))
-    assert "NoExisteEstaFuente" in r.missing()
-    idx_before = r.index()
-    cached_before = r.resolve(Font("Consolas", 20))
+    assert r.is_available("NoExisteEstaFuente") is False
 
-    r.reset_missing()
-
-    assert not r.missing()
-    assert r.index() is idx_before                    # no se reconstruyo
-    assert r.resolve(Font("Consolas", 20)) is cached_before  # cache intacta
+    # Y un cache hit tampoco esconde una familia que si esta disponible.
+    r.resolve(Font("Consolas", 20))
+    r.resolve(Font("Consolas", 20))  # segunda vez: cache hit
+    assert r.is_available("Consolas") is True
 
 
 def test_filename_bold_hint_does_not_override_explicit_regular_style():

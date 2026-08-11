@@ -109,6 +109,46 @@ def test_set_layout_forgets_stale_missing_font_warnings():
     assert not any("NoExiste" in w for w in r.warnings())
 
 
+def test_set_layout_keeps_a_still_missing_font_warning_when_reapplied():
+    # El caso realista del editor de fase 3: llama set_layout() en CADA
+    # edicion, incluso cuando el cambio no toca las fuentes. Si "NoExiste"
+    # sigue sin existir, el segundo set_layout() (con el MISMO layout) no
+    # puede hacer desaparecer la advertencia -- ese era exactamente el
+    # defecto que quedo tras la primera ronda de este fix: is_available()
+    # se recalcula del indice cada vez que se pide warnings(), asi que no
+    # depende de que resolve() haya vuelto a anotar nada en un cache miss.
+    lay = layout(fonts={"mono-14": {"family": "NoExiste", "size": 14},
+                        "mono-bold-60": {"family": "NoExiste", "size": 60}})
+    r = Renderer(lay)
+    assert any("NoExiste" in w for w in r.warnings())
+
+    r.set_layout(lay)  # el mismo layout, "NoExiste" sigue sin existir
+    assert any("NoExiste" in w for w in r.warnings())
+
+
+def test_warnings_reports_a_font_alias_unused_by_any_widget():
+    # Layout.fonts es la declaracion real: un alias de fuente que ningun
+    # widget referencia todavia (p.ej. una fuente que el usuario acaba de
+    # elegir en el editor para un widget que va a agregar despues) tiene
+    # que aparecer en warnings() si su familia no existe, aunque resolve()
+    # nunca se haya llamado para ella desde el dibujo de ningun widget.
+    raw = dict(MINIMAL)
+    raw["fonts"] = dict(MINIMAL["fonts"])
+    raw["fonts"]["unused"] = {"family": "NoExiste", "size": 10}
+    r = Renderer(schema.build(raw))
+    assert any("NoExiste" in w for w in r.warnings())
+
+
+def test_warnings_surfaces_background_phase2_notice_before_any_frame():
+    # Mismo principio que las fuentes: BackgroundSource solo agrega sus
+    # warnings la primera vez que se construye el fondo (_build(), llamado
+    # de adentro de frame()). set_layout() ahora fuerza ese build de una
+    # vez, asi que warnings() tiene que ver el aviso de "fase 2" de un
+    # fondo sequence/video/procedural SIN haber llamado frame() todavia.
+    r = Renderer(layout(background={"type": "sequence", "src": "x.mp4"}))
+    assert any("fase 2" in w for w in r.warnings())
+
+
 def _full_bleed_layout(dw, dh, color="#3987E5", bg="#0F1218"):
     """Layout minimo con un solo widget 'bar' que cubre TODO designed_for.
     _draw_bar dibuja su rectangulo 'track' sin condicion (el valor solo

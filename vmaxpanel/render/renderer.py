@@ -127,23 +127,13 @@ class Renderer:
         # un build + una copia de mas por cambio de layout, no por cuadro.
         self._bg.frame()
 
-        # missing() de FontResolver es diagnostico DEL LAYOUT ACTUAL: una
-        # familia que el layout viejo pedia y no encontraba no puede seguir
-        # apareciendo en warnings() despues de cambiar a un layout que ni
-        # siquiera la nombra -- exactamente el caso que vive el editor de
-        # fase 3, que mantiene un solo Renderer y llama set_layout() en
-        # cada edicion. El indice y la cache de fuentes SI sobreviven
-        # (reset_missing() no los toca): son estado de la maquina, no del
-        # layout, y rehacerlos en cada edicion recorreria de nuevo todos
-        # los directorios de fuente por nada.
-        self._fonts.reset_missing()
-
         # Precalienta el resolver con las fuentes que este layout va a usar,
-        # en la escala que este renderer tiene fija. Sin esto, warnings()
-        # llamado antes del primer frame() no veria ninguna fuente ausente
-        # todavia -- resolve() es quien las anota en _missing, y recien se
-        # limpio arriba. Tambien evita pagar la carga de la fuente dentro
-        # del primer frame().
+        # en la escala que este renderer tiene fija. warnings() ya no
+        # depende de este precalentamiento (ver mas abajo por que), asi que
+        # esto es puramente una optimizacion: evita pagar la carga de la
+        # fuente -- abrir el archivo, parsear el TTF -- dentro del primer
+        # frame() en vez de aca, donde a 1-10 fps no se nota tanto como
+        # adentro del loop de render.
         for font in layout.fonts.values():
             self._fonts.resolve(font, self.scale)
 
@@ -159,9 +149,29 @@ class Renderer:
         silenciosa que missing() reporta (una familia no aparece porque su
         carpeta no se pudo leer, no porque no exista) y por eso se agrega
         aca tambien.
+
+        Las fuentes ausentes se recalculan DERIVANDOLAS de
+        `self.layout.fonts` en cada llamada, en vez de leer un
+        `FontResolver.missing()` acumulado. missing() solo anota lo que un
+        resolve() anterior efectivamente vio faltar -- y `resolve()`
+        devuelve directo desde la cache en un hit, sin volver a pasar por
+        ahi -- asi que un FontResolver de larga vida (el de este Renderer,
+        reusado a traves de sucesivos set_layout()) puede tener una familia
+        cacheada de una vuelta anterior y quedarse mudo sobre ella la
+        proxima vez, aunque siga faltando y el layout activo siga
+        nombrandola. is_available() no tiene ese problema: es una consulta
+        pura contra el indice de fuentes, no un historial de llamadas a
+        resolve(), asi que da la misma respuesta la primera vez que se
+        pregunta o la enesima. Con esto no hace falta ningun estado propio
+        de "que layout pidio que" ni resetearlo entre llamadas a
+        set_layout() -- ese estado fue, en dos vueltas de revision
+        distintas, la fuente de un warning que sobrevivia de mas y de uno
+        que desaparecia de menos.
         """
+        missing = {f.family for f in self.layout.fonts.values()
+                   if not self._fonts.is_available(f.family)}
         return (list(self._bg.warnings)
-                + [f"fuente no encontrada: {f}" for f in sorted(self._fonts.missing())]
+                + [f"fuente no encontrada: {f}" for f in sorted(missing)]
                 + [f"directorio de fuentes ilegible: {d}"
                    for d in sorted(self._fonts.unreadable_dirs())])
 
