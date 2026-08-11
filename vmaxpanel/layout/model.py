@@ -66,6 +66,7 @@ class TextWidget(Widget):
     color: str = "#FFFFFF"
     format: str = "{}"
     align: str = "left"
+    humanize: str = "none"
     rules: list[Rule] = field(default_factory=list)
 
 

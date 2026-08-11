@@ -44,8 +44,42 @@ def _num(value):
     return value
 
 
+def human_rate(bps) -> str:
+    """1258291 -> "1.2 MB/s": paridad con el human_rate() de daemon/panel.py,
+    que un template de str.format no puede reproducir (no hay forma de
+    elegir la unidad segun la magnitud dentro de un unico campo)."""
+    if bps >= 1048576:
+        return f"{bps / 1048576:.1f} MB/s"
+    if bps >= 1024:
+        return f"{bps / 1024:.0f} KB/s"
+    return f"{bps:.0f} B/s"
+
+
+def human_bytes(b) -> str:
+    """3221225472 -> "3.0 GiB": mismo problema que human_rate() pero en
+    unidades binarias de almacenamiento en vez de una tasa por segundo."""
+    for unit, div in (("GiB", 1073741824), ("MiB", 1048576), ("KiB", 1024)):
+        if b >= div:
+            return f"{b / div:.1f} {unit}"
+    return f"{b:.0f} B"
+
+
+HUMANIZERS = {"rate": human_rate, "bytes": human_bytes}
+
+
 def format_value(w: model.TextWidget, value) -> str:
-    """Aplica w.format, o deja "--" conservando el sufijo del template."""
+    """Aplica humanize si corresponde, si no w.format.
+
+    Un valor ausente deja "--" (ver _dashed): con humanize activo no hay
+    template del que conservar un sufijo, asi que se devuelve DASH a secas.
+    Un modo de humanize desconocido (una defensa extra: schema.validate()
+    ya lo rechaza, pero format_value no vuelve a validar) cae de vuelta al
+    formato normal en vez de fallar.
+    """
+    humanizer = HUMANIZERS.get(getattr(w, "humanize", "none"))
+    if humanizer is not None:
+        v = _num(value)
+        return DASH if v is None else humanizer(v)
     if value is None or value is UNAVAILABLE:
         return _dashed(w.format)
     try:

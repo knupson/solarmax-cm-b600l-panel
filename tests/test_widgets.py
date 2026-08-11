@@ -271,3 +271,31 @@ def test_graph_with_negative_dimensions_does_not_crash():
     w = model.GraphWidget(id="g", type="graph", x=10, y=10, metric="cpu.load",
                           w=-200, h=-60, color="#3987E5", samples=10)
     widgets.draw(im, w, 50.0, ctx(history={"cpu.load": [10, 30, 90]}))
+
+
+# --- humanize: rate/bytes, paridad con human_rate() del daemon viejo ---
+
+def test_human_rate_scales_the_unit():
+    assert widgets.human_rate(500) == "500 B/s"
+    assert widgets.human_rate(2048) == "2 KB/s"
+    assert widgets.human_rate(5 * 1048576) == "5.0 MB/s"
+
+
+def test_humanize_rate_replaces_the_format():
+    w = text_widget(metric="net.down", format="{}", humanize="rate")
+    assert widgets.format_value(w, 1258291) == "1.2 MB/s"
+
+
+def test_humanize_dashes_on_missing_value():
+    w = text_widget(metric="net.down", format="{}", humanize="rate")
+    assert widgets.format_value(w, UNAVAILABLE) == widgets.DASH
+
+
+def test_humanize_bytes_uses_binary_units():
+    w = text_widget(metric="mem.used", format="{}", humanize="bytes")
+    assert widgets.format_value(w, 3221225472) == "3.0 GiB"
+
+
+def test_unknown_humanizer_falls_back_to_format():
+    w = text_widget(format="{:.0f}", humanize="inventado")
+    assert widgets.format_value(w, 7.0) == "7"

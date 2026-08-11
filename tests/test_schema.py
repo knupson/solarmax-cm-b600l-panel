@@ -187,3 +187,34 @@ def test_errors_accumulate_instead_of_stopping_at_the_first():
     raw = broken(version=99, background={"type": "plasma"})
     raw["widgets"] = [{"id": "w", "type": "hologram", "x": 0, "y": 0}]
     assert len(schema.validate(raw)) >= 3
+
+
+def test_humanize_must_be_a_known_mode():
+    def check(mode):
+        return schema.validate(with_widget(
+            {"id": "w", "type": "text", "metric": "net.down", "x": 0, "y": 0,
+             "font": "mono-14", "color": "#FFFFFF", "format": "{}",
+             "humanize": mode}))
+
+    assert check("rate") == []
+    assert check("bytes") == []
+    assert check("none") == []
+    assert any("humanize" in e for e in check("plasma"))
+
+
+def test_format_with_a_suffix_is_ignored_by_humanize_and_rejected():
+    """humanize reemplaza el formato entero (widgets.format_value lo aplica
+    ANTES de mirar w.format), asi que un sufijo en format() nunca aparece en
+    pantalla. Sin este chequeo, alguien que escriba format="{} Mbps" con
+    humanize="rate" nunca ve "Mbps" en el panel y no hay ningun aviso de por
+    que -- el mismo tipo de campo mintiendo en silencio que este proyecto ya
+    evita en otros lados (ver _range() en widgets.py)."""
+    def check(fmt):
+        return schema.validate(with_widget(
+            {"id": "w", "type": "text", "metric": "net.down", "x": 0, "y": 0,
+             "font": "mono-14", "color": "#FFFFFF", "format": fmt,
+             "humanize": "rate"}))
+
+    assert check("{}") == []
+    assert check("{0}") == []
+    assert any("humanize" in e and "format" in e for e in check("{} Mbps"))

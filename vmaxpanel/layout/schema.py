@@ -27,6 +27,7 @@ BACKGROUND_TYPES = {"solid", "gradient", "image", "sequence", "video", "procedur
 ALIGNS = {"left", "center", "right"}
 FITS = {"cover", "contain", "stretch"}
 ROTATIONS = {0, 90, 180, 270}
+HUMANIZE_MODES = {"none", "rate", "bytes"}
 
 PANEL_KEYS = {"rotate", "brightness", "fps", "jpeg_quality"}
 FONT_KEYS = {"family", "size", "bold"}
@@ -286,6 +287,19 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
         errs.append(f"{where}: align {w.get('align')!r} invalido")
 
     if t == "text":
+        humanize_mode = w.get("humanize", "none")
+        if humanize_mode not in HUMANIZE_MODES:
+            errs.append(f"{where}: humanize {humanize_mode!r} invalido, "
+                        f"se espera uno de {sorted(HUMANIZE_MODES)}")
+        elif (humanize_mode != "none" and isinstance(w.get("format"), str)
+              and w["format"] not in ("{}", "{0}")):
+            # format_value() aplica el humanizador y ni siquiera mira
+            # w.format en ese caso: un sufijo como "{} Mbps" quedaria
+            # escrito en el layout pero nunca se ve en el panel, sin ningun
+            # aviso de por que. Se rechaza en vez de ignorarlo en silencio.
+            errs.append(f"{where}: format {w['format']!r} no tiene efecto "
+                        f"con humanize={humanize_mode!r}; usa '{{}}' o "
+                        f"quita humanize")
         if "format" in w:
             _check_format(errs, where, w["format"])
         for j, r in enumerate(w.get("rules") or []):
