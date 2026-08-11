@@ -73,6 +73,31 @@ def test_provider_exception_degrades_without_killing_read():
     assert "wmi murio" in r.unavailable()["cpu.temp"]
 
 
+def test_provider_recovers_after_degrading():
+    class Flaky(Fake):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            self._calls = 0
+
+        def read(self):
+            self._calls += 1
+            if self._calls == 1:
+                raise RuntimeError("wmi murio")
+            return super().read()
+
+    r = Registry([Flaky("gsa1", ["cpu.temp"], {"cpu.temp": 42.0})])
+
+    first = r.read()
+    assert first["cpu.temp"] is UNAVAILABLE
+    assert "cpu.temp" not in r.resolution()
+    assert "wmi murio" in r.unavailable()["cpu.temp"]
+
+    second = r.read()
+    assert r.resolution()["cpu.temp"] == "gsa1"
+    assert "cpu.temp" not in r.unavailable()
+    assert second["cpu.temp"] == 42.0
+
+
 def test_unknown_metric_id_is_rejected_at_construction():
     with pytest.raises(ValueError, match="cpu.powr"):
         Registry([Fake("psutil", ["cpu.powr"])])
