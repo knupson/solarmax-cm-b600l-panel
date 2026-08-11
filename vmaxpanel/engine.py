@@ -69,21 +69,40 @@ class Engine:
 
     def run(self):
         attempt = 0
-        while not self._done():
-            try:
-                self._connect()
-                attempt = 0
-                self._serve()
-            except (OSError, PanelNotFound) as e:
-                self._last_error = str(e)
-                self._drop_link()
-                if self._done():
-                    break
-                self.stats["reconnects"] += 1
-                delay = self.cfg.reconnect_backoff[
-                    min(attempt, len(self.cfg.reconnect_backoff) - 1)]
-                self._clock.sleep(delay)
-                attempt += 1
+        try:
+            while not self._done():
+                try:
+                    self._connect()
+                    attempt = 0
+                    self._serve()
+                except (OSError, PanelNotFound) as e:
+                    self._last_error = str(e)
+                    self._drop_link()
+                    if self._done():
+                        break
+                    self.stats["reconnects"] += 1
+                    delay = self.cfg.reconnect_backoff[
+                        min(attempt, len(self.cfg.reconnect_backoff) - 1)]
+                    self._clock.sleep(delay)
+                    attempt += 1
+        finally:
+            # Salida limpia (stop() o max_iterations) o una excepcion que se
+            # escapa del loop entero (ValueError/RuntimeError de
+            # programacion -- a proposito no capturadas arriba, ver
+            # _render_once): en cualquiera de los dos casos hay que cerrar
+            # el transporte que quedo abierto, no confiar en que el
+            # recolector de basura lo haga cuando nada quede referenciando
+            # el objeto. No se pasa por _drop_link() -- que ademas pone
+            # self._link/self._renderer en None -- porque el loop ya
+            # termino y no hay un proximo _connect() que necesite ese
+            # estado limpio; state() sigue pudiendo reportar el ultimo sn y
+            # "ok" despues de que run() retorna (asi lo verifica
+            # test_serial_failure_reconnects_with_backoff).
+            if self._link is not None:
+                try:
+                    self._link.close()
+                except Exception:
+                    pass
 
     def _done(self):
         if self._stop:
@@ -108,8 +127,28 @@ class Engine:
         if layout is None:
             raise OSError("no hay un layout valido cargado")
         link = self._link_factory()
-        link.open()
-        link.set_brightness(layout.panel.brightness)
+        try:
+            link.open()
+            link.set_brightness(layout.panel.brightness)
+        except Exception:
+            # link_factory() puede devolver un transporte que ya esta
+            # abierto de verdad (SerialTransport abre el puerto serie en su
+            # propio __init__, antes de que open() mande el handshake). Si
+            # el handshake o el brillo inicial fallan aca, self._link nunca
+            # llega a asignarse -- asi que _drop_link(), en el except de
+            # run(), no tiene nada que cerrar y el handle recien abierto
+            # quedaria filtrado en cada intento de reconexion, confiando en
+            # el recolector de basura para cerrarlo. Mismo patron de "handle
+            # abierto bloqueando el recurso" que este proyecto ya tiene
+            # documentado para sensors.ps1/LibreHardwareMonitorLib.dll,
+            # aplicado ahora al puerto COM del panel. Se relanza la
+            # excepcion sin modificar: el backoff de run() la sigue viendo
+            # igual.
+            try:
+                link.close()
+            except Exception:
+                pass
+            raise
         self._link = link
         self._renderer = Renderer(layout, panel_size=link.geometry)
 

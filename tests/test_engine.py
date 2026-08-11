@@ -171,6 +171,22 @@ def test_serial_failure_reconnects_with_backoff(tmp_path):
     assert len(made) == 2
     assert clock.now > start                  # durmio el backoff
     assert eng.state()["panel"] == "ok"
+    # el transporte cuyo handshake fallo tiene que quedar cerrado: si
+    # nada lo cierra, el handle recien abierto queda filtrado en cada
+    # intento de reconexion en vez de liberarse antes del siguiente intento.
+    assert dead.closed is True
+
+
+def test_clean_exit_closes_the_link(tmp_path):
+    eng, made, _ = engine(tmp_path, iterations=2)
+    eng.run()
+    # run() termino sin excepcion (se agoto max_iterations): el transporte
+    # que quedo abierto tiene que cerrarse igual, no solo cuando hay una
+    # reconexion de por medio. state() sigue reportando "ok" (self._link no
+    # se descarta en la salida limpia), pero el handle de verdad ya esta
+    # liberado.
+    assert made[0].closed is True
+    assert eng.state()["panel"] == "ok"
 
 
 def test_stop_ends_the_loop(tmp_path):
