@@ -11,6 +11,10 @@ _NO_PROVIDER = "ningun provider de esta maquina sirve esta metrica"
 
 class Registry:
     def __init__(self, providers: list[Provider]):
+        # metrics() se lee una sola vez, aca. Un provider cuyo metrics() es
+        # dinamico (ej. LhmProvider.served, que descubre disk.temp.N de la
+        # primera muestra del sidecar) queda fijado a lo que tenia en este
+        # instante para toda la vida de este Registry.
         for p in providers:
             for mid in p.metrics():
                 if not is_metric(mid):

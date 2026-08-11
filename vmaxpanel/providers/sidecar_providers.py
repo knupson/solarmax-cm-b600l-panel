@@ -40,7 +40,14 @@ class PdhProvider(_SidecarProvider):
 
 
 class LhmProvider(_SidecarProvider):
-    """GPU y temps de SSD. Los ids de disco se descubren de la muestra."""
+    """GPU y temps de SSD. Los ids de disco se descubren de la muestra.
+
+    Peligro de orden: `served` lee la primera muestra que haya llegado del
+    sidecar. `Registry` llama `metrics()` una sola vez, en su constructor. Si
+    el `Registry` se arma antes de que el sidecar entregue esa primera
+    muestra (`client.wait_ready()` sin esperar), los `disk.temp.N` quedan
+    afuera para siempre en esa corrida: no hay revalidacion posterior.
+    """
 
     id = "lhm"
     namespace = "lhm"
