@@ -78,34 +78,9 @@ El proyecto va a distribuirse, así que primero pasa a ser un repo git. Después
 - Consumes: nada.
 - Produces: `vmaxpanel.metrics.UNAVAILABLE` (singleton falsy), `MetricSpec(id, label, unit, kind, min, max)`, `METRICS: dict[str, MetricSpec]`, `is_metric(mid: str) -> bool`, `disk_metric(n: int) -> str`.
 
-- [ ] **Step 1: Inicializar el repo y `.gitignore`**
+- [x] **Step 1: Inicializar el repo y `.gitignore`** — YA HECHO por el controlador
 
-El repo no existe todavía. `transcript/` pesa 2 MB y `research/` es evidencia de reversing, no código.
-
-```bash
-cd /e/Claude/Solarmax_Display
-git init
-```
-
-`.gitignore`:
-
-```
-__pycache__/
-*.pyc
-.pytest_cache/
-daemon/panel.log
-daemon/panel.err
-daemon/panel.pid
-daemon/*.dll
-daemon/assets/consola.ttf
-daemon/assets/consolab.ttf
-daemon/assets/back.png
-transcript/
-research/
-preview*.png
-```
-
-Las DLL y los TTF quedan fuera del repo a propósito: las DLL se redistribuyen aparte con su aviso MPL-2.0, y los TTF de Consolas no se redistribuyen. `back.png` es arte del vendor.
+El repo se inicializó antes de empezar la ejecución, con `.gitignore` en la raíz y un commit inicial (`36e359f`) sobre la rama `fase1-motor-data-driven`. Las DLL, los TTF de Consolas y `back.png` quedan excluidos por licencia; `transcript/` y `research/` por no ser código. **No repitas este paso**: verificá que `.gitignore` exista y arrancá en el Step 2.
 
 - [ ] **Step 2: Instalar pytest y configurarlo**
 
@@ -647,10 +622,6 @@ class Registry:
         for mid in self.unavailable():
             out.setdefault(mid, UNAVAILABLE)
         return out
-
-    def get(self, mid):
-        """Lectura puntual desde la ultima muestra; UNAVAILABLE si nadie la sirve."""
-        return self.read().get(mid, UNAVAILABLE)
 
     def close(self):
         for p in self._providers:
@@ -2088,14 +2059,17 @@ def test_resolution_is_cached():
     assert r.resolve(Font("Consolas", 20)) is r.resolve(Font("Consolas", 20))
 
 
-def test_extra_dirs_win_over_system_fonts(tmp_path):
+def test_extra_dirs_are_indexed(tmp_path):
+    """Una fuente en extra_dirs se encuentra por su familia real, no por el archivo."""
     r = FontResolver()
     src = r.index()["consolas"]["regular"]
-    fake = tmp_path / "MiMono-Regular.ttf"
-    fake.write_bytes(src.read_bytes())
+    (tmp_path / "copia.ttf").write_bytes(src.read_bytes())
     r2 = FontResolver(extra_dirs=[tmp_path])
-    assert "mimono" in r2.index() or r2.resolve(Font("MiMono", 20)) is not None
+    assert r2.index()["consolas"]["regular"] == tmp_path / "copia.ttf"
+    assert not r2.missing()
 ```
+
+El índice usa la familia que declara el archivo (`Consolas`), no el nombre del archivo, así que la copia gana por precedencia de directorio.
 
 - [ ] **Step 2: Correr y verificar que falla**
 
@@ -2427,7 +2401,6 @@ def test_image_widget_is_skipped_when_the_asset_is_missing(tmp_path):
 
 
 def test_image_widget_draws_an_existing_asset(tmp_path):
-    (tmp_path / "logo.png").write_bytes(b"")
     Image.new("RGB", (8, 8), (255, 0, 0)).save(tmp_path / "logo.png")
     im = canvas()
     w = model.ImageWidget(id="i", type="image", x=4, y=4, src="logo.png", w=16, h=16)
