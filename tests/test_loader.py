@@ -74,3 +74,40 @@ def test_store_on_missing_file_reports_error_without_raising(tmp_path):
     store = loader.ProfileStore(tmp_path / "no-existe.json")
     errors = store.load_now()
     assert errors and store.current is None
+
+
+def test_rule_thresholds_roundtrip_across_magnitudes(tmp_path):
+    # :g (la version original) pasa a notacion cientifica desde 1e6, que
+    # schema._RULE_RE no reconoce. Cubre grande (>=1e6), fraccionario chico,
+    # negativo y el caso ordinario ya cubierto en otro test.
+    raw = json.loads(json.dumps(MINIMAL))
+    raw["widgets"][1]["rules"] = [
+        {"when": "> 1234567", "color": "#FF4444"},
+        {"when": "< 0.0001", "color": "#4444FF"},
+        {"when": ">= -85.5", "color": "#44FF44"},
+        {"when": "<= 85", "color": "#FFFFFF"},
+    ]
+    path = tmp_path / "rules.json"
+    loader.save(loader.loads(json.dumps(raw)), path)
+    again = loader.load(path)
+    assert [r.value for r in again.widgets[1].rules] == [1234567.0, 0.0001, -85.5, 85.0]
+
+
+def test_store_recovers_after_user_fixes_the_file(tmp_path):
+    # El caso de uso real de hot-reload: el usuario tipea mal, el panel se
+    # queda con el layout bueno, el usuario corrige el typo y el panel
+    # levanta el archivo corregido en la siguiente pasada de polling.
+    path = write(tmp_path, MINIMAL)
+    store = loader.ProfileStore(path)
+    store.load_now()
+    good = store.current
+
+    path.write_text("{roto", encoding="utf-8")
+    changed, errors = store.reload_if_changed()
+    assert changed is False and errors
+    assert store.current is good
+
+    write(tmp_path, MINIMAL, name="p.json")
+    changed, errors = store.reload_if_changed()
+    assert changed is True and errors == []
+    assert store.current.name == "Test"

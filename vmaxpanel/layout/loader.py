@@ -3,6 +3,7 @@
 Invariante: un layout invalido NUNCA reemplaza al que esta andando. El panel no
 se queda negro por un JSON mal escrito.
 """
+import decimal
 import json
 import os
 from dataclasses import asdict
@@ -67,8 +68,28 @@ def _widget_dict(w) -> dict:
     # nunca puede disparar el error de "clave desconocida".
     d = asdict(w)
     if "rules" in d:
-        d["rules"] = [{"when": f"{r.op} {r.value:g}", "color": r.color} for r in w.rules]
+        d["rules"] = [{"when": f"{r.op} {_format_rule_value(r.value)}", "color": r.color}
+                      for r in w.rules]
     return d
+
+
+def _format_rule_value(value: float) -> str:
+    """Representa un umbral de regla en punto fijo, nunca en notacion cientifica.
+
+    repr(value) es la representacion mas corta que hace roundtrip exacto por
+    float(), pero para magnitudes muy grandes o muy chicas cae en notacion
+    cientifica (p.ej. "1e+16"), que schema._RULE_RE no reconoce (":g" es
+    todavia peor: cae en cientifica ya desde 1e6 y redondea a 6 cifras
+    significativas, perdiendo precision). Decimal reubica el punto sin
+    agregar ni perder digitos, asi que el resultado sigue siendo el mismo
+    valor exacto que repr(value) ya garantizaba.
+    """
+    s = repr(value)
+    if "e" in s or "E" in s:
+        s = format(decimal.Decimal(s), "f")
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s
 
 
 def save(layout: Layout, path):
