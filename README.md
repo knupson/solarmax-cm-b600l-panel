@@ -97,12 +97,13 @@ línea de comandos, porque los sidecars huérfanos se quedan con el DLL de LHM t
 
 ### Autostart
 
-Tarea `PanelVitals` al logon, **RunLevel Highest** (GSA1 y el SMART de los SSD piden
-elevación). Se deshabilita la tarea vendor `LCD ControlPowerBoot`.
+**Registrado el 2026-08-11**: tarea `PanelVitals` al logon, **RunLevel Highest** (GSA1 y el
+SMART de los SSD piden elevación), corriendo el motor nuevo. La tarea vendor
+`LCD ControlPowerBoot` quedó deshabilitada.
 
 ```powershell
-$py  = (Get-Command python).Source -replace 'python\.exe$','pythonw.exe'
-$act = New-ScheduledTaskAction -Execute $py -Argument '-u panel.py --fps 1 --log panel.log' -WorkingDirectory 'E:\Claude\Solarmax_Display\daemon'
+$pyw = 'C:\Users\KnuPwns\AppData\Local\Programs\Python\Python313\pythonw.exe'
+$act = New-ScheduledTaskAction -Execute $pyw -Argument '-u -m vmaxpanel --log E:\Claude\Solarmax_Display\vmaxpanel.log' -WorkingDirectory 'E:\Claude\Solarmax_Display'
 $trg = New-ScheduledTaskTrigger -AtLogOn -User 'KnuPwns'
 $prn = New-ScheduledTaskPrincipal -UserId 'KnuPwns' -LogonType Interactive -RunLevel Highest
 $set = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
@@ -110,7 +111,20 @@ Register-ScheduledTask -TaskName 'PanelVitals' -Action $act -Trigger $trg -Princ
 Disable-ScheduledTask -TaskName 'LCD ControlPowerBoot'
 ```
 
+`pythonw.exe` no tiene consola, así que **`--log` no es opcional acá**: sin él, un motor que
+muere al logon deja la pantalla negra sin dejar rastro. El log va a `vmaxpanel.log` en la raíz
+del repo (gitignored) y se escribe con flush por línea, incluido el traceback de una excepción
+que se escape.
+
+Probar la tarea sin reiniciar: `Stop-ScheduledTask PanelVitals` + `Start-ScheduledTask
+PanelVitals`, y revisar el log. Ojo que dos instancias se pelean por COM3: matar la manual
+antes.
+
 Revertir: `Unregister-ScheduledTask PanelVitals` + `Enable-ScheduledTask 'LCD ControlPowerBoot'`.
+
+Para volver al daemon viejo en el autostart, la versión anterior de esta sección está en el
+historial de git (`-Execute pythonw.exe -Argument '-u panel.py --fps 1 --log panel.log'` con
+`-WorkingDirectory` en `daemon/`).
 
 Si LCD Control arranca a mano pelea por COM3; el daemon reintenta cada 5s, pero conviene
 no tener los dos.

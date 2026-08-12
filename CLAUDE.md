@@ -115,9 +115,20 @@ diagnóstico ya hecho y verificado:
   cuando el mtime es igual al de la última lectura fallida.
 - Fases 2 (fondos animados) y 3 (servicio + tray + editor) no tienen plan todavía. El de
   fase 2 arranca con un spike de throughput: cuántos fps traga el panel decide todo lo demás.
-- **Autostart pendiente**: la tarea `PanelVitals` (ver README, sección Autostart) todavía no
-  está registrada — hizo falta permiso del usuario y quedó sin hacer. La fase 3 la reemplaza
-  por un servicio de Windows.
+- **`vitals.json` tiene un dato hardcodeado que ya quedó equivocado**: `mem-speed` es un `label`
+  con el texto `"6000"`. `Win32_PhysicalMemory` reporta `Speed` y `ConfiguredClockSpeed` =
+  **5600** (2×16 GiB Micron) porque **una actualización de BIOS reseteó el XMP/EXPO**. El panel
+  siguió mostrando 6000. Es el mejor argumento contra los valores horneados en el perfil: el
+  número cambió solo. Se lee por CIM sin elevación y no cambia en runtime → métrica `mem.speed`
+  servida por el sidecar, leída una vez al arranque.
+
+**Autostart hecho** (2026-08-11): tarea `PanelVitals` registrada corriendo `pythonw -m vmaxpanel
+--log`, tarea vendor `LCD ControlPowerBoot` deshabilitada. Ver README, sección Autostart, para
+el comando exacto y cómo revertir. La fase 3 la reemplaza por un servicio de Windows.
+
+**Con el autostart puesto, `stop.ps1` alcanza todavía menos:** además de no conocer al proceso
+`-m vmaxpanel`, la tarea lo levanta de nuevo al siguiente logon. Para bajarlo de verdad,
+`Stop-ScheduledTask PanelVitals` y matar el `pythonw.exe`.
 
 ### Al escribir los planes de fase 2 y 3
 

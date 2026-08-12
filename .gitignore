@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 .superpowers/
 
+vmaxpanel.log
 daemon/panel.log
 daemon/panel.err
 daemon/panel.pid
