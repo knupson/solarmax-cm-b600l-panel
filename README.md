@@ -118,21 +118,34 @@ Detalle de diseño en `docs/superpowers/specs/2026-08-12-vmax-panel-fase3-design
 **por qué no hay un servicio de Windows**: corre en la sesión 0 y desde ahí no se puede mostrar
 ni un ícono ni una ventana.
 
-### Autostart
-
-**Registrado el 2026-08-11**, apuntado a la bandeja el 2026-08-12: tarea `PanelVitals` al logon,
-**RunLevel Highest** (GSA1 y el SMART de los SSD piden elevación). La tarea vendor
-`LCD ControlPowerBoot` quedó deshabilitada.
+### Instalación y autostart
 
 ```powershell
-$pyw = 'C:\Users\KnuPwns\AppData\Local\Programs\Python\Python313\pythonw.exe'
-$act = New-ScheduledTaskAction -Execute $pyw -Argument '-u -m vmaxpanel.tray --log E:\Claude\Solarmax_Display\vmaxpanel.log' -WorkingDirectory 'E:\Claude\Solarmax_Display'
-$trg = New-ScheduledTaskTrigger -AtLogOn -User 'KnuPwns'
-$prn = New-ScheduledTaskPrincipal -UserId 'KnuPwns' -LogonType Interactive -RunLevel Highest
-$set = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-Register-ScheduledTask -TaskName 'PanelVitals' -Action $act -Trigger $trg -Principal $prn -Settings $set -Force
-Disable-ScheduledTask -TaskName 'LCD ControlPowerBoot'
+python -m vmaxpanel --diagnostico                          # revisa y sale, no toca nada
+python -m vmaxpanel --profile <perfil> --instalar          # revisa y registra la tarea al logon
+python -m vmaxpanel --desinstalar                          # borra la tarea
 ```
+
+`--diagnostico` es lo que hay que correr cuando "no anda": dependencias (con el nombre de pip,
+no el de import — "falta PIL" manda a buscar un paquete que no existe), la DLL de sensores, el
+perfil y el panel. Tres estados y no dos: **ok**, **FALTA** (impide funcionar, y bloquea
+`--instalar`) y **opcional** — sin ffmpeg no hay fondos de video y nada más; el panel
+desenchufado no es un problema porque la bandeja reintenta sola. Un "Acceso denegado" del
+puerto se traduce a *está en uso*: pyserial envuelve el `PermissionError` en `SerialException`
+y leído crudo manda a pelear con el UAC en vez de a cerrar LCD Control.
+
+`--instalar` registra `PanelVitals` **por XML**, no con `/SC ONLOGON`, porque los defaults de
+schtasks no arrancan la tarea a batería, la matan al desenchufar y la cortan a las 72 horas: en
+una notebook eso es el panel apagándose solo. **`RunLevel HighestAvailable`** — GSA1 y el SMART
+de los SSD piden elevación —, y por eso registrarla necesita una consola de administrador. Con
+`/F`: reinstalar reemplaza, así que correrlo dos veces deja una sola tarea. El XML va en UTF-16
+porque schtasks rechaza UTF-8 con "The task XML is malformed" sin decir que el problema es la
+codificación.
+
+**Registrado el 2026-08-11** a mano, apuntado a la bandeja el 2026-08-12, y regenerado con
+`--instalar` el mismo día. La tarea vendor `LCD ControlPowerBoot` quedó deshabilitada
+(`Disable-ScheduledTask -TaskName 'LCD ControlPowerBoot'`); revertir eso es
+`Enable-ScheduledTask`.
 
 `pythonw.exe` no tiene consola, así que **`--log` no es opcional acá**: sin él, un motor que
 muere al logon deja la pantalla negra sin dejar rastro. El log va a `vmaxpanel.log` en la raíz
@@ -145,8 +158,6 @@ nada fallara a la vista.
 Probar la tarea sin reiniciar: `Stop-ScheduledTask PanelVitals` + `Start-ScheduledTask
 PanelVitals`, y revisar el log. Ojo que dos instancias se pelean por COM3: matar la manual
 antes.
-
-Revertir: `Unregister-ScheduledTask PanelVitals` + `Enable-ScheduledTask 'LCD ControlPowerBoot'`.
 
 Para volver al daemon viejo en el autostart, la versión anterior de esta sección está en el
 historial de git (`-Execute pythonw.exe -Argument '-u panel.py --fps 1 --log panel.log'` con
@@ -198,8 +209,41 @@ Dos cosas que no se adivinan:
   `fill` puesto después de un texto lo tapa. Los separadores del perfil van antes del header
   de su sección.
 
+### Fondos
+
+`background.type` acepta seis: `solid`, `gradient`, `image` (estáticos, se cachean una vez) y
+`procedural`, `sequence`, `video` (animados, un cuadro por frame).
+
+| Tipo | Claves propias | Nota |
+|---|---|---|
+| `solid` | `color` | |
+| `gradient` | `stops`, `angle` | `angle % 180` en [45,135) = vertical; el resto horizontal. No hay diagonales |
+| `image` | `src`, `fit`, `color` | `color` es el relleno del letterbox |
+| `procedural` | `name` (`scroll`\|`pulse`), `speed`, `period`, `stops` | parte del degradado; `scroll` usa el gradiente **y su espejo** para que el ciclo cierre sin tirón |
+| `sequence` | `src` (carpeta), `fit`, `fps`, `color` | decodifica por cuadro a propósito: cachearlos son 1,4 MB cada uno |
+| `video` | `src` (archivo), `fit`, `fps`, `color` | mp4, webm, mkv, gif — lo que ffmpeg sepa abrir |
+
+**El video necesita ffmpeg**, que es externo: se busca en `vmaxpanel/lib/` y después en el PATH
+(`winget install Gyan.FFmpeg`, o dejar `ffmpeg.exe` en `vmaxpanel/lib/`). Si falta, el fondo
+degrada a color plano y el aviso dice el comando — no es una excepción. Externo y no PyAV ni
+imageio-ffmpeg porque esas son una rueda binaria por plataforma y versión de Python, y el
+criterio del proyecto es no sumar dependencias.
+
+Un ffmpeg por fondo, escupiendo rgb24 crudo del tamaño exacto del panel; un hilo lo drena y
+solo publica cuadros completos (`W*H*3` bytes), porque medio cuadro es basura dibujada. El loop
+lo hace ffmpeg (`-stream_loop -1`) y el ritmo también (`-re`): sin `-re` decodifica a fondo y
+quema un núcleo adelantando cuadros que nadie va a ver.
+
+**Ciclo de vida, que es donde estaba el riesgo real:** `Renderer.set_layout()` cierra el fondo
+anterior y `Engine._drop_link()` cierra el renderer. Sin eso, cada guardado del perfil (recarga
+en caliente) y cada reconexión dejaban un ffmpeg decodificando para nadie — el mismo patrón de
+proceso huérfano que este proyecto ya tuvo con `sensors.ps1` y el DLL de LHM.
+
+Los animados en el editor se ven quietos: la vista previa es **un** cuadro. La pista de la
+pestaña Fondo lo dice, junto con si ffmpeg está o no.
+
 ## Dependencias
 
-Python 3.13 + `psutil`, `pyserial`, `pillow`. Los 3 DLL (`LibreHardwareMonitorLib`,
+Python 3.13 + `psutil`, `pyserial`, `pillow`. `ffmpeg` es opcional y solo para fondos de video. Los 3 DLL (`LibreHardwareMonitorLib`,
 `HidSharp`, `HidLibrary`) están en `daemon/` — LHM necesita HidSharp al lado o `Open()`
 falla. `frida-tools` se usó solo para reversear el protocolo; el daemon no la necesita.

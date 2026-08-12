@@ -197,7 +197,11 @@ def xml_tarea(profile_path, log=None, python=None, usuario=None,
     <Principal id="Author">
       <UserId>{escape(usuario)}</UserId>
       <LogonType>InteractiveToken</LogonType>
-      <RunLevel>LeastPrivilege</RunLevel>
+      <!-- Elevada, y no por comodidad: GSA1 (temperaturas, voltajes, RPM) y el
+           SMART de los SSD no se leen sin elevacion. Sin esto el panel arranca
+           igual pero le faltan justo los sensores que no salen de ningun otro
+           lado. Es tambien lo que necesita el registro: una consola elevada. -->
+      <RunLevel>HighestAvailable</RunLevel>
     </Principal>
   </Principals>
   <Settings>
@@ -288,6 +292,13 @@ def instalar(profile_path, runner=None, log=None, port=None) -> tuple:
                       f"schtasks /Run /TN {TAREA}")
     else:
         lineas.append(f"schtasks fallo (codigo {code}): {salida.strip()}")
+        if "denied" in salida.lower() or "denegado" in salida.lower():
+            # schtasks dice "Access is denied" y nada mas. La causa es siempre la
+            # misma: la tarea corre elevada (ver RunLevel en el XML) y registrar
+            # eso pide una consola elevada.
+            lineas.append("La tarea corre elevada, asi que registrarla necesita "
+                          "una consola de administrador: abri PowerShell como "
+                          "administrador y corre lo mismo de nuevo.")
     return code, lineas
 
 

@@ -254,3 +254,22 @@ def test_a_serial_exception_wrapping_the_permission_error_is_recognized(perfil,
     monkeypatch.setattr(install, "_detectar_panel", tomado)
     panel = next(c for c in install.diagnosticar(perfil) if c.nombre == "panel")
     assert "en uso" in panel.detalle
+
+
+def test_the_task_runs_elevated(perfil):
+    """GSA1 (temperaturas, voltajes, RPM) y el SMART de los SSD piden elevación:
+    sin esto el panel arranca pero le faltan justo los sensores que no se pueden
+    sacar de ningún otro lado. Es lo que tenía la tarea registrada a mano."""
+    xml = install.xml_tarea(perfil, log=None, python=Path("C:/py/pythonw.exe"),
+                            usuario="DOM\\u")
+    ns = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
+    assert ET.fromstring(xml).find(".//t:RunLevel", ns).text == "HighestAvailable"
+
+
+def test_a_denied_registration_says_it_needs_admin(perfil):
+    """Registrar una tarea elevada necesita una consola elevada. El mensaje de
+    schtasks solo dice "Access is denied", que no dice qué hacer."""
+    r = FakeRunner(code=1, salida="ERROR: Access is denied.")
+    code, lineas = install.instalar(perfil, runner=r)
+    assert code == 1
+    assert any("administrador" in l.lower() for l in lineas)
