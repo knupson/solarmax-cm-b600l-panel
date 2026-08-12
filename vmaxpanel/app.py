@@ -11,6 +11,7 @@ un editor, que es justamente lo que el usuario queria. La tarea programada al
 logon hace de autostart y esta clase hace de servicio dentro de la sesion.
 """
 import json
+import sys
 import threading
 import time
 from pathlib import Path
@@ -75,6 +76,7 @@ class PanelApp:
         self._status_period = status_period or status_PERIODO
         self._status_stop = threading.Event()
         self._status_thread = None
+        self._aviso_estado = False
 
     # --- ciclo de vida ---
 
@@ -217,7 +219,18 @@ class PanelApp:
         # problems() ya junta last_error + warnings + metricas sin datos y
         # deduplica: el lector no tiene que saber que estaban en tres campos.
         st["problems"] = self.problems()
-        return self._status.write(st)
+        ok = self._status.write(st)
+        if not ok and not self._aviso_estado:
+            # Una sola vez: el latido corre cada 5 s, para siempre. Y al log, que es
+            # el unico lugar donde se puede avisar -- si el archivo no se escribe,
+            # `--estado` va a decir "no esta corriendo" para un panel que SI esta
+            # dibujando, y esa mentira no se detecta desde afuera de ninguna otra
+            # forma. Pasa de verdad con la app instalada en una carpeta de solo
+            # lectura.
+            self._aviso_estado = True
+            print(f"no se pudo publicar el estado en {self._status.path}: "
+                  f"'--estado' no va a poder contestar", file=sys.stderr)
+        return ok
 
     def _arrancar_latido(self):
         if self._status is None or (self._status_thread and

@@ -207,3 +207,23 @@ def test_the_cli_returns_one_when_the_panel_is_not_running(tmp_path, capsys,
     monkeypatch.setattr(cli, "status_path", lambda: tmp_path / "no-existe.json")
     assert cli.main(["--estado"]) == 1
     assert "no esta corriendo" in capsys.readouterr().out
+
+
+def test_a_status_file_that_cannot_be_written_is_reported_once(tmp_path, capsys):
+    """Si el archivo no se puede escribir -- carpeta de solo lectura, como pasaria
+    instalado en Program Files -- `--estado` diria "no esta corriendo" para un panel
+    que SI esta dibujando. Es una mentira silenciosa, y el unico lugar donde se puede
+    avisar es el log. Una sola vez: el latido corre cada 5 s, para siempre."""
+    from tests.test_app import app_for, wait_until
+    ruta = tmp_path / "no" / "existe" / "estado.json"
+    app, _ = app_for(tmp_path, status_path=ruta, status_period=0.02)
+    app.start()
+    try:
+        # Se espera a que el motor haya dado varias vueltas: con periodo 0.02 s, si
+        # el aviso se repitiera habria decenas cuando lleguemos a 5 cuadros.
+        assert wait_until(lambda: app.state()["frames"] >= 5)
+    finally:
+        app.stop()
+    salida = capsys.readouterr().err
+    assert "no se pudo publicar" in salida, "no aviso que no podia escribir"
+    assert salida.count("no se pudo publicar") == 1, "lo repitio en cada latido"
