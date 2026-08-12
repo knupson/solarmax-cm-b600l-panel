@@ -39,15 +39,20 @@ FONT_KEYS = {"family", "size", "bold"}
 # claves permitidas por tipo de background. "color" se admite en solid (relleno)
 # y en image/sequence/video (relleno de letterbox); en gradient no la lee el
 # modelo pero build() la acepta sin error, asi que la dejamos pasar en vez de
-# arriesgar un falso rechazo. "procedural" no tiene forma propia todavia: no
-# se restringen sus claves hasta que se defina.
+# arriesgar un falso rechazo.
 BACKGROUND_KEYS = {
     "solid": {"type", "color"},
     "gradient": {"type", "stops", "angle", "color"},
     "image": {"type", "src", "fit", "color"},
-    "sequence": {"type", "src", "fit", "color"},
-    "video": {"type", "src", "fit", "color"},
+    # sequence lleva su propio fps, independiente del panel.fps: una animacion
+    # de 12 cuadros por segundo se ve igual de fluida con el panel a 30 o a 60.
+    "sequence": {"type", "src", "fit", "color", "fps"},
+    "video": {"type", "src", "fit", "color", "fps"},
+    # procedural parte del gradiente, asi que comparte stops/angle; name elige
+    # el generador y speed/period lo parametrizan.
+    "procedural": {"type", "name", "stops", "angle", "color", "speed", "period"},
 }
+PROCEDURALES = {"scroll", "pulse"}
 
 _COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _RULE_RE = re.compile(r"^\s*(>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)\s*$")
@@ -143,6 +148,20 @@ def _parse_rule(raw):
     return Rule(m.group(1), float(m.group(2)), raw.get("color", "#FFFFFF"))
 
 
+def _errores_de_stops(stops) -> list[str]:
+    """Valida las paradas de un degradado. Compartido entre 'gradient' y
+    'procedural', que parte del mismo gradiente."""
+    errs = []
+    for i, s in enumerate(stops):
+        if not isinstance(s, dict) or not _is_num(s.get("at")):
+            errs.append(f"background.stops[{i}]: falta at numerico")
+        elif not 0.0 <= s["at"] <= 1.0:
+            errs.append(f"background.stops[{i}]: at fuera de 0..1")
+        _check_color(errs, f"background.stops[{i}]", s.get("color")
+                     if isinstance(s, dict) else None)
+    return errs
+
+
 def validate(raw) -> list[str]:
     errs: list[str] = []
     if not isinstance(raw, dict):
@@ -226,19 +245,39 @@ def validate(raw) -> list[str]:
             if not isinstance(stops, list) or len(stops) < 2:
                 errs.append("background.stops: se esperan al menos dos paradas")
             else:
-                for i, s in enumerate(stops):
-                    if not isinstance(s, dict) or not _is_num(s.get("at")):
-                        errs.append(f"background.stops[{i}]: falta at numerico")
-                    elif not 0.0 <= s["at"] <= 1.0:
-                        errs.append(f"background.stops[{i}]: at fuera de 0..1")
-                    _check_color(errs, f"background.stops[{i}]", s.get("color")
-                                 if isinstance(s, dict) else None)
+                errs.extend(_errores_de_stops(stops))
+        elif t == "procedural":
+            if bg.get("name", "scroll") not in PROCEDURALES:
+                errs.append(f"background.name: {bg.get('name')!r} no es un "
+                            f"generador conocido, se espera uno de "
+                            f"{sorted(PROCEDURALES)}")
+            # Los dos generadores parten del gradiente: sin paradas no hay nada
+            # que animar y quedaria un color plano en silencio.
+            stops = bg.get("stops")
+            if not isinstance(stops, list) or len(stops) < 2:
+                errs.append("background.stops: se esperan al menos dos paradas")
+            else:
+                errs.extend(_errores_de_stops(stops))
+            for clave in ("speed", "period"):
+                if clave not in bg:
+                    continue
+                v = bg[clave]
+                # speed 0 es legitimo (un gradiente quieto); period 0 no, seria
+                # una division por cero en la fase.
+                minimo = 0 if clave == "speed" else None
+                if not _is_num(v) or v < 0 or (minimo is None and v <= 0):
+                    errs.append(f"background.{clave}: {v!r} invalido, se espera "
+                                f"un numero {'>= 0' if minimo == 0 else '> 0'}")
         elif t in ("image", "sequence", "video"):
             if safe_asset_path(bg.get("src")) is None:
                 errs.append(f"background.src: ruta invalida o fuera del directorio "
                             f"de assets: {bg.get('src')!r}")
             if bg.get("fit", "cover") not in FITS:
                 errs.append(f"background.fit: {bg.get('fit')!r} invalido")
+            f = bg.get("fps", 10.0)
+            if not _is_num(f) or not 0.1 <= f <= MAX_FPS:
+                errs.append(f"background.fps: {f!r} fuera de 0.1..{MAX_FPS} "
+                            f"(el panel refresca a {MAX_FPS} Hz)")
 
     widgets = raw.get("widgets")
     if not isinstance(widgets, list):
@@ -388,7 +427,11 @@ def build(raw) -> Layout:
         stops=[{"at": float(s["at"]), "color": s["color"]} for s in bgr.get("stops", [])],
         angle=float(bgr.get("angle", 90.0)),
         src=safe_asset_path(bgr["src"]) if bgr.get("src") else None,
-        fit=bgr.get("fit", "cover"))
+        fit=bgr.get("fit", "cover"),
+        name=bgr.get("name", "scroll"),
+        speed=float(bgr.get("speed", 20.0)),
+        period=float(bgr.get("period", 6.0)),
+        fps=float(bgr.get("fps", 10.0)))
 
     widgets: list[Widget] = []
     for w in raw["widgets"]:

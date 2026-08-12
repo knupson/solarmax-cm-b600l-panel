@@ -44,18 +44,30 @@ def to_dict(layout: Layout) -> dict:
                          "height": layout.designed_for.height}
     d["fonts"] = {a: {"family": f.family, "size": f.size, "bold": f.bold}
                   for a, f in layout.fonts.items()}
-    bg = {"type": layout.background.type}
-    if layout.background.type == "solid":
-        bg["color"] = layout.background.color
-    elif layout.background.type == "gradient":
-        bg["stops"] = layout.background.stops
-        bg["angle"] = layout.background.angle
-    else:
-        bg["src"] = layout.background.src
-        bg["fit"] = layout.background.fit
-    d["background"] = bg
+    d["background"] = _background_dict(layout.background)
     d["widgets"] = [_widget_dict(w) for w in layout.widgets]
     return d
+
+
+def _background_dict(bg) -> dict:
+    """El fondo, con exactamente las claves que su tipo admite.
+
+    Derivado de schema.BACKGROUND_KEYS y no escrito a mano por tipo: la version
+    anterior tenia una rama else que emitia src/fit para todo lo que no fuera
+    solid ni gradient, asi que al aparecer 'procedural' -- que no lleva ninguna
+    de las dos -- save() empezo a escribir un fondo que load() rechazaba. Con
+    las claves derivadas, agregar un tipo nuevo no puede romper el roundtrip.
+    """
+    permitidas = schema.BACKGROUND_KEYS.get(bg.type)
+    if permitidas is None:
+        permitidas = {"type", "color"}
+    out = {"type": bg.type}
+    for clave in sorted(permitidas - {"type"}):
+        valor = getattr(bg, clave, None)
+        if valor is None:
+            continue            # un src sin definir no puede escribirse como null
+        out[clave] = valor
+    return out
 
 
 def _widget_dict(w) -> dict:

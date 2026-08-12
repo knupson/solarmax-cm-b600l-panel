@@ -1,22 +1,35 @@
-"""Fondos. Fase 1: solid, gradient e image.
+"""Fondos: solid, gradient, image (estaticos) y procedural, sequence (animados).
 
-sequence/video/procedural son fase 2 y degradan a solid con un aviso, en vez de
-fallar: un perfil compartido que los use tiene que seguir abriendo.
+`video` sigue sin implementar y degrada a color plano con un aviso, en vez de
+fallar: un perfil compartido que lo use tiene que seguir abriendo.
 
-El fondo se cachea porque no cambia entre frames mientras el layout sea el
-mismo; el loop de render solo copia el cache y le dibuja los widgets encima.
+Los estaticos se cachean porque no cambian entre frames mientras el layout sea
+el mismo; el loop de render solo copia el cache y le dibuja los widgets encima.
+Los animados calculan cada cuadro en funcion del reloj, que se INYECTA: un fondo
+que dependa de time.monotonic() directo no se puede testear de forma
+determinista.
+
 Quien construye un BackgroundSource es quien tiene que descartarlo y crear uno
-nuevo si el layout (o el tamano) cambia: esta clase no se entera de esos
-cambios sola, no hay invalidacion automatica.
+nuevo si el layout (o el tamano) cambia: esta clase no se entera de esos cambios
+sola, no hay invalidacion automatica.
+
+Costos medidos en el spike de fase 2 (perfil real, 320x1480, presupuesto de
+16,7 ms por cuadro a 60 fps): gradiente reconstruido 7,7 ms, secuencia 2,8 ms,
+scroll procedural 0,5 ms.
 """
+import math
+import time
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageEnhance
 
 from ..layout.schema import safe_asset_path
 
 FALLBACK = (10, 12, 16)
-PHASE2 = {"sequence", "video", "procedural"}
+SIN_IMPLEMENTAR = {"video"}
+ANIMADOS = {"procedural", "sequence"}
+PROCEDURALES = ("scroll", "pulse")
+EXT_CUADROS = (".png", ".jpg", ".jpeg", ".bmp", ".gif")
 
 
 def parse_hex(color, default=FALLBACK):
@@ -40,31 +53,153 @@ def parse_hex(color, default=FALLBACK):
 
 
 class BackgroundSource:
-    animated = False        # fase 2 lo pone en True para sequence/video/procedural
-
-    def __init__(self, bg, size, assets_dir="."):
+    def __init__(self, bg, size, assets_dir=".", clock=None):
         self.bg = bg
         self.size = (size.width, size.height)
         self.assets_dir = Path(assets_dir)
         self.warnings: list[str] = []
         self._cache = None
+        self._tira = None          # el gradiente y su espejo, para el scroll
+        self._cuadros = None       # rutas de una sequence, leidas una sola vez
+        # monotonic y no time(): un ajuste de hora del sistema -- o el cambio de
+        # horario -- no puede hacer saltar la animacion hacia atras.
+        self._clock = clock or time.monotonic
+
+    @property
+    def animated(self) -> bool:
+        return self.bg.type in ANIMADOS
 
     def frame(self) -> Image.Image:
-        """Devuelve una copia del fondo. Copia, no el original: quien recibe
-        el frame le dibuja widgets encima, y si eso mutara el cache el
-        siguiente frame arrancaria con la basura del anterior."""
+        """Devuelve una copia del fondo. Copia, no el original: quien recibe el
+        frame le dibuja widgets encima, y si eso mutara el cache el siguiente
+        frame arrancaria con la basura del anterior."""
+        if self.animated:
+            return self._animado(self._clock())
         if self._cache is None:
             self._cache = self._build()
         return self._cache.copy()
+
+    # --- animados ---
+
+    def _animado(self, t) -> Image.Image:
+        if self.bg.type == "sequence":
+            return self._sequence(t)
+        if self.bg.name == "scroll":
+            return self._scroll(t)
+        if self.bg.name == "pulse":
+            return self._pulse(t)
+        self._avisar(f"generador procedural {self.bg.name!r} desconocido; "
+                     f"se usa un color plano")
+        return self._solid()
+
+    def _avisar(self, texto):
+        """Aviso sin duplicar.
+
+        Un fondo animado recalcula hasta 60 veces por segundo: si cada vuelta
+        agregara su aviso, warnings() creceria sin limite y la bandeja mostraria
+        el mismo texto mil veces.
+        """
+        if texto not in self.warnings:
+            self.warnings.append(texto)
+
+    def _tira_doble(self) -> Image.Image:
+        """El gradiente y su espejo apilados: 2x el alto del panel.
+
+        Es lo que hace que el scroll cierre sin salto. Con una sola copia, al
+        dar la vuelta el ultimo color choca con el primero y se ve un tiron en
+        cada ciclo; con el espejo el recorrido es continuo en los dos sentidos.
+        """
+        if self._tira is None:
+            base = self._gradient()
+            ancho, alto = self.size
+            tira = Image.new("RGB", (ancho, alto * 2))
+            tira.paste(base, (0, 0))
+            tira.paste(base.transpose(Image.Transpose.FLIP_TOP_BOTTOM), (0, alto))
+            self._tira = tira
+        return self._tira
+
+    def _scroll(self, t) -> Image.Image:
+        tira = self._tira_doble()
+        ancho, alto = self.size
+        desp = int(round((self.bg.speed or 0.0) * t)) % (alto * 2)
+        if desp + alto <= alto * 2:
+            return tira.crop((0, desp, ancho, desp + alto))
+        # La ventana quedo partida entre el final de la tira y su principio.
+        out = Image.new("RGB", self.size)
+        primera = alto * 2 - desp
+        out.paste(tira.crop((0, desp, ancho, alto * 2)), (0, 0))
+        out.paste(tira.crop((0, 0, ancho, alto - primera)), (0, primera))
+        return out
+
+    def _pulse(self, t) -> Image.Image:
+        """El gradiente con el brillo respirando.
+
+        El factor no baja de 0.55: un fondo que se va a negro deja el texto
+        flotando en el vacio, y el punto de un fondo es acompanar, no competir.
+        """
+        if self._cache is None:
+            self._cache = self._gradient()
+        periodo = self.bg.period if self.bg.period and self.bg.period > 0 else 6.0
+        fase = (t % periodo) / periodo
+        k = 0.775 + 0.225 * math.cos(2 * math.pi * fase)
+        return ImageEnhance.Brightness(self._cache).enhance(k)
+
+    def _lista_cuadros(self):
+        """Rutas de los cuadros, ordenadas y leidas una sola vez.
+
+        Una sola vez porque el conjunto de ids/cuadros no puede cambiar entre
+        muestras: es la misma razon por la que los adaptadores de red y el
+        indice de los discos se fijan al arrancar.
+        """
+        if self._cuadros is not None:
+            return self._cuadros
+        self._cuadros = []
+        seguro = safe_asset_path(self.bg.src) if self.bg.src else None
+        if seguro is None:
+            self._avisar(f"fondo 'sequence' con ruta invalida o fuera del "
+                         f"directorio de assets: {self.bg.src!r}")
+            return self._cuadros
+        try:
+            self._cuadros = sorted(p for p in (self.assets_dir / seguro).iterdir()
+                                   if p.suffix.lower() in EXT_CUADROS)
+        except Exception as e:
+            self._avisar(f"no se pudo leer la secuencia {self.bg.src!r}: {e}")
+            return self._cuadros
+        if not self._cuadros:
+            self._avisar(f"la secuencia {self.bg.src!r} no tiene ningun cuadro")
+        return self._cuadros
+
+    def _sequence(self, t) -> Image.Image:
+        """Cuadro `int(t * fps) % n`, decodificado en el momento.
+
+        Los cuadros decodificados NO se cachean a proposito: a 320x1480 cada uno
+        ocupa 1,4 MB en RAM, asi que una secuencia de 60 se comeria 85 MB para
+        ahorrar los 2,8 ms que cuesta decodificar y escalar (medido en el
+        spike). El archivo ya lo cachea el sistema operativo.
+        """
+        cuadros = self._lista_cuadros()
+        if not cuadros:
+            return self._solid()
+        fps = self.bg.fps if self.bg.fps and self.bg.fps > 0 else 10.0
+        idx = int(t * fps) % len(cuadros)
+        try:
+            src = Image.open(cuadros[idx])
+            src.load()
+            return self._fit(src.convert("RGB"))
+        except Exception as e:
+            self._avisar(f"no se pudo abrir el cuadro {cuadros[idx].name!r}: {e}")
+            return self._solid()
+
+    # --- estaticos ---
 
     def _build(self) -> Image.Image:
         # Se llama una sola vez (frame() cachea el resultado), asi que los
         # warnings que agregan las ramas de aca abajo no se duplican aunque
         # frame() se llame muchas veces.
         t = self.bg.type
-        if t in PHASE2:
+        if t in SIN_IMPLEMENTAR:
             self.warnings.append(
-                f"fondo de tipo {t!r} todavia no esta implementado (fase 2); "
+                f"fondo de tipo {t!r} todavia no esta implementado; "
                 f"se usa un color plano")
             return self._solid()
         if t == "gradient":

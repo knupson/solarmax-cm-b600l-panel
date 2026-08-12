@@ -169,3 +169,18 @@ def test_reload_reports_no_change_when_the_file_is_untouched(tmp_path):
     store.load_now()
     assert store.reload_if_changed() == (False, [])
     assert store.reload_if_changed() == (False, [])
+
+
+def test_an_animated_background_survives_the_roundtrip(tmp_path):
+    """El editor de fase 3 guarda con loader.save: un fondo animado que se
+    escribe y no se puede volver a abrir es trabajo perdido."""
+    raw = json.loads(json.dumps(MINIMAL))
+    raw["background"] = {"type": "procedural", "name": "pulse", "period": 8,
+                         "stops": [{"at": 0.0, "color": "#101725"},
+                                   {"at": 1.0, "color": "#141A26"}]}
+    path = tmp_path / "animado.json"
+    loader.save(loader.loads(json.dumps(raw)), path)
+    otro = loader.load(path)
+    assert otro.background.type == "procedural"
+    assert otro.background.name == "pulse"
+    assert otro.background.period == 8.0

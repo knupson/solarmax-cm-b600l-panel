@@ -114,11 +114,14 @@ def test_image_path_traversal_degrades_safely_instead_of_escaping(tmp_path):
     assert any("invalida" in w for w in s.warnings)
 
 
-def test_phase2_types_degrade_with_a_warning():
-    for t in ("sequence", "video", "procedural"):
-        s = src(model.Background(type=t, src="x.mp4"))
-        assert s.frame().size == (64, 200)
-        assert any("fase 2" in w for w in s.warnings), t
+def test_video_still_degrades_with_a_warning():
+    """`sequence` y `procedural` ya estan implementados (ver
+    test_background_animado.py). `video` sigue afuera: no hay decoder en la
+    stdlib y sumar una dependencia va contra el criterio del proyecto. Un
+    perfil compartido que lo use tiene que seguir abriendo igual."""
+    s = src(model.Background(type="video", src="x.mp4"))
+    assert s.frame().size == (64, 200)
+    assert any("no esta implementado" in w for w in s.warnings)
 
 
 def test_frame_is_cached_and_returns_a_copy():

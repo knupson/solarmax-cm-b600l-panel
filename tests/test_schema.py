@@ -366,3 +366,58 @@ def test_fps_accepts_up_to_the_panel_refresh_rate():
     assert any("fps" in e for e in schema.validate(con_fps(61)))
     assert any("fps" in e for e in schema.validate(con_fps(120)))
     assert any("fps" in e for e in schema.validate(con_fps(0)))
+
+
+# --- fondos animados ---
+
+def con_fondo(bg):
+    raw = copy.deepcopy(MINIMAL)
+    raw["background"] = bg
+    return raw
+
+
+STOPS_OK = [{"at": 0.0, "color": "#101725"}, {"at": 1.0, "color": "#141A26"}]
+
+
+def test_procedural_scroll_and_pulse_are_valid():
+    assert schema.validate(con_fondo({"type": "procedural", "name": "scroll",
+                                      "stops": STOPS_OK, "speed": 20})) == []
+    assert schema.validate(con_fondo({"type": "procedural", "name": "pulse",
+                                      "stops": STOPS_OK, "period": 6})) == []
+
+
+def test_procedural_needs_a_known_generator():
+    errs = schema.validate(con_fondo({"type": "procedural", "name": "inventado",
+                                      "stops": STOPS_OK}))
+    assert any("name" in e for e in errs)
+
+
+def test_procedural_needs_stops_like_a_gradient():
+    """Los dos generadores parten del gradiente: sin paradas no hay nada que
+    animar."""
+    errs = schema.validate(con_fondo({"type": "procedural", "name": "scroll"}))
+    assert any("stops" in e for e in errs)
+
+
+def test_procedural_rejects_a_negative_speed_or_period():
+    assert any("speed" in e for e in schema.validate(
+        con_fondo({"type": "procedural", "name": "scroll", "stops": STOPS_OK,
+                   "speed": -5})))
+    assert any("period" in e for e in schema.validate(
+        con_fondo({"type": "procedural", "name": "pulse", "stops": STOPS_OK,
+                   "period": 0})))
+
+
+def test_sequence_is_valid_with_a_folder_and_an_fps():
+    assert schema.validate(con_fondo({"type": "sequence", "src": "fondos/lluvia",
+                                      "fps": 12, "fit": "cover"})) == []
+
+
+def test_sequence_rejects_an_fps_the_panel_cannot_show():
+    errs = schema.validate(con_fondo({"type": "sequence", "src": "x", "fps": 120}))
+    assert any("fps" in e for e in errs)
+
+
+def test_sequence_rejects_a_path_outside_the_assets_dir():
+    errs = schema.validate(con_fondo({"type": "sequence", "src": "../../etc"}))
+    assert any("src" in e for e in errs)

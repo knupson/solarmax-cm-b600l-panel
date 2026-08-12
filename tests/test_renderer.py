@@ -139,14 +139,18 @@ def test_warnings_reports_a_font_alias_unused_by_any_widget():
     assert any("NoExiste" in w for w in r.warnings())
 
 
-def test_warnings_surfaces_background_phase2_notice_before_any_frame():
+def test_warnings_surfaces_the_unimplemented_background_notice_before_any_frame():
     # Mismo principio que las fuentes: BackgroundSource solo agrega sus
     # warnings la primera vez que se construye el fondo (_build(), llamado
     # de adentro de frame()). set_layout() ahora fuerza ese build de una
-    # vez, asi que warnings() tiene que ver el aviso de "fase 2" de un
-    # fondo sequence/video/procedural SIN haber llamado frame() todavia.
-    r = Renderer(layout(background={"type": "sequence", "src": "x.mp4"}))
-    assert any("fase 2" in w for w in r.warnings())
+    # vez, asi que warnings() tiene que ver el aviso SIN haber llamado
+    # frame() todavia.
+    #
+    # 'video' y no 'sequence': sequence y procedural ya estan implementados
+    # (ver test_background_animado.py), asi que ya no avisan nada. video sigue
+    # afuera porque no hay decoder en la stdlib.
+    r = Renderer(layout(background={"type": "video", "src": "x.mp4"}))
+    assert any("no esta implementado" in w for w in r.warnings())
 
 
 def _full_bleed_layout(dw, dh, color="#3987E5", bg="#0F1218"):

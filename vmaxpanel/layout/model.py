@@ -49,6 +49,14 @@ class Background:
     angle: float = 90.0
     src: str | None = None
     fit: str = "cover"
+    # --- animados (fase 2) ---
+    # `name` elige el generador de 'procedural'. Los dos reusan `stops`, asi que
+    # un fondo animado se configura con el mismo vocabulario que el gradiente
+    # que el usuario ya conoce.
+    name: str = "scroll"
+    speed: float = 20.0        # px/s, para scroll
+    period: float = 6.0        # s de un ciclo completo, para pulse
+    fps: float = 10.0          # cuadros por segundo de una 'sequence'
 
 
 @dataclass
