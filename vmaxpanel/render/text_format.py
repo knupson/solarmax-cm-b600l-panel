@@ -48,7 +48,28 @@ def human_bytes(b) -> str:
     return f"{b:.0f} B"
 
 
-HUMANIZERS = {"rate": human_rate, "bytes": human_bytes}
+def human_duration(segundos) -> str:
+    """33098 -> "9h 11m": una duracion como la diria una persona.
+
+    Dos unidades como maximo y siempre las dos mas significativas: "1d 1h" en
+    vez de "1d 1h 0m 0s". Un uptime en segundos crudos no le dice nada a nadie
+    en un panel que se mira de reojo.
+    """
+    s = int(max(0, segundos))
+    d, resto = divmod(s, 86400)
+    h, resto = divmod(resto, 3600)
+    m, seg = divmod(resto, 60)
+    if d:
+        return f"{d}d {h}h"
+    if h:
+        return f"{h}h {m}m"
+    if m:
+        return f"{m}m {seg}s"
+    return f"{seg}s"
+
+
+HUMANIZERS = {"rate": human_rate, "bytes": human_bytes,
+              "duration": human_duration}
 
 
 def format_value(w: model.TextWidget, value) -> str:

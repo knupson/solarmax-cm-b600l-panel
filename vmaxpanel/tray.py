@@ -57,6 +57,7 @@ CMD_QUIT = 1007
 # Los fps van en un rango aparte, CMD_FPS_BASE + indice de la opcion: si se
 # solaparan con los ids fijos, elegir un fps ejecutaria otra cosa.
 CMD_FPS_BASE = 1100
+CMD_PROFILE_BASE = 1200
 
 # LRESULT es del tamano de un puntero: en 64 bits, c_long (32) TRUNCA el valor
 # de retorno. Y sin argtypes declarados, ctypes asume int de 32 bits para cada
@@ -233,6 +234,18 @@ class Tray:
                            "Reanudar" if st.get("paused") else "Pausar (suelta el puerto)")
         user32.AppendMenuW(menu, MF_STRING, CMD_RESTART, "Reiniciar el motor")
 
+        # Submenu de perfiles: es lo primero que alguien quiere cambiar.
+        subp = user32.CreatePopupMenu()
+        for cmd, nombre, actual in self._profile_entries():
+            user32.AppendMenuW(subp, MF_STRING | (MF_CHECKED if actual else 0),
+                               cmd, nombre)
+        if self._editor_abierto():
+            user32.AppendMenuW(menu, MF_STRING | MF_GRAYED, 0,
+                               "Perfil (cerrá el editor primero)")
+            user32.DestroyMenu(subp)
+        else:
+            user32.AppendMenuW(menu, MF_STRING | MF_POPUP, subp, "Perfil")
+
         # Submenu de fps. El panel refresca a 60 Hz; por encima descarta, asi
         # que 60 es el tope y el costo de cada opcion va en su etiqueta.
         sub = user32.CreatePopupMenu()
@@ -278,6 +291,14 @@ class Tray:
     def _editor_abierto(self) -> bool:
         return self._editor is not None and self._editor.poll() is None
 
+    def _profile_entries(self):
+        """[(comando, nombre, es_el_actual)] para el submenu de perfiles."""
+        actual = Path(self.app.profile_path)
+        salida = []
+        for i, p in enumerate(self.app.profiles()):
+            salida.append((CMD_PROFILE_BASE + i, Path(p).stem, Path(p) == actual))
+        return salida
+
     def _fps_entries(self):
         """[(comando, etiqueta, marcado)] para el submenu de fps."""
         actual = self.app.fps()
@@ -287,6 +308,15 @@ class Tray:
         return salida
 
     def _dispatch(self, cmd):
+        if CMD_PROFILE_BASE <= cmd < CMD_PROFILE_BASE + 32:
+            perfiles = self.app.profiles()
+            i = cmd - CMD_PROFILE_BASE
+            if 0 <= i < len(perfiles):
+                # En un thread: set_profile baja el motor y lo vuelve a
+                # levantar, lo que incluye esperar al sidecar.
+                threading.Thread(target=self.app.set_profile,
+                                 args=(perfiles[i],), daemon=True).start()
+            return
         if CMD_FPS_BASE <= cmd < CMD_FPS_BASE + 64:
             if self._editor_abierto():
                 return              # el editor tiene el perfil en memoria

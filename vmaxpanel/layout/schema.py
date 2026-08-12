@@ -31,7 +31,7 @@ BACKGROUND_TYPES = {"solid", "gradient", "image", "sequence", "video", "procedur
 ALIGNS = {"left", "center", "right"}
 FITS = {"cover", "contain", "stretch"}
 ROTATIONS = {0, 90, 180, 270}
-HUMANIZE_MODES = {"none", "rate", "bytes"}
+HUMANIZE_MODES = {"none", "rate", "bytes", "duration"}
 
 # Derivados del modelo, no escritos a mano: agregarle un campo a PanelCfg o a
 # Font hacia que el validador empezara a rechazar layouts validos hasta que

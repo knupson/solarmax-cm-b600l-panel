@@ -163,3 +163,38 @@ def test_the_fps_picker_is_refused_while_the_editor_is_open():
     t._dispatch(tray.CMD_FPS_BASE + 1)
     assert pedidos == [], "escribio el perfil con el editor abierto"
     assert t._editor_abierto() is True
+
+
+def test_the_profile_submenu_marks_the_current_one(monkeypatch, tmp_path):
+    a = tmp_path / "vitals.json"
+    b = tmp_path / "apex.json"
+    for f in (a, b):
+        f.write_text("{}", encoding="utf-8")
+
+    class AppConPerfiles(FakeApp):
+        def __init__(self, **st):
+            super().__init__(**st)
+            self.profile_path = b
+            self.pedidos = []
+
+        def profiles(self):
+            return [b, a]
+
+        def set_profile(self, p):
+            self.pedidos.append(p)
+            return []
+
+    t = tray.Tray.__new__(tray.Tray)
+    t.app = AppConPerfiles(paused=False, running=True)
+    t._editor = None
+    entradas = t._profile_entries()
+    assert [e[1] for e in entradas] == ["apex", "vitals"]
+    assert [e[2] for e in entradas] == [True, False]
+    t._dispatch(tray.CMD_PROFILE_BASE + 1)
+    assert t.app.pedidos == [a]
+
+
+def test_the_profile_and_fps_command_ranges_do_not_overlap():
+    for i in range(32):
+        assert tray.CMD_PROFILE_BASE + i not in range(tray.CMD_FPS_BASE,
+                                                      tray.CMD_FPS_BASE + 64)

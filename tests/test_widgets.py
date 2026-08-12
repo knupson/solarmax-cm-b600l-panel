@@ -392,3 +392,21 @@ def test_rect_without_fill_or_stroke_draws_nothing():
     im = canvas()
     widgets.draw(im, rect_widget(fill=None), None, ctx())
     assert im.getbbox() is None
+
+
+# --- humanize: duration ---
+
+def test_human_duration_reads_like_a_person_says_it():
+    """sys.uptime son segundos. "33098" no le dice nada a nadie; "9h 11m" si."""
+    assert widgets.human_duration(45) == "45s"
+    assert widgets.human_duration(90) == "1m 30s"
+    assert widgets.human_duration(3600) == "1h 0m"
+    assert widgets.human_duration(33098) == "9h 11m"
+    assert widgets.human_duration(90000) == "1d 1h"
+    assert widgets.human_duration(0) == "0s"
+
+
+def test_humanize_duration_is_available_to_a_text_widget():
+    w = text_widget(metric="sys.uptime", format="{}", humanize="duration")
+    assert widgets.format_value(w, 33098) == "9h 11m"
+    assert widgets.format_value(w, None) == widgets.DASH

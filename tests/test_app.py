@@ -193,3 +193,47 @@ def test_the_cpu_cost_of_each_option_is_published(tmp_path):
     for valor, etiqueta in opciones:
         assert str(valor) in etiqueta
         assert "%" in etiqueta
+
+
+# --- cambio de perfil ---
+
+def test_profiles_lists_the_json_files_next_to_the_current_one(tmp_path):
+    app, _ = app_for(tmp_path)
+    (app.profile_path.parent / "otro.json").write_text(
+        json.dumps(MINIMAL), encoding="utf-8")
+    (app.profile_path.parent / "notas.txt").write_text("x", encoding="utf-8")
+    nombres = [p.name for p in app.profiles()]
+    assert app.profile_path.name in nombres
+    assert "otro.json" in nombres
+    assert "notas.txt" not in nombres
+
+
+def test_switching_profile_restarts_the_engine_on_the_new_one(tmp_path):
+    app, _ = app_for(tmp_path)
+    otro = app.profile_path.parent / "otro.json"
+    otro.write_text(json.dumps(dict(MINIMAL, name="Otro")), encoding="utf-8")
+    app.start()
+    try:
+        assert wait_until(lambda: app.state()["frames"] >= 1)
+        assert app.set_profile(otro) == []
+        assert app.profile_path == otro
+        assert wait_until(lambda: app.state()["profile"] == "Otro")
+    finally:
+        app.stop()
+
+
+def test_switching_to_a_broken_profile_is_refused(tmp_path):
+    """Cambiar a un perfil invalido dejaria el panel sin nada que dibujar. Se
+    valida ANTES de tocar el motor que esta andando."""
+    app, _ = app_for(tmp_path)
+    roto = app.profile_path.parent / "roto.json"
+    roto.write_text("{no es json", encoding="utf-8")
+    original = app.profile_path
+    errores = app.set_profile(roto)
+    assert errores
+    assert app.profile_path == original
+
+
+def test_switching_to_the_same_profile_is_a_no_op(tmp_path):
+    app, _ = app_for(tmp_path)
+    assert app.set_profile(app.profile_path) == []

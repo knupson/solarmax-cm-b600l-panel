@@ -23,7 +23,8 @@ from ..metrics import spec_for
 # Reexportados: el formateo de texto vive en text_format.py (no depende de PIL),
 # pero quien importaba widgets.format_value o widgets.human_rate sigue andando.
 from .text_format import (DASH, HUMANIZERS, _dashed, _Dash, _num,  # noqa: F401
-                          color_for, format_value, human_bytes, human_rate)
+                          color_for, format_value, human_bytes,
+                          human_duration, human_rate)
 
 @dataclass
 class DrawCtx:

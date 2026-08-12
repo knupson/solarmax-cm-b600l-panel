@@ -13,6 +13,7 @@ logon hace de autostart y esta clase hace de servicio dentro de la sesion.
 import json
 import threading
 import time
+from pathlib import Path
 
 from .engine import Engine, EngineConfig
 from .layout import loader, schema
@@ -145,6 +146,44 @@ class PanelApp:
 
     def toggle(self):
         self.resume() if self._paused else self.pause()
+
+    # --- perfiles ---
+
+    def profiles(self) -> list:
+        """Los .json que hay al lado del perfil actual, ordenados."""
+        try:
+            carpeta = Path(self.profile_path).parent
+            return sorted(p for p in carpeta.glob("*.json"))
+        except Exception:
+            return [Path(self.profile_path)]
+
+    def set_profile(self, path) -> list:
+        """Cambia de perfil y reinicia el motor. Devuelve los errores.
+
+        Se valida ANTES de tocar el motor que esta andando: cambiar a un perfil
+        invalido dejaria el panel sin nada que dibujar, y el usuario habria
+        perdido el que funcionaba por elegir mal de una lista.
+
+        Reiniciar y no recargar en caliente porque el Registry se arma al
+        arrancar: un perfil que usa metricas de un provider distinto necesita el
+        registry nuevo, y el hot-reload solo cambia el layout.
+        """
+        nuevo = Path(path)
+        if nuevo == Path(self.profile_path):
+            return []
+        try:
+            loader.load(nuevo)
+        except loader.LayoutError as e:
+            return e.errors
+        except OSError as e:
+            return [f"no se pudo leer {nuevo.name}: {e}"]
+        corria = self.running()
+        if corria:
+            self.stop()
+        self.profile_path = nuevo
+        if corria:
+            self.start()
+        return []
 
     # --- fps ---
     #
