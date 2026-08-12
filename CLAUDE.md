@@ -67,8 +67,9 @@ métodos de lectura.** No agregar escrituras sin saber exactamente a qué regist
 
 ## Estado
 
-**Fases 1 y 3 completas, en `main`** (2026-08-12, 251 tests verdes). Fase 2 (fondos animados)
-es lo único que falta. El paquete `vmaxpanel/` reemplaza el layout
+**Las 3 fases completas, en `main`** (2026-08-12, 469 tests verdes). Fase 2 cerró con los fondos
+animados (`procedural`, `sequence`) y los de **video** por ffmpeg externo. El paquete `vmaxpanel/`
+reemplaza el layout
 hardcodeado de `daemon/panel.py` por un motor manejado por datos. Verificado contra el panel
 real: muestra el layout nuevo y editar el perfil se refleja sin reiniciar. El widget `rect`, los
 separadores del perfil y los 5 fixes de la revisión final entraron después de la revisión
@@ -103,8 +104,14 @@ en el mensaje de esos dos commits, que es el lugar donde buscarlo si algo se rom
 - `loader.py` — hot-reload por `st_mtime_ns`, ciego a dos escrituras en el mismo tick
   (arreglado: ahora es un hash del contenido)
 
-- **Fase 2 (fondos animados) es lo único que queda sin plan.** El spike de throughput **ya está
-  hecho** (`docs/superpowers/specs/2026-08-12-vmax-panel-fase2-spike.md`, herramienta en
+- **Fondos animados hechos**, incluido `video` (mp4/webm/mkv/gif) por **ffmpeg como proceso
+  externo**: un decoder por fondo escupiendo rgb24 crudo, drenado por un hilo que solo publica
+  cuadros completos. ffmpeg **no está instalado en esta máquina**: el fondo degrada a color plano
+  con el comando para instalarlo. Sin PyAV ni imageio-ffmpeg — son una rueda binaria por
+  plataforma, y el criterio es no sumar dependencias. **Lo delicado es el ciclo de vida:**
+  `Renderer.set_layout()` cierra el fondo anterior y `Engine._drop_link()` cierra el renderer,
+  porque sin eso cada guardado del perfil dejaba un ffmpeg huérfano. El spike de throughput
+  **está hecho** (`docs/superpowers/specs/2026-08-12-vmax-panel-fase2-spike.md`, herramienta en
   `research/spike_throughput.py`): nada del host es el cuello — 10 ms por frame extremo a
   extremo, 100 fps de techo, y un fondo animado suma 0,5–7,7 ms según la estrategia. **El panel
   refresca a 60 Hz** (dato del usuario; desde el host no se podía deducir porque no aplica
@@ -117,8 +124,9 @@ en el mensaje de esos dos commits, que es el lugar donde buscarlo si algo se rom
   sale negra y `FindWindow` no enumera las ventanas del escritorio del usuario. Lo funcional sí
   está verificado (la tarea levanta la bandeja, el motor toma COM3, el editor construye y
   guarda).
-- El editor no tiene arrastrar-y-soltar ni UI para `fonts`/`background`/`rules`: eso sigue
-  siendo edición del JSON, que la bandeja abre con un clic.
+- El editor ya tiene arrastrar-y-soltar sobre la vista previa (con undo), pestañas de
+  `fonts`/`background` y reglas de color. Lo que queda sin UI se edita en el JSON, que la
+  bandeja abre con un clic.
 - **La RAM está corriendo a 5600, no a 6000**: una actualización de BIOS reseteó el XMP/EXPO y
   quedó en la base JEDEC. Si el kit es de 6000, hay que volver a activar el perfil en BIOS. El
   panel mostraba 6000 porque estaba **horneado** como un `label` en el perfil; ya se lee de
@@ -127,8 +135,12 @@ en el mensaje de esos dos commits, que es el lugar donde buscarlo si algo se rom
   solo y nadie se enteró.
 
 **Autostart hecho** (2026-08-11, apuntado a la bandeja el 2026-08-12): tarea `PanelVitals`
-corriendo `pythonw -m vmaxpanel.tray --log`, tarea vendor `LCD ControlPowerBoot` deshabilitada.
-Ver README, sección Autostart. **No la reemplaza un servicio de Windows: eso estaba mal en el
+corriendo `pythonw -m vmaxpanel.tray --profile ...apex.json --log`, tarea vendor
+`LCD ControlPowerBoot` deshabilitada. Desde el 2026-08-12 la registra
+`python -m vmaxpanel --instalar` (y `--diagnostico` / `--desinstalar`), así que **no volver a
+armarla a mano**: el XML del instalador desactiva las guardas de batería, saca el límite de 72
+horas y usa `RunLevel HighestAvailable`, que es obligatorio — sin elevación no hay GSA1 ni SMART.
+Ver README, sección "Instalación y autostart". **No la reemplaza un servicio de Windows: eso estaba mal en el
 diseño original** — un servicio corre en la sesión 0 y desde ahí no se puede mostrar ni un ícono
 de bandeja ni una ventana. Ver el spec de fase 3.
 
