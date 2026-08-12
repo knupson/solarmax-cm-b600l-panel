@@ -7,6 +7,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from . import install
 from .engine import Engine, EngineConfig
 from .layout import loader
 from .logsetup import run_with_log
@@ -33,9 +34,49 @@ def main(argv=None) -> int:
                     help="ademas de la consola, escribe todo a este archivo "
                          "(necesario cuando corre con pythonw.exe, que no tiene "
                          "consola donde imprimir)")
+    ap.add_argument("--diagnostico", action="store_true",
+                    help="revisa dependencias, sensores, perfil y panel, y sale "
+                         "sin tocar nada")
+    ap.add_argument("--instalar", action="store_true",
+                    help="revisa todo y registra la tarea que arranca la bandeja "
+                         "al iniciar sesion")
+    ap.add_argument("--desinstalar", action="store_true",
+                    help="borra esa tarea; el panel deja de arrancar solo")
     a = ap.parse_args(argv)
 
+    # Antes del run_with_log: estos tres salen por consola y terminan. Escribir
+    # el diagnostico a un log en vez de a la pantalla seria justo lo contrario de
+    # lo que se le pide a alguien que dice "no anda".
+    if a.desinstalar:
+        return _reportar(install.desinstalar())
+    if a.instalar:
+        print(f"Instalando VMax Panel con el perfil {a.profile}")
+        return _reportar(install.instalar(a.profile, log=a.log or _log_por_defecto(),
+                                          port=a.port))
+    if a.diagnostico:
+        checks = install.diagnosticar(a.profile, a.port)
+        for c in checks:
+            print(f"  [{c.marca:>8}] {c.nombre}: {c.detalle}")
+        return 2 if install.bloquea(checks) else 0
+
     return run_with_log(a.log, lambda: _run(a))
+
+
+def _log_por_defecto() -> Path:
+    """Donde escribe la bandeja cuando la levanta la tarea.
+
+    Al lado del repo y no en %TEMP%: la tarea corre con pythonw, sin consola, asi
+    que este archivo es el UNICO lugar donde queda el motivo de que el panel no
+    haya arrancado. Tiene que estar donde el usuario lo encuentre.
+    """
+    return HERE.parent / "vmaxpanel.log"
+
+
+def _reportar(resultado) -> int:
+    code, lineas = resultado
+    for l in lineas:
+        print(l)
+    return code
 
 
 def _run(a) -> int:
