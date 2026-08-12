@@ -260,3 +260,38 @@ def test_the_brightness_submenu_marks_the_current_value():
     assert [e[2] for e in entradas] == [False, True, False]
     t._dispatch(tray.CMD_BRIGHT_BASE + 2)
     assert t.app.pedido == 100
+
+
+def test_the_export_command_reaches_the_app(monkeypatch, tmp_path, capsys):
+    """El item de menu tiene que llegar a app.export_profile y, si salio bien, abrir
+    la carpeta: la bandeja no tiene ventana donde escribir un mensaje, asi que un
+    export silencioso es indistinguible de un boton que no hace nada."""
+    llamadas, abiertos = [], []
+
+    class AppQueExporta(FakeApp):
+        def export_profile(self):
+            llamadas.append(True)
+            return tmp_path / "salidas" / "x.vmaxpanel", "exportado a x.vmaxpanel"
+
+    monkeypatch.setattr(tray, "_open_with_shell", abiertos.append)
+    t = tray.Tray.__new__(tray.Tray)
+    t.app = AppQueExporta(paused=False, running=True)
+    t._exportar()
+    assert llamadas == [True]
+    assert abiertos == [tmp_path / "salidas"]
+    assert "x.vmaxpanel" in capsys.readouterr().out
+
+
+def test_a_failed_export_does_not_open_anything(monkeypatch, capsys):
+    abiertos = []
+
+    class AppQueFalla(FakeApp):
+        def export_profile(self):
+            return None, "no se pudo exportar: el perfil no es valido"
+
+    monkeypatch.setattr(tray, "_open_with_shell", abiertos.append)
+    t = tray.Tray.__new__(tray.Tray)
+    t.app = AppQueFalla(paused=False, running=True)
+    t._exportar()
+    assert abiertos == []
+    assert "no se pudo" in capsys.readouterr().out

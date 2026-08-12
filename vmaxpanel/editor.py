@@ -18,6 +18,7 @@ from pathlib import Path
 
 from PIL import Image
 
+from . import bundle
 from .layout import loader, model, schema
 from .metrics import METRICS, group_for, spec_for
 from .providers.setup import build_registry_without_sensors
@@ -875,6 +876,10 @@ class EditorWindow:
         ttk.Button(acciones, text="Guardar", command=self._save).pack(side="left")
         ttk.Button(acciones, text="Descartar cambios",
                    command=self._discard).pack(side="left", padx=4)
+        ttk.Button(acciones, text="Exportar…",
+                   command=self._pedir_exportar).pack(side="left")
+        ttk.Button(acciones, text="Importar…",
+                   command=self._pedir_importar).pack(side="left", padx=4)
         self.estado = ttk.Label(centro, text="", wraplength=380, justify="left")
         self.estado.pack(fill="x", pady=(6, 0))
 
@@ -1556,6 +1561,89 @@ class EditorWindow:
     def _discard(self):
         self.state.reload()
         self._refresh(select_first=True)
+
+    # --- exportar / importar ---
+    #
+    # La logica vive en bundle.py; aca esta el pegamento y los dos mensajes que
+    # importan: por que no se exporto, y donde quedo lo que se importo.
+
+    def _carpetas(self):
+        """(perfiles, assets) del proyecto.
+
+        Se derivan del paquete y no del perfil abierto: el perfil puede estar en
+        cualquier parte -- los tests lo abren desde un tmp_path -- pero los assets
+        de un bundle siempre van a vmaxpanel/assets, que es el unico lugar donde el
+        motor los busca.
+        """
+        from .cli import assets_dir, profiles_dir
+        return profiles_dir(), assets_dir()
+
+    def _pedir_exportar(self):
+        from tkinter import filedialog
+        sugerido = f"{self.state.path.stem}{bundle.EXT}"
+        destino = filedialog.asksaveasfilename(
+            parent=self.root, title="Exportar perfil",
+            initialfile=sugerido, defaultextension=bundle.EXT,
+            filetypes=[("Perfil de VMax Panel", f"*{bundle.EXT}")])
+        if destino:
+            self._exportar_a(Path(destino))
+
+    def _exportar_a(self, destino):
+        destino = Path(destino)
+        if self.state.dirty:
+            # Exportar lee el ARCHIVO, no lo que hay en pantalla. Con cambios sin
+            # guardar el bundle llevaria la version vieja, y ese error no se nota
+            # hasta que otra persona lo abre.
+            self.estado.config(text="hay cambios sin guardar: guardá primero y "
+                                    "después exportá", foreground="#803000")
+            return
+        if destino.exists():
+            # asksaveasfilename ya pregunta, pero este metodo tambien se llama
+            # directo: pisar un bundle que el usuario quizas ya compartio no puede
+            # depender de que el dialogo haya preguntado.
+            self.estado.config(text=f"{destino.name} ya existe: elegí otro nombre",
+                               foreground="#803000")
+            return
+        try:
+            info = bundle.export_profile(self.state.path, destino, self._carpetas()[1])
+        except bundle.BundleError as e:
+            self.estado.config(text=str(e), foreground="#A00000")
+            return
+        assets = ", ".join(info["assets"]) or "sin assets"
+        self.estado.config(
+            text=f"exportado a {destino.name} ({assets}). Las fuentes no viajan: "
+                 f"se piden por familia.", foreground="#006000")
+
+    def _pedir_importar(self):
+        from tkinter import filedialog
+        origen = filedialog.askopenfilename(
+            parent=self.root, title="Importar perfil",
+            filetypes=[("Perfil de VMax Panel", f"*{bundle.EXT}"),
+                       ("Todos", "*.*")])
+        if origen:
+            self._importar_de(Path(origen))
+
+    def _importar_de(self, origen, profiles_dir=None, assets_dir=None):
+        """Importa y pasa a editar el perfil importado.
+
+        Importar y no abrirlo dejaria al usuario adivinando si funciono.
+        """
+        perfiles, assets = self._carpetas()
+        try:
+            info = bundle.import_bundle(origen, profiles_dir or perfiles,
+                                        assets_dir or assets, si_existe="renombrar")
+        except bundle.BundleError as e:
+            self.estado.config(text=str(e), foreground="#A00000")
+            return
+        self.state = EditorState(info["profile"])
+        self.state.reload()
+        self._refresh(select_first=True)
+        faltan = info["fuentes_faltantes"]
+        aviso = (f" Ojo: no tenés {', '.join(faltan)}, se ve distinto."
+                 if faltan else "")
+        self.estado.config(
+            text=f"importado en {info['profile'].name}, y abierto.{aviso}",
+            foreground="#803000" if faltan else "#006000")
 
     def run(self):
         self.root.mainloop()

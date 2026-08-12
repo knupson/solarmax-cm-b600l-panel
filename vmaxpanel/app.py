@@ -185,6 +185,42 @@ class PanelApp:
             self.start()
         return []
 
+    # --- exportar ---
+
+    def export_profile(self, carpeta=None, assets_dir=None, fecha=None) -> tuple:
+        """Guarda el perfil y sus assets en un bundle. -> (ruta | None, mensaje).
+
+        Sin dialogo de archivo: la bandeja es ctypes puro y abrir un
+        GetSaveFileName desde el bombeo de mensajes es mas cirugia que valor. Va a
+        una carpeta fija con la fecha en el nombre, y el mensaje dice donde quedo.
+        Para elegir el destino esta el editor, que tiene Tkinter.
+
+        Nunca levanta: quien llama a esto es el bombeo de mensajes de Win32, donde
+        una excepcion no la ve nadie -- pythonw no tiene consola -- y deja la
+        bandeja muda.
+        """
+        from . import bundle
+        from .cli import assets_dir as assets_por_defecto
+        carpeta = Path(carpeta) if carpeta else Path(self.profile_path).parent.parent.parent / "perfiles-exportados"
+        assets = Path(assets_dir) if assets_dir else assets_por_defecto()
+        if fecha is None:
+            fecha = time.strftime("%Y-%m-%d")
+        base = f"{Path(self.profile_path).stem}-{fecha}"
+        destino = carpeta / f"{base}{bundle.EXT}"
+        # Exportar dos veces el mismo dia no puede pisar el bundle anterior: puede
+        # ser el que el usuario ya compartio.
+        i = 2
+        while destino.exists():
+            destino = carpeta / f"{base}-{i}{bundle.EXT}"
+            i += 1
+        try:
+            info = bundle.export_profile(self.profile_path, destino, assets)
+        except Exception as e:
+            return None, f"no se pudo exportar: {e}"
+        cuantos = len(info["assets"])
+        return destino, (f"exportado a {destino.name}"
+                         + (f" con {cuantos} asset(s)" if cuantos else ""))
+
     # --- fps ---
     #
     # El costo de cada cadencia esta medido contra el panel real (i5-12400F, 12

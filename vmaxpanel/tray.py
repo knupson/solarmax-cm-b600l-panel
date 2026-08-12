@@ -54,6 +54,7 @@ CMD_PROFILE = 1004
 CMD_LOG = 1005
 CMD_RESTART = 1006
 CMD_QUIT = 1007
+CMD_EXPORT = 1008
 # Los fps van en un rango aparte, CMD_FPS_BASE + indice de la opcion: si se
 # solaparan con los ids fijos, elegir un fps ejecutaria otra cosa.
 CMD_FPS_BASE = 1100
@@ -270,6 +271,7 @@ class Tray:
         user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, MF_STRING, CMD_EDITOR, "Editor de layout…")
         user32.AppendMenuW(menu, MF_STRING, CMD_PROFILE, "Abrir el perfil (JSON)")
+        user32.AppendMenuW(menu, MF_STRING, CMD_EXPORT, "Exportar el perfil…")
         flags = MF_STRING if (self.log_path and Path(self.log_path).exists()) else \
             MF_STRING | MF_GRAYED
         user32.AppendMenuW(menu, flags, CMD_LOG, "Ver el log")
@@ -375,10 +377,26 @@ class Tray:
             self._editor_launcher()
         elif cmd == CMD_PROFILE:
             _open_with_shell(self.app.profile_path)
+        elif cmd == CMD_EXPORT:
+            # En un thread: comprimir un fondo de video son megas, y esto corre en
+            # el thread que bombea los mensajes de Windows.
+            threading.Thread(target=self._exportar, daemon=True).start()
         elif cmd == CMD_LOG and self.log_path:
             _open_with_shell(self.log_path)
         elif cmd == CMD_QUIT:
             user32.DestroyWindow(self._hwnd)
+
+    def _exportar(self):
+        """Exporta y abre la carpeta donde quedo.
+
+        Abrir la carpeta es la unica confirmacion posible: la bandeja no tiene
+        ventana propia donde escribir un mensaje, y un export silencioso es
+        indistinguible de un boton que no hace nada.
+        """
+        destino, mensaje = self.app.export_profile()
+        print(mensaje)
+        if destino is not None:
+            _open_with_shell(destino.parent)
 
     def _restart(self):
         self.app.stop()

@@ -474,3 +474,57 @@ def test_a_rule_that_would_break_the_layout_is_reported(ventana):
     ventana._apply_rule(0, "value")
     assert ventana.state.errors == []            # se revirtio
     assert ventana.estado.cget("text")           # y lo dijo
+
+
+# --- exportar e importar desde el editor ---
+
+
+def test_exporting_from_the_editor_writes_a_bundle(ventana, tmp_path):
+    destino = tmp_path / "salida.vmaxpanel"
+    ventana._exportar_a(destino)
+    assert destino.exists()
+    assert "salida.vmaxpanel" in ventana.estado.cget("text")
+
+
+def test_exporting_with_unsaved_changes_refuses_and_says_why(ventana, tmp_path):
+    """Exportar lee el archivo del disco. Con cambios sin guardar, el bundle
+    llevaria la version vieja y el usuario compartiria algo que no es lo que ve en
+    pantalla -- el peor tipo de error, porque no se nota hasta que alguien mas lo
+    abre."""
+    seleccionar(ventana, "cpu-load")
+    ventana._move(5, 0)
+    destino = tmp_path / "no-deberia.vmaxpanel"
+    ventana._exportar_a(destino)
+    assert not destino.exists()
+    assert "guard" in ventana.estado.cget("text").lower()
+
+
+def test_exporting_over_an_existing_file_refuses(ventana, tmp_path):
+    destino = tmp_path / "ya-esta.vmaxpanel"
+    destino.write_bytes(b"algo")
+    ventana._exportar_a(destino)
+    assert destino.read_bytes() == b"algo"
+    assert "ya existe" in ventana.estado.cget("text")
+
+
+def test_importing_from_the_editor_loads_the_imported_profile(ventana, tmp_path):
+    """Importar y no abrir el perfil importado dejaria al usuario adivinando si
+    funciono. Se importa y se pasa a editarlo."""
+    from vmaxpanel import bundle
+    zip_ = tmp_path / "b.vmaxpanel"
+    bundle.export_profile(ventana.state.path, zip_,
+                          assets_dir=tmp_path / "assets-vacio")
+    destino_p = tmp_path / "perfiles"
+    ventana._importar_de(zip_, profiles_dir=destino_p, assets_dir=tmp_path / "a2")
+    assert ventana.state.path.parent == destino_p
+    assert ventana.state.raw["name"]
+    assert "importado" in ventana.estado.cget("text").lower()
+
+
+def test_a_bad_bundle_reports_in_the_status_bar_and_keeps_editing(ventana, tmp_path):
+    falso = tmp_path / "x.vmaxpanel"
+    falso.write_bytes(b"no soy un zip")
+    antes = ventana.state.path
+    ventana._importar_de(falso, profiles_dir=tmp_path / "p", assets_dir=tmp_path / "a")
+    assert ventana.state.path == antes
+    assert "no es un bundle" in ventana.estado.cget("text")

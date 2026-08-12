@@ -6,6 +6,7 @@ estos metodos.
 """
 import json
 import time
+from pathlib import Path
 
 from vmaxpanel.app import PanelApp
 from vmaxpanel.providers.base import Provider
@@ -281,3 +282,38 @@ def test_problems_is_empty_when_everything_is_fine(tmp_path):
         assert app.problems() == []
     finally:
         app.stop()
+
+
+# --- exportar desde la bandeja ---
+
+
+def test_export_writes_a_bundle_next_to_the_project(tmp_path):
+    """La bandeja no puede abrir un dialogo de archivo -- es ctypes puro -- asi que
+    exporta sola a una carpeta fija y dice donde quedo. El nombre lleva fecha para
+    que exportar dos veces no pise nada."""
+    app, _ = app_for(tmp_path)
+    destino, mensaje = app.export_profile(carpeta=tmp_path / "salidas",
+                                          assets_dir=tmp_path, fecha="2026-08-12")
+    assert destino is not None
+    assert destino.name == "vitals-2026-08-12.vmaxpanel"
+    assert destino.exists()
+    assert destino.name in mensaje
+
+
+def test_exporting_twice_does_not_overwrite(tmp_path):
+    app, _ = app_for(tmp_path)
+    kw = dict(carpeta=tmp_path / "salidas", assets_dir=tmp_path, fecha="2026-08-12")
+    primero, _ = app.export_profile(**kw)
+    segundo, _ = app.export_profile(**kw)
+    assert segundo != primero
+    assert primero.exists() and segundo.exists()
+
+
+def test_exporting_a_broken_profile_reports_instead_of_raising(tmp_path):
+    """Esto lo llama el bombeo de mensajes de Win32: una excepcion ahi no la ve
+    nadie (Tkinter no esta, y pythonw no tiene consola) y deja la bandeja muda."""
+    app, _ = app_for(tmp_path)
+    Path(app.profile_path).write_text("{ roto", encoding="utf-8")
+    destino, mensaje = app.export_profile(carpeta=tmp_path / "s", assets_dir=tmp_path)
+    assert destino is None
+    assert "no" in mensaje.lower()

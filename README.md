@@ -209,6 +209,43 @@ Dos cosas que no se adivinan:
   `fill` puesto después de un texto lo tapa. Los separadores del perfil van antes del header
   de su sección.
 
+### Compartir y respaldar un perfil
+
+```powershell
+python -m vmaxpanel --profile <perfil> --exportar mi-perfil.vmaxpanel
+python -m vmaxpanel --importar mi-perfil.vmaxpanel
+python -m vmaxpanel --importar otro.vmaxpanel --si-existe renombrar
+```
+
+También desde el editor (**Exportar… / Importar…**, con diálogo de archivo) y desde la bandeja
+(**Exportar el perfil…**, que guarda en `perfiles-exportados/` con la fecha en el nombre y abre
+la carpeta — la bandeja es ctypes puro y no tiene ventana donde poner un mensaje).
+
+Un `.vmaxpanel` es un zip con `perfil.json`, los assets que el fondo referencia y un
+`bundle.json` con el manifiesto. **Copiar el `.json` suelto no alcanza:** un perfil referencia
+assets y nombra fuentes, así que del otro lado aparece con el fondo degradado y las fuentes
+cambiadas sin que nadie entienda por qué.
+
+Cuatro decisiones que no se adivinan:
+
+- **Las fuentes no se empaquetan.** Consolas y las Franklin Gothic son de Microsoft. Se listan
+  en el manifiesto y al importar se avisa cuál falta *en esta máquina* — que es la diferencia
+  entre "se ve raro" y "te falta esta fuente". La pregunta sólo se puede contestar del lado que
+  recibe, así que se contesta al importar, no al exportar.
+- **El JSON viaja byte a byte**, leído y escrito en bytes. Con `read_text` Python traduce CRLF a
+  LF y el perfil que volvía tenía 60 bytes menos que el original: "es el mismo" habría sido
+  mentira. Lo cazó una verificación contra los perfiles reales del repo, no el test — el test
+  usaba un fixture de una sola línea.
+- **Importar no pisa nada por defecto.** Dos personas exportando "apex" es lo normal; el layout
+  del usuario es trabajo suyo. `--si-existe renombrar` o `pisar` si es lo que se quiere.
+- **Un zip ajeno se trata como hostil.** Se valida el perfil *antes* de escribir nada (un bundle
+  roto no puede dejar assets a medio copiar), se rechaza cualquier miembro absoluto, con `..` o
+  con letra de unidad — zip-slip, y este proceso corre elevado —, y se corta por tamaño
+  declarado para no descomprimir una bomba.
+
+`perfiles-exportados/` tiene los bundles de los perfiles que vienen con el repo, como respaldo
+listo para copiar a otra máquina.
+
 ### Fondos
 
 `background.type` acepta seis: `solid`, `gradient`, `image` (estáticos, se cachean una vez) y

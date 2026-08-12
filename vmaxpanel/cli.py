@@ -7,7 +7,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import install
+from . import bundle, install
 from .engine import Engine, EngineConfig
 from .layout import loader
 from .logsetup import run_with_log
@@ -20,6 +20,15 @@ HERE = Path(__file__).resolve().parent
 
 def default_profile_path() -> Path:
     return HERE / "profiles" / "vitals.json"
+
+
+def profiles_dir() -> Path:
+    """Donde viven los perfiles. Funcion y no constante para poder sustituirla."""
+    return HERE / "profiles"
+
+
+def assets_dir() -> Path:
+    return HERE / "assets"
 
 
 def main(argv=None) -> int:
@@ -42,6 +51,15 @@ def main(argv=None) -> int:
                          "al iniciar sesion")
     ap.add_argument("--desinstalar", action="store_true",
                     help="borra esa tarea; el panel deja de arrancar solo")
+    ap.add_argument("--exportar", type=Path, metavar="ARCHIVO",
+                    help="guarda el perfil y sus assets en un solo archivo "
+                         f"({bundle.EXT}) para compartirlo o respaldarlo")
+    ap.add_argument("--importar", type=Path, metavar="ARCHIVO",
+                    help="instala un perfil exportado con --exportar")
+    ap.add_argument("--si-existe", choices=("fallar", "renombrar", "pisar"),
+                    default="fallar",
+                    help="que hacer al importar si ya hay un perfil con ese "
+                         "nombre (por defecto: fallar y no tocar nada)")
     a = ap.parse_args(argv)
 
     # Antes del run_with_log: estos tres salen por consola y terminan. Escribir
@@ -53,6 +71,10 @@ def main(argv=None) -> int:
         print(f"Instalando VMax Panel con el perfil {a.profile}")
         return _reportar(install.instalar(a.profile, log=a.log or _log_por_defecto(),
                                           port=a.port))
+    if a.exportar:
+        return _exportar(a.profile, a.exportar)
+    if a.importar:
+        return _importar(a.importar, a.si_existe)
     if a.diagnostico:
         checks = install.diagnosticar(a.profile, a.port)
         for c in checks:
@@ -70,6 +92,54 @@ def _log_por_defecto() -> Path:
     haya arrancado. Tiene que estar donde el usuario lo encuentre.
     """
     return HERE.parent / "vmaxpanel.log"
+
+
+def _exportar(perfil, destino) -> int:
+    destino = Path(destino)
+    if destino.exists():
+        # Sin --si-existe para exportar a proposito: el bundle anterior puede ser
+        # justo el que el usuario ya le mando a alguien, y pisarlo en silencio no
+        # tiene vuelta atras. Cambiar el nombre cuesta menos que recuperarlo.
+        print(f"{destino} ya existe: elegi otro nombre o borralo primero.")
+        return 2
+    try:
+        info = bundle.export_profile(perfil, destino, assets_dir())
+    except bundle.BundleError as e:
+        print(str(e))
+        return 2
+    kb = destino.stat().st_size / 1024
+    print(f"exportado: {destino} ({kb:.0f} KB)")
+    print(f"  perfil:  {Path(perfil).name}")
+    print(f"  assets:  {', '.join(info['assets']) or 'ninguno'}")
+    print(f"  fuentes: {', '.join(info['fonts'])}")
+    if info["faltantes"]:
+        print(f"  OJO, no estaban y no van en el bundle: "
+              f"{', '.join(info['faltantes'])}")
+    # Las fuentes no viajan y eso no es un olvido: son de Microsoft. Se dice aca
+    # para que nadie se sorprenda del otro lado.
+    print("  (las fuentes no se empaquetan: se piden por familia y en cualquier "
+          "Windows estan)")
+    return 0
+
+
+def _importar(origen, si_existe) -> int:
+    try:
+        info = bundle.import_bundle(origen, profiles_dir(), assets_dir(),
+                                    si_existe=si_existe)
+    except bundle.BundleError as e:
+        print(str(e))
+        return 2
+    print(f"importado: {info['profile']}")
+    if info["assets"]:
+        print(f"  assets:  {', '.join(info['assets'])}")
+    if info["fuentes_faltantes"]:
+        print(f"  fuentes que NO estan en esta maquina: "
+              f"{', '.join(info['fuentes_faltantes'])}")
+        print("  el panel va a usar una de reemplazo: el layout se ve distinto "
+              "pero funciona.")
+    print(f"  para usarlo: elegilo en el menu de la bandeja, o "
+          f"--profile {info['profile']}")
+    return 0
 
 
 def _reportar(resultado) -> int:
