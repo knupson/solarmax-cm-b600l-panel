@@ -113,6 +113,7 @@ class EditorState:
         self._cache_catalogo = None     # el catalogo cuesta consultar WMI
         self._fuentes = None            # FontResolver, para medir cajas de texto
         self._drag = None               # (id, offset x, offset y) del arrastre
+        self._historial = []            # copias del layout, para deshacer
         self.reload()
 
     # --- carga y guardado ---
@@ -127,6 +128,7 @@ class EditorState:
             return
         self.errors = schema.validate(self.raw)
         self.dirty = False
+        self._historial = []      # lo que hay en disco es el nuevo punto cero
 
     def save(self) -> list[str]:
         """Guarda solo si valida. Devuelve los errores que lo impidieron.
@@ -215,12 +217,40 @@ class EditorState:
         catalogo, grupos = self._cache_catalogo
         return dict(catalogo), dict(grupos)
 
+    # --- deshacer ---
+    #
+    # Se guarda una copia del layout crudo ANTES de cada cambio, no un diff: con
+    # 154 widgets el JSON son ~40 KB y copiarlo cuesta menos que razonar sobre
+    # como revertir cada tipo de operacion. Un diff serviria si el layout fuera
+    # grande de verdad; aca solo agregaria formas de equivocarse.
+    MAX_UNDO = 60
+
+    def _snapshot(self):
+        """Guarda el estado actual como punto de retorno.
+
+        Topeado: sin limite, un arrastre de 300 px guardaria 300 copias, y el
+        editor terminaria con decenas de MB de historial por mover un widget.
+        """
+        self._historial.append(json.dumps(self.raw, ensure_ascii=False))
+        if len(self._historial) > self.MAX_UNDO:
+            del self._historial[0]
+
+    def undo(self) -> bool:
+        """Vuelve al punto anterior. False si no hay nada que deshacer."""
+        if not self._historial:
+            return False
+        self.raw = json.loads(self._historial.pop())
+        self.dirty = True
+        self.errors = schema.validate(self.raw)
+        return True
+
     # --- edicion ---
 
     def set_field(self, wid, key, value) -> list[str]:
         w = self.widget(wid)
         if w is None:
             return [f"no existe el widget {wid!r}"]
+        self._snapshot()
         w[key] = _coerce(key, value)
         self.dirty = True
         self.errors = schema.validate(self.raw)
@@ -231,6 +261,7 @@ class EditorState:
             return [f"tipo desconocido {tipo!r}"]
         if wid in self.widget_ids():
             return [f"ya hay un widget con id {wid!r}"]
+        self._snapshot()
         nuevo = {"id": wid, "type": tipo, **_TEMPLATES[tipo]}
         if nuevo.get("font", "sin-alias") is None:
             aliases = self.fonts()
@@ -243,6 +274,7 @@ class EditorState:
         return list(self.errors)
 
     def remove_widget(self, wid) -> list[str]:
+        self._snapshot()
         widgets = self.raw.get("widgets", [])
         self.raw["widgets"] = [w for w in widgets if w.get("id") != wid]
         self.dirty = True
@@ -275,6 +307,7 @@ class EditorState:
         fuentes = self.raw.setdefault("fonts", {})
         if alias not in fuentes:
             return [f"no existe el alias de fuente {alias!r}"]
+        self._snapshot()
         if clave == "size":
             fuentes[alias][clave] = _coerce("size", valor)
         elif clave == "bold":
@@ -295,6 +328,7 @@ class EditorState:
         fuentes = self.raw.setdefault("fonts", {})
         if alias in fuentes:
             return [f"ya existe el alias {alias!r}"]
+        self._snapshot()
         fuentes[alias] = dict(self._FUENTE_DEFAULT)
         self.dirty = True
         self.errors = schema.validate(self.raw)
@@ -320,6 +354,7 @@ class EditorState:
             return [f"no existe el alias {alias!r}"]
         if len(fuentes) <= 1:
             return ["el layout necesita al menos una fuente"]
+        self._snapshot()
         del fuentes[alias]
         self.dirty = True
         self.errors = schema.validate(self.raw)
@@ -416,6 +451,10 @@ class EditorState:
         w = self.widget(wid)
         if w is None:
             return
+        # El snapshot va aca y no en drag_to(): un arrastre dispara un cambio por
+        # pixel de mouse, y con uno por cambio deshacer un arrastre pediria
+        # cincuenta Ctrl+Z. El gesto entero es UN paso.
+        self._snapshot()
         self._drag = (wid, x - int(w.get("x", 0)), y - int(w.get("y", 0)))
 
     def drag_to(self, x, y) -> list[str]:
@@ -472,6 +511,7 @@ class EditorState:
         afino, que es justamente el punto de que procedural parta de ahi -- y se
         descartan las que no, porque quedarian como claves desconocidas.
         """
+        self._snapshot()
         viejo = dict(self.raw.get("background") or {})
         permitidas = schema.BACKGROUND_KEYS.get(tipo, {"type", "color"})
         nuevo = {"type": tipo}
@@ -490,6 +530,7 @@ class EditorState:
         return list(self.errors)
 
     def set_background_field(self, clave, valor) -> list[str]:
+        self._snapshot()
         self.raw.setdefault("background", {})[clave] = _coerce_fondo(clave, valor)
         self.dirty = True
         self.errors = schema.validate(self.raw)
@@ -506,6 +547,7 @@ class EditorState:
         En el medio y no al final: una parada nueva encima de otra existente no
         se ve, y el usuario no entiende que paso.
         """
+        self._snapshot()
         stops = self.raw.setdefault("background", {}).setdefault("stops", [])
         if len(stops) < 2:
             stops[:] = [dict(s) for s in self._STOPS_DEFAULT]
@@ -529,6 +571,7 @@ class EditorState:
             return ["un degradado necesita al menos dos paradas"]
         if not 0 <= i < len(stops):
             return [f"no existe la parada {i}"]
+        self._snapshot()
         del stops[i]
         self.dirty = True
         self.errors = schema.validate(self.raw)
@@ -538,6 +581,7 @@ class EditorState:
         stops = self.stops()
         if not 0 <= i < len(stops):
             return [f"no existe la parada {i}"]
+        self._snapshot()
         stops[i][clave] = float(valor) if clave == "at" else str(valor).strip()
         self.dirty = True
         self.errors = schema.validate(self.raw)
@@ -549,6 +593,7 @@ class EditorState:
         return ["fps", "brightness", "rotate", "jpeg_quality"]
 
     def set_panel_field(self, clave, valor) -> list[str]:
+        self._snapshot()
         self.raw.setdefault("panel", {})[clave] = _coerce(clave, valor)
         self.dirty = True
         self.errors = schema.validate(self.raw)
@@ -558,6 +603,7 @@ class EditorState:
         w = self.widget(wid)
         if w is None:
             return [f"no existe el widget {wid!r}"]
+        self._snapshot()
         w["x"] = int(w.get("x", 0)) + int(dx)
         w["y"] = int(w.get("y", 0)) + int(dy)
         self.dirty = True
@@ -737,6 +783,7 @@ class EditorWindow:
 
         self.root.report_callback_exception = self._report_error
         self.root.bind("<Control-s>", lambda e: self._save())
+        self.root.bind("<Control-z>", lambda e: self._undo())
         for tecla, (dx, dy) in (("<Left>", (-1, 0)), ("<Right>", (1, 0)),
                                 ("<Up>", (0, -1)), ("<Down>", (0, 1))):
             self.root.bind(tecla, lambda e, a=dx, b=dy: self._nudge(a, b))
@@ -1306,6 +1353,16 @@ class EditorWindow:
         if not errores:
             self.estado.config(text="guardado; el panel lo levanta solo",
                                foreground="#006000")
+
+    def _undo(self):
+        """Ctrl+Z. Repinta TODO: deshacer puede haber cambiado el fondo, las
+        fuentes o la lista de widgets, no solo el campo que se estaba editando.
+        Sin repintar, los controles siguen mostrando el valor deshecho."""
+        if not self.state.undo():
+            self.estado.config(text="no hay nada que deshacer",
+                               foreground="#606060")
+            return
+        self._refresh()
 
     def _discard(self):
         self.state.reload()

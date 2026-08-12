@@ -403,3 +403,30 @@ def test_the_family_picker_offers_installed_families(ventana):
     valores = list(combo.cget("values"))
     assert len(valores) > 5, "el combo de familias salio casi vacio"
     assert any("consol" in v.lower() for v in valores)
+
+
+def test_control_z_undoes_from_the_window(ventana):
+    seleccionar(ventana, "cpu-load")
+    x0 = ventana.state.widget("cpu-load")["x"]
+    ventana._move(20, 0)
+    assert ventana.state.widget("cpu-load")["x"] == x0 + 20
+    ventana.root.event_generate("<Control-z>")
+    ventana.root.update()
+    assert ventana.state.widget("cpu-load")["x"] == x0
+
+
+def test_undo_refreshes_the_fields_and_the_preview(ventana):
+    """Deshacer sin repintar deja los campos mostrando el valor deshecho: el
+    usuario ve un numero que ya no es el del layout."""
+    seleccionar(ventana, "cpu-load")
+    ventana._fields["x"].set("222")
+    ventana._apply("x")
+    ventana._undo()
+    ventana.root.update()
+    assert ventana._fields["x"].get() != "222"
+    assert ventana._fields["x"].get() == str(ventana.state.widget("cpu-load")["x"])
+
+
+def test_undo_with_empty_history_says_so_in_the_status(ventana):
+    ventana._undo()
+    assert "deshacer" in ventana.estado.cget("text").lower()

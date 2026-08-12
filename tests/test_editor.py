@@ -441,3 +441,77 @@ def test_the_available_families_are_offered(tmp_path):
     assert any("consol" in f.lower() for f in familias)
     for f in familias:
         assert isinstance(f, str) and f
+
+
+# --- deshacer ---
+
+def test_undo_reverts_the_last_change(tmp_path):
+    st = state_for(tmp_path)
+    original = st.widget("cpu-load")["x"]
+    st.set_field("cpu-load", "x", "99")
+    assert st.widget("cpu-load")["x"] == 99
+    assert st.undo() is True
+    assert st.widget("cpu-load")["x"] == original
+
+
+def test_undo_with_nothing_to_undo_says_so(tmp_path):
+    st = state_for(tmp_path)
+    assert st.undo() is False
+
+
+def test_undo_walks_back_several_steps(tmp_path):
+    st = state_for(tmp_path)
+    original = st.widget("cpu-load")["x"]
+    for v in (10, 20, 30):
+        st.set_field("cpu-load", "x", str(v))
+    st.undo()
+    assert st.widget("cpu-load")["x"] == 20
+    st.undo()
+    assert st.widget("cpu-load")["x"] == 10
+    st.undo()
+    assert st.widget("cpu-load")["x"] == original
+
+
+def test_a_whole_drag_is_one_undo_step(tmp_path):
+    """Arrastrar dispara un cambio por pixel de mouse. Si cada uno fuera un paso,
+    deshacer un arrastre pediria cincuenta Ctrl+Z."""
+    st = state_for(tmp_path)
+    x0 = st.widget("cpu-load")["x"]
+    st.begin_drag("cpu-load", x0, 248)
+    for dx in range(1, 40):
+        st.drag_to(x0 + dx, 248)
+    st.end_drag()
+    assert st.widget("cpu-load")["x"] != x0
+    assert st.undo() is True
+    assert st.widget("cpu-load")["x"] == x0
+
+
+def test_undo_covers_adding_and_removing_widgets(tmp_path):
+    st = state_for(tmp_path)
+    n = len(st.widget_ids())
+    st.add_widget("rect", "nuevo")
+    st.undo()
+    assert len(st.widget_ids()) == n
+    st.remove_widget("cpu-load")
+    st.undo()
+    assert st.widget("cpu-load") is not None
+
+
+def test_undo_covers_the_background_and_the_fonts(tmp_path):
+    st = state_for(tmp_path)
+    tipo = st.raw["background"]["type"]
+    st.set_background_type("solid")
+    st.undo()
+    assert st.raw["background"]["type"] == tipo
+    st.add_font("prueba")
+    st.undo()
+    assert "prueba" not in st.raw["fonts"]
+
+
+def test_the_undo_history_is_bounded(tmp_path):
+    """Un historial sin limite guarda una copia del layout por cada pixel de
+    arrastre: son 300 KB por copia con 154 widgets."""
+    st = state_for(tmp_path)
+    for i in range(200):
+        st.set_field("cpu-load", "x", str(20 + i % 50))
+    assert len(st._historial) <= st.MAX_UNDO
