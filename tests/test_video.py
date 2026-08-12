@@ -175,3 +175,29 @@ def test_the_reason_ffmpeg_gives_is_included(tmp_path):
     fuente.close()
     assert any("no-existe" in w.lower() or "no such" in w.lower()
                for w in fuente.warnings), fuente.warnings
+
+
+def test_reading_the_reason_does_not_hang_on_a_live_process(tmp_path):
+    """`read()` sobre el stderr de un proceso VIVO bloquea hasta que ese proceso lo
+    cierre, y esto corre en el hilo lector: un ffmpeg que cierra stdout y se queda
+    vivo dejaria el hilo colgado. Se simula con un proceso que cierra stdout de
+    entrada y sigue vivo: el aviso tiene que llegar igual, sin motivo."""
+    def spawn():
+        return subprocess.Popen(
+            [sys.executable, "-c",
+             # os.close(1) y no sys.stdout.close(): cerrar el objeto de Python no
+             # siempre cierra el descriptor, asi que el padre no veria el EOF y el
+             # test no ejercitaria nada.
+             "import os, time; os.close(1); time.sleep(30)"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    fuente = VideoSource(tmp_path / "x.mp4", model.Size(8, 8), fps=30, spawn=spawn)
+    fuente.start()
+    limite = time.monotonic() + 10
+    while time.monotonic() < limite and not fuente.warnings:
+        time.sleep(0.05)
+    try:
+        assert fuente.warnings, "el hilo lector quedo colgado leyendo stderr"
+    finally:
+        fuente.close()
+    assert fuente._thread is not None and not fuente._thread.is_alive()

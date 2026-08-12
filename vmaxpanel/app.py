@@ -260,8 +260,11 @@ class PanelApp:
         bandeja muda.
         """
         from . import bundle
-        from .cli import assets_dir as assets_por_defecto
-        carpeta = Path(carpeta) if carpeta else Path(self.profile_path).parent.parent.parent / "perfiles-exportados"
+        from .cli import HERE, assets_dir as assets_por_defecto
+        # La carpeta se deriva de donde esta INSTALADO el paquete, no del perfil: un
+        # perfil abierto desde el Escritorio hacia que "tres niveles arriba" cayera
+        # en C:\Users, y el bundle aparecia en un lugar que nadie iba a mirar.
+        carpeta = Path(carpeta) if carpeta else HERE.parent / "perfiles-exportados"
         assets = Path(assets_dir) if assets_dir else assets_por_defecto()
         if fecha is None:
             fecha = time.strftime("%Y-%m-%d")

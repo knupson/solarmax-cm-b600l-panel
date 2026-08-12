@@ -734,7 +734,16 @@ def _mismo_contenido(a, b) -> bool:
         return censo(a) == censo(b)
     if a.stat().st_size != b.stat().st_size:
         return False
-    return a.read_bytes() == b.read_bytes()
+    # Por trozos y no read_bytes(): un video de 900 MB comparado asi son 1,8 GB en
+    # memoria de golpe, para contestar una pregunta de si/no. En este proyecto ya
+    # hubo un episodio de consumo de RAM y no vale la pena repetirlo por comodidad.
+    with a.open("rb") as fa, b.open("rb") as fb:
+        while True:
+            ta, tb = fa.read(1 << 20), fb.read(1 << 20)
+            if ta != tb:
+                return False
+            if not ta:
+                return True
 
 
 def pista_fondo(tipo) -> str:

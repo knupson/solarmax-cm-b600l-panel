@@ -164,12 +164,19 @@ class VideoSource:
     def _stderr(self) -> str:
         """Lo ultimo que dijo ffmpeg, en una linea.
 
-        Se lee sin bloquear indefinidamente: el proceso ya cerro stdout, asi que su
-        stderr esta cerrado o a punto. Si algo sale mal leyendo, se devuelve "" --
-        un aviso sin motivo sigue siendo mejor que una excepcion en el hilo lector.
+        **Se espera a que el proceso muera antes de leer.** `read()` sobre el stderr
+        de un proceso vivo bloquea hasta que ese proceso lo cierre, y esto corre en
+        el hilo lector: un ffmpeg que cierra stdout y se queda vivo dejaria el hilo
+        colgado hasta que alguien llame a close(). Si no murio en un segundo se
+        devuelve "" y el aviso va sin motivo -- que sigue siendo mejor que un hilo
+        trabado, y mejor que una excepcion, porque nadie la veria.
         """
         proc = self._proc
         if proc is None or proc.stderr is None:
+            return ""
+        try:
+            proc.wait(timeout=1.0)
+        except Exception:
             return ""
         try:
             crudo = proc.stderr.read() or b""

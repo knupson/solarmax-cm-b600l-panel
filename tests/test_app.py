@@ -320,3 +320,15 @@ def test_exporting_a_broken_profile_reports_instead_of_raising(tmp_path):
     destino, mensaje = app.export_profile(carpeta=tmp_path / "s", assets_dir=tmp_path)
     assert destino is None
     assert "no" in mensaje.lower()
+
+
+def test_the_export_folder_does_not_depend_on_where_the_profile_lives(tmp_path):
+    """Se derivaba del perfil con parent.parent.parent, o sea "tres niveles arriba".
+    Con un perfil abierto desde el Escritorio eso caía en la carpeta de usuarios y el bundle
+    aparecía donde nadie iba a mirarlo. Ahora sale de donde está instalado el
+    paquete."""
+    from vmaxpanel import cli
+    app, _ = app_for(tmp_path)              # el perfil vive en un tmp_path plano
+    destino, _ = app.export_profile(assets_dir=tmp_path, fecha="2026-08-12")
+    assert destino.parent == cli.HERE.parent / "perfiles-exportados"
+    destino.unlink()                        # no dejar basura en el repo
