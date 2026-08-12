@@ -717,6 +717,26 @@ ANIMADO = ("Fondo animado: la vista previa muestra un solo cuadro, así que acá
            "panel (pestaña Panel) para que se note.")
 
 
+def _mismo_contenido(a, b) -> bool:
+    """Dos rutas con el mismo contenido.
+
+    Compara tamano y despues bytes; para carpetas alcanza con la lista de nombres y
+    tamanos -- una secuencia de cuadros con los mismos nombres y tamanos es la misma
+    secuencia, y leer 300 PNG para confirmarlo no paga.
+    """
+    a, b = Path(a), Path(b)
+    if a.is_dir() != b.is_dir():
+        return False
+    if a.is_dir():
+        def censo(d):
+            return sorted((p.relative_to(d).as_posix(), p.stat().st_size)
+                          for p in d.rglob("*") if p.is_file())
+        return censo(a) == censo(b)
+    if a.stat().st_size != b.stat().st_size:
+        return False
+    return a.read_bytes() == b.read_bytes()
+
+
 def pista_fondo(tipo) -> str:
     """Aviso por tipo de fondo, o "" si no hace falta ninguno.
 
@@ -1043,9 +1063,106 @@ class EditorWindow:
                 self._pendiente_al_tipear(var, "bg", clave)
                 self._bg_fields[clave] = var
             control.grid(row=fila, column=1, sticky="w", padx=4)
+            if clave == "src":
+                # Al lado del campo, no en otra parte: es lo que la mayoria va a
+                # usar en vez de tipear una ruta, y tiene que estar donde se ve el
+                # valor que reemplaza.
+                self._btn_asset = ttk.Button(self._bg_campos, text="Elegir…",
+                                             width=9, command=self._pedir_asset)
+                self._btn_asset.grid(row=fila, column=2, padx=(2, 0))
 
         self._show_stops()
         self._bg_hint.config(text=pista_fondo(tipo))
+
+    # --- elegir el archivo del fondo ---
+
+    def _pedir_asset(self):
+        """Diálogo para elegir el video, la imagen o la carpeta del fondo."""
+        from tkinter import filedialog
+        tipo = self._bg_type.get()
+        if tipo == "sequence":
+            elegido = filedialog.askdirectory(
+                parent=self.root, title="Carpeta con los cuadros de la secuencia")
+        else:
+            filtros = ([("Video", "*.mp4 *.webm *.mkv *.gif *.avi *.mov")]
+                       if tipo == "video" else
+                       [("Imagen", "*.png *.jpg *.jpeg *.bmp *.gif")])
+            elegido = filedialog.askopenfilename(
+                parent=self.root, title="Archivo del fondo",
+                filetypes=filtros + [("Todos", "*.*")])
+        if elegido:
+            self._usar_asset(Path(elegido))
+
+    def _usar_asset(self, origen, assets_dir=None):
+        """Deja `origen` disponible como asset y lo pone en `src`. -> nombre | None.
+
+        **Copia el archivo adentro de vmaxpanel/assets si esta afuera**, y eso es
+        todo el punto: `safe_asset_path` rechaza cualquier ruta que se escape de ese
+        directorio -- con razon, el proceso corre elevado --, asi que elegir un video
+        del Escritorio SOLO puede funcionar copiandolo. Sin esto el editor guardaria
+        una ruta que el motor rechaza y el fondo quedaria en color plano sin que nada
+        lo explique.
+        """
+        import shutil
+        origen = Path(origen)
+        destino_raiz = Path(assets_dir) if assets_dir else self._carpetas()[1]
+        if not origen.exists():
+            self.estado.config(text=f"no existe {origen.name}", foreground="#A00000")
+            return None
+        try:
+            destino_raiz.mkdir(parents=True, exist_ok=True)
+            adentro = self._ya_esta_adentro(origen, destino_raiz)
+            if adentro is not None:
+                nombre = adentro
+            else:
+                nombre = self._copiar_asset(origen, destino_raiz, shutil)
+        except OSError as e:
+            self.estado.config(text=f"no se pudo copiar {origen.name}: {e}",
+                               foreground="#A00000")
+            return None
+
+        self.state.set_background_field("src", nombre)
+        if "src" in getattr(self, "_bg_fields", {}):
+            self._bg_fields["src"].set(nombre)
+        self._pendientes.discard(("bg", "src"))
+        self._draw_preview()
+        self._show_errors()
+        self.estado.config(text=f"fondo: {nombre}", foreground="#006000")
+        return nombre
+
+    @staticmethod
+    def _ya_esta_adentro(origen, raiz):
+        """El nombre relativo si `origen` ya vive bajo `raiz`, o None.
+
+        Con / y no con os.sep: va a un JSON que se comparte entre maquinas, y
+        safe_asset_path normaliza las dos formas pero el archivo se lee mejor asi.
+        """
+        try:
+            return origen.resolve().relative_to(raiz.resolve()).as_posix()
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _copiar_asset(origen, raiz, shutil):
+        """Copia (archivo o carpeta) y devuelve el nombre que quedo.
+
+        Si el nombre ya existe con OTRO contenido se renombra a `-2`: pisar el asset
+        de otro perfil es destruir trabajo por un nombre repetido. Si existe con el
+        MISMO contenido se reusa, para que tocar el boton dos veces no deje dos
+        copias identicas.
+        """
+        destino = raiz / origen.name
+        i = 2
+        while destino.exists():
+            if _mismo_contenido(origen, destino):
+                return destino.relative_to(raiz).as_posix()
+            destino = raiz / f"{origen.stem}-{i}{origen.suffix}"
+            i += 1
+        if origen.is_dir():
+            shutil.copytree(origen, destino)
+        else:
+            shutil.copy2(origen, destino)
+        return destino.relative_to(raiz).as_posix()
 
     def _apply_bg(self, clave):
         control = self._bg_fields.get(clave)

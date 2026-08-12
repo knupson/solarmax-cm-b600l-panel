@@ -286,6 +286,13 @@ listo para copiar a otra máquina.
 | `sequence` | `src` (carpeta), `fit`, `fps`, `color` | decodifica por cuadro a propósito: cachearlos son 1,4 MB cada uno |
 | `video` | `src` (archivo), `fit`, `fps`, `color` | mp4, webm, mkv, gif — lo que ffmpeg sepa abrir |
 
+En el editor, el campo `src` tiene un botón **Elegir…** que abre el diálogo de archivos y
+**copia lo elegido a `vmaxpanel/assets/`**. Eso no es comodidad: `safe_asset_path` rechaza
+cualquier ruta que se escape de ese directorio — con razón, el motor corre elevado —, así que un
+video del Escritorio sólo puede funcionar copiándolo adentro. Si el nombre ya existe con otro
+contenido, se guarda como `-2` en vez de pisar el asset de otro perfil; si existe con el mismo
+contenido, se reusa.
+
 **El video necesita ffmpeg**, que es externo: se busca en `vmaxpanel/lib/` y después en el PATH
 (`winget install Gyan.FFmpeg`, o dejar `ffmpeg.exe` en `vmaxpanel/lib/`). Si falta, el fondo
 degrada a color plano y el aviso dice el comando — no es una excepción. Externo y no PyAV ni

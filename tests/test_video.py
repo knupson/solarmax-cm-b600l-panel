@@ -144,3 +144,34 @@ def test_buscar_ffmpeg_returns_none_when_there_is_none(tmp_path, monkeypatch):
     monkeypatch.setattr("vmaxpanel.render.video.LIB", tmp_path)
     monkeypatch.setattr("vmaxpanel.render.video.shutil.which", lambda n: None)
     assert buscar_ffmpeg() is None
+
+
+def test_a_file_ffmpeg_cannot_open_says_so_instead_of_that_it_ended(tmp_path):
+    """ffmpeg contra un archivo que no existe (o que no es video) cierra stdout de
+    entrada, y eso se leia como "el video termino". Manda al usuario a mirar la
+    duracion del video cuando el problema es la ruta o el codec. El motivo lo dice
+    ffmpeg en stderr, que hasta ahora se tiraba a la basura."""
+    fuente = VideoSource(tmp_path / "no-existe.mp4", model.Size(8, 8), fps=30)
+    fuente.start()
+    limite = time.monotonic() + 10
+    while time.monotonic() < limite and not fuente.warnings:
+        time.sleep(0.05)
+    fuente.close()
+    assert fuente.warnings, "no aviso nada"
+    aviso = " ".join(fuente.warnings)
+    assert "no pudo abrir" in aviso
+    assert "no-existe.mp4" in aviso
+    assert "termino" not in aviso
+
+
+def test_the_reason_ffmpeg_gives_is_included(tmp_path):
+    """El texto de ffmpeg es lo unico que distingue "no existe" de "no es un video"
+    de "falta el codec". Sin eso el aviso es generico y no lleva a ninguna parte."""
+    fuente = VideoSource(tmp_path / "no-existe.mp4", model.Size(8, 8), fps=30)
+    fuente.start()
+    limite = time.monotonic() + 10
+    while time.monotonic() < limite and not fuente.warnings:
+        time.sleep(0.05)
+    fuente.close()
+    assert any("no-existe" in w.lower() or "no such" in w.lower()
+               for w in fuente.warnings), fuente.warnings

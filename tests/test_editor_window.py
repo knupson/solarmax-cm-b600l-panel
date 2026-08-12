@@ -611,3 +611,110 @@ def test_unsaved_changes_are_visible_in_the_title(ventana):
     assert "sin guardar" in ventana.root.title()
     ventana._save()
     assert "sin guardar" not in ventana.root.title()
+
+
+# --- elegir el archivo del fondo ---
+
+
+def test_choosing_an_asset_outside_the_project_copies_it_in(ventana, tmp_path):
+    """`safe_asset_path` rechaza cualquier cosa fuera de vmaxpanel/assets, así que
+    elegir un video del Escritorio sólo puede funcionar copiándolo adentro. Sin esto
+    el usuario elige un archivo, el editor guarda una ruta que el motor rechaza, y el
+    fondo queda en color plano sin explicación."""
+    origen = tmp_path / "mi video.mp4"
+    origen.write_bytes(b"contenido")
+    assets = tmp_path / "assets"
+    assets.mkdir()
+
+    nombre = ventana._usar_asset(origen, assets_dir=assets)
+
+    assert nombre == "mi video.mp4"
+    assert (assets / "mi video.mp4").read_bytes() == b"contenido"
+    assert ventana.state.raw["background"]["src"] == "mi video.mp4"
+
+
+def test_choosing_an_asset_already_inside_does_not_duplicate_it(ventana, tmp_path):
+    assets = tmp_path / "assets"
+    (assets / "fondos").mkdir(parents=True)
+    dentro = assets / "fondos" / "ya-esta.mp4"
+    dentro.write_bytes(b"x")
+
+    nombre = ventana._usar_asset(dentro, assets_dir=assets)
+
+    assert nombre == "fondos/ya-esta.mp4"          # relativo, con / para el JSON
+    assert list((assets / "fondos").iterdir()) == [dentro]
+
+
+def test_a_name_collision_with_other_content_does_not_overwrite(ventana, tmp_path):
+    """Copiar encima del asset de otro perfil es destruir trabajo ajeno por un
+    nombre repetido."""
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    (assets / "fondo.mp4").write_bytes(b"el que ya estaba")
+    otro = tmp_path / "otra carpeta" / "fondo.mp4"
+    otro.parent.mkdir()
+    otro.write_bytes(b"el nuevo")
+
+    nombre = ventana._usar_asset(otro, assets_dir=assets)
+
+    assert nombre == "fondo-2.mp4"
+    assert (assets / "fondo.mp4").read_bytes() == b"el que ya estaba"
+    assert (assets / "fondo-2.mp4").read_bytes() == b"el nuevo"
+
+
+def test_choosing_the_same_file_twice_reuses_the_copy(ventana, tmp_path):
+    """Mismo contenido y mismo nombre: es el mismo archivo, no hace falta otra
+    copia. Sin esto, tocar el botón dos veces deja fondo.mp4 y fondo-2.mp4
+    idénticos."""
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    origen = tmp_path / "v.mp4"
+    origen.write_bytes(b"igual")
+
+    primero = ventana._usar_asset(origen, assets_dir=assets)
+    segundo = ventana._usar_asset(origen, assets_dir=assets)
+
+    assert primero == segundo == "v.mp4"
+    assert [p.name for p in assets.iterdir()] == ["v.mp4"]
+
+
+def test_choosing_a_folder_for_a_sequence_copies_the_whole_folder(ventana, tmp_path):
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    carpeta = tmp_path / "cuadros"
+    carpeta.mkdir()
+    for i in range(3):
+        (carpeta / f"{i}.png").write_bytes(b"x")
+
+    nombre = ventana._usar_asset(carpeta, assets_dir=assets)
+
+    assert nombre == "cuadros"
+    assert len(list((assets / "cuadros").iterdir())) == 3
+
+
+def test_a_missing_asset_is_reported_and_changes_nothing(ventana, tmp_path):
+    antes = dict(ventana.state.raw["background"])
+    nombre = ventana._usar_asset(tmp_path / "no-existe.mp4",
+                                 assets_dir=tmp_path / "assets")
+    assert nombre is None
+    assert ventana.state.raw["background"] == antes
+    assert "no-existe.mp4" in ventana.estado.cget("text")
+
+
+def test_the_choose_button_appears_only_for_backgrounds_with_a_file(ventana):
+    """Un `solid` no tiene archivo que elegir; un `video` sí. El botón sigue al
+    campo `src`, así que aparece exactamente cuando ese campo existe."""
+    def hay_boton():
+        return any("Elegir" in str(c.cget("text"))
+                   for c in ventana._bg_campos.winfo_children()
+                   if c.winfo_class() == "TButton")
+
+    ventana._bg_type.set("solid")
+    ventana._on_pick_bg_type()
+    ventana.root.update()
+    assert not hay_boton()
+
+    ventana._bg_type.set("video")
+    ventana._on_pick_bg_type()
+    ventana.root.update()
+    assert hay_boton()

@@ -92,8 +92,12 @@ class VideoSource:
         ]
 
     def _spawn_ffmpeg(self):
+        # stderr a un pipe y no a DEVNULL: es el UNICO lugar donde ffmpeg dice por
+        # que no pudo abrir el archivo -- no existe, no es un video, falta el codec
+        # -- y sin eso el aviso al usuario es generico. Con -loglevel error son unas
+        # pocas lineas, no hay riesgo de llenar el pipe.
         return subprocess.Popen(self._comando(), stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL,
+                                stderr=subprocess.PIPE,
                                 creationflags=SIN_VENTANA)
 
     def start(self):
@@ -129,7 +133,7 @@ class VideoSource:
             while len(datos) < tamano and not self._stop.is_set():
                 trozo = flujo.read(tamano - len(datos))
                 if not trozo:
-                    self._avisar("el video termino o ffmpeg se cerro")
+                    self._explicar_el_final(bool(self._ultimo))
                     return
                 datos.extend(trozo)
             if len(datos) < tamano:
@@ -137,6 +141,43 @@ class VideoSource:
             img = Image.frombytes("RGB", (ancho, alto), bytes(datos))
             with self._lock:
                 self._ultimo = img
+
+    def _explicar_el_final(self, hubo_cuadros):
+        """Distingue "no se pudo abrir" de "se corto en el medio".
+
+        Los dos llegan como un stdout vacio, y tratarlos igual mandaba al usuario a
+        mirar la duracion del video cuando el problema era la ruta. Si nunca llego un
+        cuadro, el video nunca arranco: eso es lo que hay que decir, con el motivo
+        que dio ffmpeg.
+
+        `-stream_loop -1` hace que un video que se abrio bien no termine nunca, asi
+        que el caso "hubo cuadros y ahora no hay" tampoco es un final normal.
+        """
+        motivo = self._stderr()
+        if not hubo_cuadros:
+            self._avisar(f"ffmpeg no pudo abrir {Path(self.ruta).name}"
+                         + (f": {motivo}" if motivo else ""))
+            return
+        self._avisar(f"el video se corto (ffmpeg dejo de escribir)"
+                     + (f": {motivo}" if motivo else ""))
+
+    def _stderr(self) -> str:
+        """Lo ultimo que dijo ffmpeg, en una linea.
+
+        Se lee sin bloquear indefinidamente: el proceso ya cerro stdout, asi que su
+        stderr esta cerrado o a punto. Si algo sale mal leyendo, se devuelve "" --
+        un aviso sin motivo sigue siendo mejor que una excepcion en el hilo lector.
+        """
+        proc = self._proc
+        if proc is None or proc.stderr is None:
+            return ""
+        try:
+            crudo = proc.stderr.read() or b""
+        except Exception:
+            return ""
+        lineas = [l.strip() for l in crudo.decode("utf-8", "replace").splitlines()
+                  if l.strip()]
+        return lineas[-1] if lineas else ""
 
     def _avisar(self, texto):
         if texto not in self.warnings:
