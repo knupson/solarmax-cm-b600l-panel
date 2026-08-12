@@ -515,3 +515,72 @@ def test_the_undo_history_is_bounded(tmp_path):
     for i in range(200):
         st.set_field("cpu-load", "x", str(20 + i % 50))
     assert len(st._historial) <= st.MAX_UNDO
+
+
+# --- reglas de color ---
+
+def test_rules_are_listed_parsed(tmp_path):
+    """El JSON guarda la regla como "> 90"; la UI necesita el operador y el
+    numero por separado para poner un combo y un campo."""
+    st = state_for(tmp_path)
+    reglas = st.rules("cpu-load")
+    assert reglas and reglas[0]["op"] == ">" and reglas[0]["value"] == "90"
+    assert reglas[0]["color"].startswith("#")
+
+
+def test_a_widget_without_rules_reports_an_empty_list(tmp_path):
+    st = state_for(tmp_path)
+    assert st.rules("cpu-bar") == []
+    assert st.rules("no-existe") == []
+
+
+def test_adding_a_rule_gives_something_valid(tmp_path):
+    st = state_for(tmp_path)
+    assert st.add_rule("cpu-temp") == []
+    assert len(st.rules("cpu-temp")) == 2
+    assert st.save() == []
+
+
+def test_editing_the_pieces_of_a_rule(tmp_path):
+    st = state_for(tmp_path)
+    assert st.set_rule("cpu-load", 0, "op", ">=") == []
+    assert st.set_rule("cpu-load", 0, "value", "75.5") == []
+    assert st.set_rule("cpu-load", 0, "color", "#00FF00") == []
+    r = st.rules("cpu-load")[0]
+    assert (r["op"], r["value"], r["color"]) == (">=", "75.5", "#00FF00")
+    # y en el JSON quedo como el comparador que el validador espera
+    crudo = st.widget("cpu-load")["rules"][0]
+    assert crudo["when"] == ">= 75.5"
+
+
+def test_an_impossible_rule_is_reported_not_written_silently(tmp_path):
+    st = state_for(tmp_path)
+    errores = st.set_rule("cpu-load", 0, "value", "no es un numero")
+    assert errores and any("rules" in e or "comparador" in e for e in errores)
+
+
+def test_a_bad_operator_is_refused(tmp_path):
+    st = state_for(tmp_path)
+    assert st.set_rule("cpu-load", 0, "op", "=~")
+    assert st.rules("cpu-load")[0]["op"] == ">"
+
+
+def test_removing_a_rule(tmp_path):
+    st = state_for(tmp_path)
+    n = len(st.rules("cpu-load"))
+    assert st.remove_rule("cpu-load", 0) == []
+    assert len(st.rules("cpu-load")) == n - 1
+
+
+def test_rules_are_undoable(tmp_path):
+    st = state_for(tmp_path)
+    n = len(st.rules("cpu-load"))
+    st.add_rule("cpu-load")
+    st.undo()
+    assert len(st.rules("cpu-load")) == n
+
+
+def test_the_operators_offered_are_the_ones_the_validator_accepts(tmp_path):
+    st = state_for(tmp_path)
+    for op in st.rule_operators():
+        assert st.set_rule("cpu-load", 0, "op", op) == [], op

@@ -430,3 +430,39 @@ def test_undo_refreshes_the_fields_and_the_preview(ventana):
 def test_undo_with_empty_history_says_so_in_the_status(ventana):
     ventana._undo()
     assert "deshacer" in ventana.estado.cget("text").lower()
+
+
+def test_the_rules_editor_appears_only_for_text_widgets(ventana):
+    """Solo los widgets de texto tienen reglas de color en este motor: mostrar
+    la seccion en una barra prometeria algo que no existe."""
+    seleccionar(ventana, "cpu-load")
+    assert ventana._rule_rows, "un text con reglas no mostro el editor"
+    seleccionar(ventana, "cpu-bar")
+    assert ventana._rule_rows == []
+
+
+def test_editing_a_rule_from_the_ui_reaches_the_state(ventana):
+    seleccionar(ventana, "cpu-load")
+    fila = ventana._rule_rows[0]
+    fila["value"].set("70")
+    ventana._apply_rule(0, "value")
+    assert ventana.state.rules("cpu-load")[0]["value"] == "70"
+    assert ventana.state.dirty is True
+
+
+def test_adding_and_removing_a_rule_from_the_ui(ventana):
+    seleccionar(ventana, "cpu-temp")
+    n = len(ventana._rule_rows)
+    ventana._add_rule()
+    assert len(ventana._rule_rows) == n + 1
+    ventana._remove_rule(n)
+    assert len(ventana._rule_rows) == n
+
+
+def test_a_rule_that_would_break_the_layout_is_reported(ventana):
+    seleccionar(ventana, "cpu-load")
+    fila = ventana._rule_rows[0]
+    fila["value"].set("no")
+    ventana._apply_rule(0, "value")
+    assert ventana.state.errors == []            # se revirtio
+    assert ventana.estado.cget("text")           # y lo dijo

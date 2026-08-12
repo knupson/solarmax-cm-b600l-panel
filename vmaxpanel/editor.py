@@ -11,6 +11,7 @@ archivo ES el protocolo.
 """
 import argparse
 import json
+import re
 import sys
 import traceback
 from pathlib import Path
@@ -476,6 +477,90 @@ class EditorState:
     def end_drag(self):
         self._drag = None
 
+    # --- reglas de color ---
+    #
+    # En el JSON una regla es {"when": "> 90", "color": "#FF4D00"}: el comparador
+    # y el numero viajan juntos en un string. La UI necesita las tres piezas por
+    # separado -- un combo para el operador, un campo para el numero, otro para el
+    # color -- asi que aca se parten al leer y se vuelven a armar al escribir. Es
+    # el unico lugar del editor que traduce entre la forma del archivo y la forma
+    # de los controles, y esta aca en vez de en la ventana para que tenga tests.
+    _RULE_RE = re.compile(r"^\s*(>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)\s*$")
+
+    def rule_operators(self) -> list[str]:
+        """Los que el validador acepta, en orden de uso."""
+        return [">", ">=", "<", "<="]
+
+    def rules(self, wid) -> list[dict]:
+        """[{op, value, color}] del widget, con el comparador ya partido."""
+        w = self.widget(wid) or {}
+        salida = []
+        for r in w.get("rules") or []:
+            m = self._RULE_RE.match(str(r.get("when", "")))
+            salida.append({"op": m.group(1) if m else ">",
+                           "value": m.group(2) if m else "",
+                           "color": r.get("color", "#FFFFFF")})
+        return salida
+
+    def add_rule(self, wid) -> list[str]:
+        """Agrega una regla que ya valida.
+
+        El umbral por defecto sale del spec de la metrica -- el 85% de su maximo
+        -- en vez de un 90 fijo: una regla ">= 90" sobre un voltaje de 1,05 V
+        nunca se dispara y el usuario no entiende por que su regla no hace nada.
+        """
+        w = self.widget(wid)
+        if w is None:
+            return [f"no existe el widget {wid!r}"]
+        spec = spec_for(w.get("metric", ""))
+        techo = spec.max if (spec and spec.max) else 100.0
+        self._snapshot()
+        w.setdefault("rules", []).append(
+            {"when": f"> {round(techo * 0.85, 2):g}", "color": "#FF8A1F"})
+        self.dirty = True
+        self.errors = schema.validate(self.raw)
+        return list(self.errors)
+
+    def remove_rule(self, wid, i) -> list[str]:
+        reglas = (self.widget(wid) or {}).get("rules") or []
+        if not 0 <= i < len(reglas):
+            return [f"no existe la regla {i}"]
+        self._snapshot()
+        del reglas[i]
+        self.dirty = True
+        self.errors = schema.validate(self.raw)
+        return list(self.errors)
+
+    def set_rule(self, wid, i, campo, valor) -> list[str]:
+        """Cambia una pieza de una regla. No escribe si queda invalida.
+
+        A diferencia del resto de los campos del editor -- donde un valor a medio
+        tipear es legitimo y solo se reporta -- una regla mal armada rompe TODAS
+        las reglas de ese widget, porque el validador rechaza el layout entero.
+        Asi que aca se prueba primero y se descarta el cambio si no valida.
+        """
+        reglas = (self.widget(wid) or {}).get("rules") or []
+        if not 0 <= i < len(reglas):
+            return [f"no existe la regla {i}"]
+        actual = self.rules(wid)[i]
+        nuevo = dict(actual)
+        nuevo[campo] = str(valor).strip()
+        candidata = {"when": f"{nuevo['op']} {nuevo['value']}",
+                     "color": nuevo["color"]}
+        anterior = dict(reglas[i])
+        reglas[i] = candidata
+        errores = schema.validate(self.raw)
+        if errores:
+            reglas[i] = anterior          # se revierte: una regla rota apaga todas
+            self.errors = schema.validate(self.raw)
+            return errores
+        reglas[i] = anterior              # para que el snapshot guarde el estado previo
+        self._snapshot()
+        reglas[i] = candidata
+        self.dirty = True
+        self.errors = []
+        return []
+
     # --- fondo ---
     #
     # Los campos que admite cada tipo salen de schema.BACKGROUND_KEYS, no de una
@@ -700,6 +785,8 @@ class EditorWindow:
         self._fields = {}
         self._pickers = {}
         self._metric_por_etiqueta = {}
+        self._rule_rows = []
+        self._rules_frame = None
         self._build()
         self._refresh(select_first=True)
 
@@ -1234,6 +1321,91 @@ class EditorWindow:
             entrada.bind("<FocusOut>", lambda e, k=clave: self._apply(k))
             entrada.bind("<Return>", lambda e, k=clave: self._apply(k))
             self._fields[clave] = var
+        self._show_rules(len(w) + 1)
+
+    # --- reglas de color ---
+
+    def _show_rules(self, fila_base):
+        """El editor de reglas, debajo de las propiedades.
+
+        Solo para los widgets de texto: son los unicos que tienen reglas en este
+        motor, y mostrar la seccion en una barra prometeria algo que no existe.
+        """
+        ttk = self.ttk
+        # No hay que destruir nada aca: _show_props() ya borro todos los hijos de
+        # self.props, y el marco de reglas es uno de ellos. La version anterior
+        # guardaba una referencia y le pedia los hijos a un widget ya destruido,
+        # que es "bad window path name".
+        self._rule_rows = []
+        wid = self._selected()
+        w = self.state.widget(wid) if wid else None
+        if w is None or w.get("type") != "text":
+            return
+
+        marco = ttk.Frame(self.props)
+        marco.grid(row=fila_base, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        self._rules_frame = marco
+        ttk.Label(marco, text="COLOR SEGÚN EL VALOR", foreground="#606060").grid(
+            row=0, column=0, columnspan=4, sticky="w")
+        for i, regla in enumerate(self.state.rules(wid)):
+            op = ttk.Combobox(marco, width=4, state="readonly",
+                              values=self.state.rule_operators())
+            op.set(regla["op"])
+            op.grid(row=i + 1, column=0, padx=(0, 2), pady=1)
+            op.bind("<<ComboboxSelected>>", lambda e, j=i: self._apply_rule(j, "op"))
+
+            valor = self.tk.StringVar(value=regla["value"])
+            color = self.tk.StringVar(value=regla["color"])
+            e_valor = ttk.Entry(marco, textvariable=valor, width=8)
+            e_color = ttk.Entry(marco, textvariable=color, width=10)
+            e_valor.grid(row=i + 1, column=1, padx=2)
+            e_color.grid(row=i + 1, column=2, padx=2)
+            for control, campo in ((e_valor, "value"), (e_color, "color")):
+                for evento in ("<FocusOut>", "<Return>"):
+                    control.bind(evento,
+                                 lambda e, j=i, c=campo: self._apply_rule(j, c))
+            ttk.Button(marco, text="−", width=3,
+                       command=lambda j=i: self._remove_rule(j)).grid(row=i + 1,
+                                                                     column=3)
+            self._rule_rows.append({"op": op, "value": valor, "color": color})
+        ttk.Button(marco, text="+ regla", command=self._add_rule).grid(
+            row=len(self._rule_rows) + 1, column=0, columnspan=3, sticky="w",
+            pady=(4, 0))
+
+    def _apply_rule(self, i, campo):
+        wid = self._selected()
+        if wid is None or not 0 <= i < len(self._rule_rows):
+            return
+        control = self._rule_rows[i][campo]
+        valor = control.get()
+        errores = self.state.set_rule(wid, i, campo, valor)
+        # Se repinta siempre: una regla rechazada se revierte en el estado, asi
+        # que el control tiene que volver a mostrar el valor que quedo y no el
+        # que el usuario tipeo.
+        self._show_props()
+        self._draw_preview()
+        if errores:
+            self.estado.config(text=" / ".join(errores), foreground="#B00000")
+        else:
+            self._show_errors()
+
+    def _add_rule(self):
+        wid = self._selected()
+        if wid is None:
+            return
+        self.state.add_rule(wid)
+        self._show_props()
+        self._draw_preview()
+        self._show_errors()
+
+    def _remove_rule(self, i):
+        wid = self._selected()
+        if wid is None:
+            return
+        self.state.remove_rule(wid, i)
+        self._show_props()
+        self._draw_preview()
+        self._show_errors()
 
     # --- acciones ---
 
