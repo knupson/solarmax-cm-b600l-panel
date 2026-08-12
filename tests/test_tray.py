@@ -85,3 +85,81 @@ def test_the_icon_asset_ships_and_has_a_small_size_layer():
     assert (16, 16) in tamanos
     assert (32, 32) in tamanos
     assert (256, 256) in tamanos
+
+
+def test_the_fps_submenu_offers_the_measured_options():
+    """El costo de cada cadencia va en la etiqueta: elegir 60 fps sin saber
+    que son 37% de un nucleo, continuo, no es elegir."""
+    class AppConFps(FakeApp):
+        def fps_options(self):
+            return [(1, "1 fps · 1% de un núcleo"), (30, "30 fps · 17% de un núcleo"),
+                    (60, "60 fps · 37% de un núcleo")]
+
+        def fps(self):
+            return 30
+
+    t = tray.Tray.__new__(tray.Tray)
+    t.app = AppConFps(paused=False, running=True)
+    entradas = t._fps_entries()
+    assert [cmd for cmd, _, _ in entradas] == [tray.CMD_FPS_BASE + i for i in range(3)]
+    assert [marcado for _, _, marcado in entradas] == [False, True, False]
+    assert "37%" in entradas[2][1]
+
+
+def test_picking_an_fps_writes_it_through_the_app(monkeypatch):
+    pedidos = []
+
+    class AppConFps(FakeApp):
+        def fps_options(self):
+            return [(1, "1 fps"), (30, "30 fps"), (60, "60 fps")]
+
+        def fps(self):
+            return 1
+
+        def set_fps(self, v):
+            pedidos.append(v)
+            return []
+
+    t = tray.Tray.__new__(tray.Tray)
+    t.app = AppConFps(paused=False, running=True)
+    t._editor = None
+    t._dispatch(tray.CMD_FPS_BASE + 2)
+    assert pedidos == [60]
+
+
+def test_the_fps_commands_do_not_collide_with_the_other_menu_ids():
+    """Los ids de fps son CMD_FPS_BASE + indice: si se solapan con CMD_QUIT,
+    elegir un fps cierra la app."""
+    fijos = {tray.CMD_STATE, tray.CMD_TOGGLE, tray.CMD_EDITOR, tray.CMD_PROFILE,
+             tray.CMD_LOG, tray.CMD_RESTART, tray.CMD_QUIT}
+    for i in range(16):
+        assert tray.CMD_FPS_BASE + i not in fijos
+
+
+def test_the_fps_picker_is_refused_while_the_editor_is_open():
+    """Los dos escriben el mismo perfil: el editor guarda su copia en memoria y
+    se llevaria puesto el fps recien elegido. Mismo motivo por el que la
+    bandeja no abre dos editores."""
+    pedidos = []
+
+    class AppConFps(FakeApp):
+        def fps_options(self):
+            return [(1, "1 fps"), (60, "60 fps")]
+
+        def fps(self):
+            return 1
+
+        def set_fps(self, v):
+            pedidos.append(v)
+            return []
+
+    class EditorVivo:
+        def poll(self):
+            return None            # sigue corriendo
+
+    t = tray.Tray.__new__(tray.Tray)
+    t.app = AppConFps(paused=False, running=True)
+    t._editor = EditorVivo()
+    t._dispatch(tray.CMD_FPS_BASE + 1)
+    assert pedidos == [], "escribio el perfil con el editor abierto"
+    assert t._editor_abierto() is True

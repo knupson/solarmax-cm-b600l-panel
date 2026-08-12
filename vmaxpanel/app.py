@@ -10,11 +10,12 @@ en la sesion 0: desde ahi no se puede mostrar un icono en la bandeja ni abrir
 un editor, que es justamente lo que el usuario queria. La tarea programada al
 logon hace de autostart y esta clase hace de servicio dentro de la sesion.
 """
+import json
 import threading
 import time
 
 from .engine import Engine, EngineConfig
-from .layout import loader
+from .layout import loader, schema
 from .providers.setup import build_registry
 from .transport.panel_link import PanelLink
 
@@ -144,6 +145,49 @@ class PanelApp:
 
     def toggle(self):
         self.resume() if self._paused else self.pause()
+
+    # --- fps ---
+    #
+    # El costo de cada cadencia esta medido contra el panel real (i5-12400F, 12
+    # hilos): CPU del proceso sostenida sobre 5 s. Se muestra al lado de cada
+    # opcion porque elegir 60 fps sin saber que son 37% de un nucleo -- continuo,
+    # mientras el panel este prendido -- no es elegir.
+    FPS_OPCIONES = ((1, 0.6), (10, 5.9), (30, 17.2), (60, 37.2))
+
+    def fps_options(self) -> list:
+        """[(fps, etiqueta)] para el menu."""
+        return [(v, f"{v} fps · {c:.0f}% de un núcleo") for v, c in self.FPS_OPCIONES]
+
+    def fps(self):
+        """El fps que dice el perfil en disco, o None si no se puede leer."""
+        try:
+            crudo = json.loads(self.profile_path.read_text(encoding="utf-8"))
+            return (crudo.get("panel") or {}).get("fps")
+        except Exception:
+            return None
+
+    def set_fps(self, valor) -> list:
+        """Escribe el fps en el perfil. Devuelve los errores que lo impidieron.
+
+        El fps vive en el perfil, asi que cambiarlo es editarlo: el motor lo
+        recarga en caliente y no hace falta reiniciar. Se valida ANTES de
+        escribir -- un perfil invalido en disco lo rechazaria el motor y se
+        quedaria con el anterior, o sea que el usuario habria "cambiado" algo
+        que el panel ignora.
+
+        Si el perfil no se puede leer no se escribe nada: pisarlo con un fps
+        nuevo destruiria lo que haya quedado ahi.
+        """
+        try:
+            crudo = json.loads(self.profile_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            return [f"no se pudo leer el perfil: {e}"]
+        crudo.setdefault("panel", {})["fps"] = valor
+        errores = schema.validate(crudo)
+        if errores:
+            return errores
+        loader.save_raw(crudo, self.profile_path)
+        return []
 
     # --- estado para la bandeja ---
 

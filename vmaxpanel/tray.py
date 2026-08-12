@@ -43,6 +43,7 @@ SM_CXSMICON, SM_CYSMICON = 49, 50
 ICONO = Path(__file__).resolve().parent / "assets" / "vmaxpanel.ico"
 
 MF_STRING, MF_SEPARATOR, MF_GRAYED, MF_CHECKED = 0x0000, 0x0800, 0x0001, 0x0008
+MF_POPUP = 0x0010
 TPM_RIGHTBUTTON = 0x0002
 TPM_RETURNCMD = 0x0100          # el id vuelve por retorno, no por WM_COMMAND
 
@@ -53,6 +54,9 @@ CMD_PROFILE = 1004
 CMD_LOG = 1005
 CMD_RESTART = 1006
 CMD_QUIT = 1007
+# Los fps van en un rango aparte, CMD_FPS_BASE + indice de la opcion: si se
+# solaparan con los ids fijos, elegir un fps ejecutaria otra cosa.
+CMD_FPS_BASE = 1100
 
 # LRESULT es del tamano de un puntero: en 64 bits, c_long (32) TRUNCA el valor
 # de retorno. Y sin argtypes declarados, ctypes asume int de 32 bits para cada
@@ -228,6 +232,22 @@ class Tray:
         user32.AppendMenuW(menu, MF_STRING, CMD_TOGGLE,
                            "Reanudar" if st.get("paused") else "Pausar (suelta el puerto)")
         user32.AppendMenuW(menu, MF_STRING, CMD_RESTART, "Reiniciar el motor")
+
+        # Submenu de fps. El panel refresca a 60 Hz; por encima descarta, asi
+        # que 60 es el tope y el costo de cada opcion va en su etiqueta.
+        sub = user32.CreatePopupMenu()
+        for cmd, etiqueta, marcado in self._fps_entries():
+            banderas = MF_STRING | (MF_CHECKED if marcado else 0)
+            user32.AppendMenuW(sub, banderas, cmd, etiqueta)
+        # Con el editor abierto el submenu queda gris: los dos escriben el
+        # mismo perfil y el ultimo en guardar se lleva puesto al otro.
+        if self._editor_abierto():
+            user32.AppendMenuW(menu, MF_STRING | MF_GRAYED, 0,
+                               "Cuadros por segundo (cerra el editor primero)")
+            user32.DestroyMenu(sub)
+        else:
+            user32.AppendMenuW(menu, MF_STRING | MF_POPUP, sub,
+                               "Cuadros por segundo")
         user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, MF_STRING, CMD_EDITOR, "Editor de layout…")
         user32.AppendMenuW(menu, MF_STRING, CMD_PROFILE, "Abrir el perfil (JSON)")
@@ -255,7 +275,30 @@ class Tray:
         if cmd:
             self._dispatch(cmd)
 
+    def _editor_abierto(self) -> bool:
+        return self._editor is not None and self._editor.poll() is None
+
+    def _fps_entries(self):
+        """[(comando, etiqueta, marcado)] para el submenu de fps."""
+        actual = self.app.fps()
+        salida = []
+        for i, (valor, etiqueta) in enumerate(self.app.fps_options()):
+            salida.append((CMD_FPS_BASE + i, etiqueta, valor == actual))
+        return salida
+
     def _dispatch(self, cmd):
+        if CMD_FPS_BASE <= cmd < CMD_FPS_BASE + 64:
+            if self._editor_abierto():
+                return              # el editor tiene el perfil en memoria
+            opciones = self.app.fps_options()
+            i = cmd - CMD_FPS_BASE
+            if 0 <= i < len(opciones):
+                # En un thread: set_fps() escribe el perfil y el motor lo
+                # recarga; bloquear aca congelaria el bombeo de mensajes.
+                valor = opciones[i][0]
+                threading.Thread(target=self.app.set_fps, args=(valor,),
+                                 daemon=True).start()
+            return
         if cmd == CMD_TOGGLE:
             # En un thread: pause() hace join del motor y puede tardar lo que
             # tarde el frame en curso. Bloquear aca congela la bandeja entera,

@@ -135,3 +135,61 @@ def test_state_survives_a_broken_profile_at_startup(tmp_path):
         assert app.state()["profile"] is None
     finally:
         app.stop()
+
+
+# --- fps elegible desde la bandeja ---
+
+def test_set_fps_writes_the_profile_and_the_engine_picks_it_up(tmp_path):
+    """El fps vive en el perfil, asi que cambiarlo es editarlo: el motor lo
+    recarga en caliente sin reiniciar nada."""
+    app, _ = app_for(tmp_path)
+    assert app.fps() == 1
+    assert app.set_fps(30) == []
+    assert app.fps() == 30
+    assert json.loads(app.profile_path.read_text(encoding="utf-8"))["panel"]["fps"] == 30
+
+    app.start()
+    try:
+        assert wait_until(lambda: app.state()["fps"] == 30)
+    finally:
+        app.stop()
+
+
+def test_set_fps_rejects_what_the_panel_cannot_show(tmp_path):
+    """Por encima del refresco del panel los frames se descartan: es CPU
+    quemada al vacio."""
+    app, _ = app_for(tmp_path)
+    errores = app.set_fps(120)
+    assert errores and any("fps" in e for e in errores)
+    assert app.fps() == 1                      # no lo escribio
+    assert json.loads(app.profile_path.read_text(encoding="utf-8"))["panel"]["fps"] == 1
+
+
+def test_set_fps_keeps_the_rest_of_the_profile_intact(tmp_path):
+    app, _ = app_for(tmp_path)
+    antes = json.loads(app.profile_path.read_text(encoding="utf-8"))
+    app.set_fps(60)
+    despues = json.loads(app.profile_path.read_text(encoding="utf-8"))
+    assert despues["widgets"] == antes["widgets"]
+    assert despues["panel"]["brightness"] == antes["panel"]["brightness"]
+    assert list(despues) == list(antes)
+
+
+def test_set_fps_on_a_broken_profile_reports_instead_of_overwriting(tmp_path):
+    """Si el perfil no se puede leer, escribir un fps encima lo destruiria."""
+    app, _ = app_for(tmp_path)
+    app.profile_path.write_text("{roto", encoding="utf-8")
+    errores = app.set_fps(30)
+    assert errores
+    assert app.profile_path.read_text(encoding="utf-8") == "{roto"
+
+
+def test_the_cpu_cost_of_each_option_is_published(tmp_path):
+    """La bandeja muestra el costo al lado de cada opcion: elegir 60 fps sin
+    saber que son 37% de un nucleo no es elegir."""
+    app, _ = app_for(tmp_path)
+    opciones = app.fps_options()
+    assert [v for v, _ in opciones] == [1, 10, 30, 60]
+    for valor, etiqueta in opciones:
+        assert str(valor) in etiqueta
+        assert "%" in etiqueta
