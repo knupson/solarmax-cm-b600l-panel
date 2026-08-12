@@ -166,3 +166,38 @@ def test_a_metric_with_no_surviving_provider_is_unavailable_with_the_reason():
     only.fail = True
     assert r.read()["cpu.clock"] is UNAVAILABLE
     assert "pdh" in r.unavailable()["cpu.clock"]
+
+
+def test_the_registry_aggregates_catalog_and_groups():
+    """El editor pide un solo catalogo, no uno por provider. Y solo de los
+    providers disponibles: ofrecer una metrica que nadie sirve seria invitar
+    al usuario a poner un widget que va a mostrar "--"."""
+
+    class ConCatalogo(TwoWayProvider):
+        def catalog(self):
+            from vmaxpanel.metrics import MetricSpec
+            return {"vol.D.free": MetricSpec("vol.D.free", "D: (JUEGOS) — libre",
+                                             "GiB", "number", 0.0, None)}
+
+        def groups(self):
+            return {"vol.D.free": "Disco D: (JUEGOS)"}
+
+    class Caido(ConCatalogo):
+        def probe(self):
+            self.unavailable_reason = "no anda"
+            return False
+
+    r = Registry([ConCatalogo("wmi", {"vol.D.free"}, {"vol.D.free": 453.6})])
+    assert r.catalog()["vol.D.free"].label == "D: (JUEGOS) — libre"
+    assert r.groups()["vol.D.free"] == "Disco D: (JUEGOS)"
+
+    r2 = Registry([Caido("wmi", {"vol.D.free"}, {})])
+    assert "vol.D.free" not in r2.catalog()
+
+
+def test_the_catalog_falls_back_to_the_generic_label():
+    """Un provider que no publica catalogo igual tiene que aparecer en el
+    catalogo del registry: la etiqueta sale de metrics.spec_for()."""
+    r = Registry([TwoWayProvider("pdh", {"cpu.clock"}, {"cpu.clock": 4080})])
+    assert r.catalog()["cpu.clock"].label == "Clock de CPU"
+    assert r.groups().get("cpu.clock") == "CPU"

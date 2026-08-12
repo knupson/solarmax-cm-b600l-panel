@@ -13,6 +13,7 @@ from .registry import Registry
 from .sidecar import SidecarClient
 from .sidecar_providers import (Gsa1Provider, LhmProvider, PdhProvider,
                                 SmbiosProvider)
+from .wmi_provider import WmiProvider
 
 SIDECAR = Path(__file__).resolve().parent.parent / "sensors.ps1"
 
@@ -24,10 +25,15 @@ def build_registry(sidecar_script=SIDECAR, warmup=25.0):
         print("aviso: el sidecar no entrego datos; los sensores de hardware "
               "van a quedar no disponibles", file=sys.stderr)
     return Registry([PsutilProvider(), Gsa1Provider(client), PdhProvider(client),
-                     LhmProvider(client), SmbiosProvider(client),
+                     LhmProvider(client), SmbiosProvider(client), WmiProvider(),
                      MsrProvider()]), client
 
 
 def build_registry_without_sensors():
-    """Solo psutil: para previsualizar layouts sin levantar el sidecar."""
-    return Registry([PsutilProvider()]), None
+    """Sin sidecar: psutil y WMI, que no necesitan DLLs ni elevacion.
+
+    Se usa para previsualizar layouts. WMI entra porque el espacio en disco es
+    justamente uno de los datos que se quiere ver al disenar, y su consulta no
+    depende de LibreHardwareMonitor.
+    """
+    return Registry([PsutilProvider(), WmiProvider()]), None

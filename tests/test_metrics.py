@@ -82,3 +82,57 @@ def test_short_cpu_name_leaves_an_unknown_string_usable():
 def test_cpu_name_short_is_a_registered_text_metric():
     assert is_metric("cpu.name_short")
     assert metrics.spec_for("cpu.name_short").kind == "text"
+
+
+# --- familias de metricas por dispositivo ---
+#
+# El id es tecnico y estable (vol.C.free); la etiqueta amigable la arma
+# spec_for() y el provider la refina con el nombre real del dispositivo.
+
+def test_volume_metrics_are_valid_and_have_a_friendly_label():
+    assert is_metric("vol.C.free")
+    assert is_metric("vol.D.load")
+    spec = metrics.spec_for("vol.C.free")
+    assert spec.kind == "number" and spec.unit == "GiB"
+    assert "C:" in spec.label                    # la etiqueta nombra el volumen
+    carga = metrics.spec_for("vol.D.load")
+    assert (carga.min, carga.max) == (0.0, 100.0)
+    assert carga.unit == "%"
+
+
+def test_core_metrics_are_valid_per_core():
+    assert is_metric("core.0.temp")
+    assert is_metric("core.11.load")
+    assert is_metric("core.3.clock")
+    spec = metrics.spec_for("core.3.temp")
+    assert "3" in spec.label and spec.unit == "°C"
+
+
+def test_fan_and_motherboard_metrics_are_valid():
+    assert is_metric("fan.1.rpm")
+    assert is_metric("mb.temp.2")
+    assert metrics.spec_for("fan.1.rpm").unit == "RPM"
+    assert metrics.spec_for("mb.temp.2").unit == "°C"
+
+
+def test_network_metrics_per_adapter_accept_a_slug():
+    assert is_metric("net.ethernet.down")
+    assert is_metric("net.wi-fi-2.up")
+    assert not is_metric("net.Ethernet 2.down")   # con espacios y mayusculas, no
+    assert metrics.spec_for("net.ethernet.down").unit == "B/s"
+
+
+def test_unknown_families_are_still_rejected():
+    for malo in ("vol.C.inventado", "vol..free", "core.x.temp", "fan.rpm",
+                 "mb.temp", "net.eth.sideways", "vol.CC.free"):
+        assert not is_metric(malo), malo
+        assert metrics.spec_for(malo) is None
+
+
+def test_the_slug_helper_is_reversible_enough_to_be_readable():
+    """El id lleva un slug del nombre del dispositivo porque tiene que entrar
+    en un id de metrica; el nombre lindo lo publica el provider aparte."""
+    assert metrics.slug("Ethernet") == "ethernet"
+    assert metrics.slug("Wi-Fi 2") == "wi-fi-2"
+    assert metrics.slug("Realtek PCIe GbE Family Controller") == \
+        "realtek-pcie-gbe-family-controller"

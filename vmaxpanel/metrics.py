@@ -4,6 +4,7 @@ Un id que ningun provider disponible sirve se lee como UNAVAILABLE, estado
 distinto de None: None es "el provider existe pero esta muestra no trajo valor".
 """
 import re
+import unicodedata
 from dataclasses import dataclass
 
 
@@ -73,11 +74,81 @@ METRICS: dict[str, MetricSpec] = {m.id: m for m in [
     _n("net.up", "Subida", "B/s", 0.0, None),
     _t("clock.time", "Hora"),
     _t("clock.date", "Fecha"),
+    _n("sys.uptime", "Encendida hace", "s", 0.0, None),
+    _n("sys.procs", "Procesos", "", 0.0, None),
 ]}
 
 _DISK_RE = re.compile(r"^disk\.temp\.(\d+)$")
 
 DISK_TEMP_SPEC = _n("disk.temp.N", "Temperatura de disco", "°C", 0.0, 100.0)
+
+
+def slug(nombre) -> str:
+    """"Wi-Fi 2" -> "wi-fi-2": nombre de dispositivo apto para un id.
+
+    Los ids de metrica se escriben a mano en el perfil y viajan por JSON, asi
+    que no pueden llevar espacios ni mayusculas ni acentos. El nombre lindo no
+    se pierde: lo publica el provider en su catalogo, que es lo que el editor
+    muestra.
+    """
+    if not isinstance(nombre, str):
+        return ""
+    s = unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode()
+    s = re.sub(r"[^A-Za-z0-9-]+", "-", s).strip("-").lower()
+    return re.sub(r"-{2,}", "-", s)
+
+
+# --- familias de metricas por dispositivo ---
+#
+# Un id de metrica se valida contra estos patrones cuando no esta en METRICS.
+# Hace falta porque las instancias se descubren en tiempo de ejecucion -- que
+# volumenes hay, cuantos nucleos, que adaptadores -- y el validador de layouts
+# corre sin consultar hardware: tiene que poder decir que `vol.D.free` es un id
+# legitimo aunque en ESTA maquina no exista la D.
+#
+# La etiqueta de aca nombra la instancia por su id ("D: -- libre"). El provider
+# la refina con el nombre real del dispositivo ("D: JUEGOS -- libre") en su
+# catalogo, que es de donde la saca el editor.
+_MEDIDAS_VOL = {
+    "free": ("libre", "GiB", 0.0, None),
+    "used": ("usado", "GiB", 0.0, None),
+    "total": ("total", "GiB", 0.0, None),
+    "load": ("uso", "%", 0.0, 100.0),
+}
+_MEDIDAS_CORE = {
+    "temp": ("temperatura", "°C", 0.0, 110.0),
+    "clock": ("frecuencia", "MHz", 0.0, 6000.0),
+    "load": ("carga", "%", 0.0, 100.0),
+}
+_MEDIDAS_NET = {
+    "down": ("bajada", "B/s", 0.0, None),
+    "up": ("subida", "B/s", 0.0, None),
+}
+
+_FAMILIAS = [
+    (re.compile(r"^vol\.([A-Z])\.(free|used|total|load)$"),
+     lambda m: (f"{m.group(1)}: — {_MEDIDAS_VOL[m.group(2)][0]}",
+                *_MEDIDAS_VOL[m.group(2)][1:])),
+    (re.compile(r"^core\.(\d+)\.(temp|clock|load)$"),
+     lambda m: (f"Núcleo {m.group(1)} — {_MEDIDAS_CORE[m.group(2)][0]}",
+                *_MEDIDAS_CORE[m.group(2)][1:])),
+    (re.compile(r"^fan\.(\d+)\.rpm$"),
+     lambda m: (f"Fan {m.group(1)}", "RPM", 0.0, 3000.0)),
+    (re.compile(r"^mb\.temp\.(\d+)$"),
+     lambda m: (f"Placa — temperatura {m.group(1)}", "°C", 0.0, 100.0)),
+    (re.compile(r"^net\.([a-z0-9][a-z0-9-]*)\.(down|up)$"),
+     lambda m: (f"{m.group(1)} — {_MEDIDAS_NET[m.group(2)][0]}",
+                *_MEDIDAS_NET[m.group(2)][1:])),
+]
+
+
+def _familia(mid: str):
+    """(label, unit, lo, hi) si `mid` pertenece a una familia, o None."""
+    for patron, armar in _FAMILIAS:
+        m = patron.match(mid)
+        if m:
+            return armar(m)
+    return None
 
 
 def disk_metric(n: int) -> str:
@@ -134,7 +205,8 @@ def is_metric(mid) -> bool:
     """
     if not isinstance(mid, str):
         return False
-    return mid in METRICS or bool(_DISK_RE.match(mid))
+    return (mid in METRICS or bool(_DISK_RE.match(mid))
+            or _familia(mid) is not None)
 
 
 def spec_for(mid) -> MetricSpec | None:
@@ -145,4 +217,8 @@ def spec_for(mid) -> MetricSpec | None:
     if _DISK_RE.match(mid):
         return MetricSpec(mid, DISK_TEMP_SPEC.label, DISK_TEMP_SPEC.unit,
                           "number", DISK_TEMP_SPEC.min, DISK_TEMP_SPEC.max)
+    fam = _familia(mid)
+    if fam is not None:
+        label, unidad, lo, hi = fam
+        return MetricSpec(mid, label, unidad, "number", lo, hi)
     return None

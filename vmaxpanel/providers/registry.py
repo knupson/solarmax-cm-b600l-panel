@@ -1,10 +1,10 @@
 """Resuelve cada id de metrica al provider disponible de mayor prioridad."""
-from ..metrics import UNAVAILABLE, is_metric
+from ..metrics import UNAVAILABLE, is_metric, spec_for
 from .base import Provider
 
 # Mas especifico primero: si una placa Gigabyte sirve cpu.temp por GSA1, eso
 # le gana a la lectura generica de LibreHardwareMonitor.
-PROVIDER_PRIORITY = ["gsa1", "msr", "pdh", "lhm", "smbios", "psutil"]
+PROVIDER_PRIORITY = ["gsa1", "msr", "pdh", "lhm", "smbios", "wmi", "psutil"]
 
 _NO_PROVIDER = "ningun provider de esta maquina sirve esta metrica"
 
@@ -62,6 +62,44 @@ class Registry:
         """metric id -> provider id que la sirve ahora."""
         return {m: pid for m, pid in self._resolution.items()
                 if m not in self._degraded}
+
+    def catalog(self) -> dict:
+        """id -> MetricSpec con la mejor etiqueta disponible, para el editor.
+
+        Solo de los providers DISPONIBLES: ofrecerle al usuario una metrica que
+        nadie sirve es invitarlo a poner un widget que va a mostrar "--".
+
+        La etiqueta del provider gana sobre la generica de metrics.spec_for()
+        porque es la unica que puede nombrar el dispositivo real: `vol.D.free`
+        no sabe que la D se llama "JUEGOS".
+        """
+        cat = {}
+        for mid in self._servers:
+            base = spec_for(mid)
+            if base is not None:
+                cat[mid] = base
+        for p in self._available:
+            try:
+                cat.update(p.catalog())
+            except Exception:
+                pass                    # un catalogo roto no puede tumbar al editor
+        return cat
+
+    def groups(self) -> dict:
+        """id -> dispositivo, para agrupar la lista del editor.
+
+        Lo que el provider no clasifique cae al prefijo del id en mayusculas
+        ("cpu.clock" -> "CPU"), que es una agrupacion pobre pero nunca vacia.
+        """
+        g = {}
+        for mid in self._servers:
+            g[mid] = mid.split(".", 1)[0].upper()
+        for p in self._available:
+            try:
+                g.update(p.groups())
+            except Exception:
+                pass
+        return g
 
     def unavailable(self) -> dict[str, str]:
         """metric id -> motivo, en lenguaje llano, para mostrar en el editor."""
