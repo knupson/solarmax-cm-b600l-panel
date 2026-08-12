@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from ctypes import wintypes
 from pathlib import Path
 
@@ -32,6 +33,11 @@ WM_COMMAND = 0x0111
 WM_RBUTTONUP = 0x0205
 WM_LBUTTONDBLCLK = 0x0203
 WM_TRAY = 0x0400 + 1            # WM_APP: mensaje propio del icono
+
+# Esperas entre intentos de agregar el icono. La primera es 0 -- el caso normal entra
+# de una -- y el resto cubre la carrera de arranque al logon, donde la bandeja de
+# Windows puede no estar lista todavia. Suman ~7 s y despues se rinde avisando.
+ESPERAS_ICONO = (0, 0.5, 1, 1.5, 2, 2)
 
 NIM_ADD, NIM_MODIFY, NIM_DELETE = 0, 1, 2
 NIF_MESSAGE, NIF_ICON, NIF_TIP = 0x01, 0x02, 0x04
@@ -89,6 +95,8 @@ user32.TrackPopupMenu.argtypes = [wintypes.HMENU, wintypes.UINT, ctypes.c_int,
 user32.TrackPopupMenu.restype = ctypes.c_int
 user32.DestroyWindow.argtypes = [wintypes.HWND]
 user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+user32.RegisterWindowMessageW.argtypes = [wintypes.LPCWSTR]
+user32.RegisterWindowMessageW.restype = wintypes.UINT
 shell32.Shell_NotifyIconW.restype = wintypes.BOOL
 # Sin restype declarado, ctypes asume int de 32 bits y TRUNCA el handle: el
 # modulo base queda con un valor que no es el real, y la clase se registra
@@ -113,6 +121,11 @@ class WNDCLASS(ctypes.Structure):
                 ("lpszMenuName", wintypes.LPCWSTR), ("lpszClassName", wintypes.LPCWSTR)]
 
 
+# El id del mensaje "TaskbarCreated" no es una constante fija: lo asigna Windows y hay
+# que pedirlo. Se registra al importar, una sola vez.
+WM_TASKBARCREATED = user32.RegisterWindowMessageW("TaskbarCreated")
+
+
 class NOTIFYICONDATA(ctypes.Structure):
     _fields_ = [("cbSize", wintypes.DWORD), ("hWnd", wintypes.HWND),
                 ("uID", wintypes.UINT), ("uFlags", wintypes.UINT),
@@ -122,6 +135,78 @@ class NOTIFYICONDATA(ctypes.Structure):
 
 class POINT(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+
+CLAVE_ICONOS = r"Control Panel\NotifyIconSettings"
+
+
+def _leer_entradas_icono() -> dict:
+    """{nombre de subclave: {valor: dato}} de HKCU\\Control Panel\\NotifyIconSettings."""
+    import winreg
+    fuera = {}
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, CLAVE_ICONOS) as raiz:
+        i = 0
+        while True:
+            try:
+                nombre = winreg.EnumKey(raiz, i)
+            except OSError:
+                break
+            i += 1
+            datos = {}
+            try:
+                with winreg.OpenKey(raiz, nombre) as sub:
+                    j = 0
+                    while True:
+                        try:
+                            v, dato, _ = winreg.EnumValue(sub, j)
+                        except OSError:
+                            break
+                        datos[v] = dato
+                        j += 1
+            except OSError:
+                continue
+            fuera[nombre] = datos
+    return fuera
+
+
+def _escribir_promovido(subclave, valor):
+    import winreg
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, f"{CLAVE_ICONOS}\\{subclave}", 0,
+                        winreg.KEY_SET_VALUE) as k:
+        winreg.SetValueEx(k, "IsPromoted", 0, winreg.REG_DWORD, valor)
+
+
+def promover_icono(exe, tip_prefijo, leer=None, escribir=None) -> bool:
+    """Hace visible el icono en la barra si Windows lo escondio. -> True si lo cambio.
+
+    **Windows 11 esconde TODO icono nuevo**: lo manda al menu de iconos ocultos y no a
+    la barra. Verificado en esta maquina: la entrada estaba con el tooltip "VMax Panel"
+    y sin `IsPromoted`, y el usuario nunca vio el icono. Para una app cuya UNICA
+    interfaz es ese icono, quedar escondido es quedar sin interfaz -- no hay pausa, ni
+    cambio de perfil, ni editor.
+
+    **Si el valor esta en 0 no se toca:** eso significa que el usuario lo apago a mano
+    en Configuracion, y volver a prenderlo en cada arranque seria pelearle a su
+    decision. Solo se arregla la ausencia, que es el default de Windows y no una
+    eleccion de nadie.
+
+    Nunca levanta: es cosmetico y no puede impedir que la bandeja arranque.
+    """
+    leer = leer or _leer_entradas_icono
+    escribir = escribir or _escribir_promovido
+    try:
+        for subclave, datos in (leer() or {}).items():
+            if str(datos.get("ExecutablePath", "")).lower() != str(exe).lower():
+                continue
+            if not str(datos.get("InitialTooltip", "")).startswith(tip_prefijo):
+                continue
+            if "IsPromoted" in datos:
+                return False            # ya visible, o apagado a mano: se respeta
+            escribir(subclave, 1)
+            return True
+    except Exception:
+        return False
+    return False
 
 
 def _open_with_shell(path):
@@ -183,6 +268,17 @@ class Tray:
                                  IMAGE_ICON, 0, 0, LR_DEFAULTSIZE)
 
     def _add_icon(self):
+        """Agrega el icono, VERIFICANDO que Windows lo haya aceptado.
+
+        El retorno se ignoraba, y Windows rechaza el NIM_ADD de verdad cuando la
+        bandeja todavia no esta lista -- que es exactamente el momento en que la tarea
+        arranca esto, al logon. Sin icono no hay menu: ni pausa, ni cambio de perfil,
+        ni editor. La app seguiria dibujando y sin ninguna forma de manejarla, y nada
+        lo diria.
+
+        Reintenta con esperas cortas porque el caso normal es una carrera de arranque
+        que se resuelve en uno o dos segundos.
+        """
         nid = NOTIFYICONDATA()
         nid.cbSize = ctypes.sizeof(NOTIFYICONDATA)
         nid.hWnd = self._hwnd
@@ -191,8 +287,33 @@ class Tray:
         nid.uCallbackMessage = WM_TRAY
         nid.hIcon = self._icon()
         nid.szTip = self._tip()
-        shell32.Shell_NotifyIconW(NIM_ADD, ctypes.byref(nid))
         self._nid = nid
+
+        self._icono_puesto = False
+        for intento, espera in enumerate(ESPERAS_ICONO):
+            if shell32.Shell_NotifyIconW(NIM_ADD, ctypes.byref(nid)):
+                self._icono_puesto = True
+                if intento:
+                    print(f"icono de bandeja agregado al intento {intento + 1}")
+                # Recien despues del NIM_ADD existe la entrada en el registro que hay
+                # que promover: Windows la crea al aceptar el icono, con un nombre de
+                # subclave que calcula el. Por eso no se puede hacer en --instalar.
+                if promover_icono(sys.executable, "VMax Panel"):
+                    print("el icono estaba escondido (default de Windows 11): "
+                          "lo puse visible en la barra")
+                    # Windows decide barra vs menu oculto EN EL MOMENTO del NIM_ADD:
+                    # promoverlo despues no lo mueve solo. Se borra y se agrega de
+                    # nuevo para que la barra lo re-evalue, o el cambio recien se
+                    # veria al proximo arranque.
+                    shell32.Shell_NotifyIconW(NIM_DELETE, ctypes.byref(nid))
+                    shell32.Shell_NotifyIconW(NIM_ADD, ctypes.byref(nid))
+                return
+            if espera:
+                time.sleep(espera)
+        print("no se pudo agregar el icono a la bandeja: Windows rechazo el NIM_ADD. "
+              "El panel sigue dibujando, pero sin menu. El editor se abre igual con "
+              "'python -m vmaxpanel.editor', y se baja con "
+              "'python -m vmaxpanel --parar'.", file=sys.stderr)
 
     def _tip(self) -> str:
         st = self.app.state()
@@ -435,7 +556,13 @@ class Tray:
                 self._editor_launcher()
             else:
                 self._refresh_tip()
-        elif msg == WM_COMMAND:
+        elif msg == WM_TASKBARCREATED:
+            # Explorer se reinicio (pasa, y no es raro: un cuelgue del shell, un
+            # cambio de escala). Windows manda esto a todas las ventanas y CADA app
+            # tiene que volver a agregar su icono; el anterior ya no existe. Sin esto
+            # el panel sigue dibujando pero el icono no vuelve hasta el proximo logon,
+            # o sea que el usuario se queda sin menu.
+            self._add_icon()
             self._dispatch(wparam & 0xFFFF)
         elif msg == WM_DESTROY:
             if self._nid is not None:

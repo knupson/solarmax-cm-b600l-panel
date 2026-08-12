@@ -295,3 +295,145 @@ def test_a_failed_export_does_not_open_anything(monkeypatch, capsys):
     t._exportar()
     assert abiertos == []
     assert "no se pudo" in capsys.readouterr().out
+
+
+# --- el icono tiene que existir de verdad ---
+
+
+class FakeShell:
+    """shell32 de mentira: cuenta los NIM_ADD y puede fallar los primeros N."""
+
+    def __init__(self, fallar=0):
+        self.adds = 0
+        self.fallar = fallar
+        self.mensajes = []
+
+    def Shell_NotifyIconW(self, accion, _nid):
+        self.mensajes.append(accion)
+        if accion == tray.NIM_ADD:
+            self.adds += 1
+            return 0 if self.adds <= self.fallar else 1
+        return 1
+
+
+def _tray_con(shell, monkeypatch, app=None):
+    monkeypatch.setattr(tray, "shell32", shell)
+    t = tray.Tray.__new__(tray.Tray)
+    t.app = app or FakeApp(paused=False, running=True)
+    t._editor = None
+    t._hwnd = 1234
+    t._nid = None
+    t._icono_puesto = False
+    return t
+
+
+def test_a_rejected_icon_is_retried_and_reported(monkeypatch, capsys):
+    """El retorno de Shell_NotifyIcon se ignoraba. Windows lo rechaza de verdad cuando
+    la bandeja todavia no esta lista -- y la tarea arranca esto AL LOGON, que es
+    exactamente ese momento. Sin icono no hay menu, ni pausa, ni editor: la app queda
+    dibujando y sin ninguna forma de manejarla."""
+    shell = FakeShell(fallar=2)
+    t = _tray_con(shell, monkeypatch)
+    t._add_icon()
+    assert shell.adds >= 3, "no reintento"
+    assert t._icono_puesto is True
+    assert "bandeja" in capsys.readouterr().out.lower()
+
+
+def test_an_icon_that_never_gets_accepted_says_so(monkeypatch, capsys):
+    shell = FakeShell(fallar=99)
+    t = _tray_con(shell, monkeypatch)
+    t._add_icon()
+    assert t._icono_puesto is False
+    # A stderr, no a stdout: es una falla, y el log de la bandeja junta los dos.
+    salida = capsys.readouterr().err.lower()
+    assert "no se pudo" in salida
+    assert "python -m vmaxpanel.editor" in salida, "sin icono, hay que decir el plan B"
+
+
+def test_the_icon_is_added_again_when_explorer_restarts(monkeypatch):
+    """Cuando explorer se reinicia -- pasa, y no es raro -- Windows manda
+    TaskbarCreated y CADA app tiene que volver a agregar su icono. Sin eso el panel
+    sigue dibujando pero el icono no vuelve nunca: el usuario se queda sin menu hasta
+    el proximo logon."""
+    shell = FakeShell()
+    t = _tray_con(shell, monkeypatch)
+    t._add_icon()
+    assert shell.adds == 1
+    t._on_message(t._hwnd, tray.WM_TASKBARCREATED, 0, 0)
+    assert shell.adds == 2, "no volvio a poner el icono"
+
+
+# --- que el icono se VEA, no solo que exista ---
+
+
+def test_the_icon_promotes_itself_when_windows_hid_it_by_default():
+    r"""Windows 11 esconde TODO icono nuevo: lo agrega al menu oculto y no a la barra.
+    Verificado en esta maquina -- la entrada existia en
+    HKCU\Control Panel\NotifyIconSettings con el tooltip "VMax Panel" y sin
+    IsPromoted, y el usuario nunca vio el icono en meses de uso. Para una app cuya
+    UNICA interfaz es ese icono, quedar escondido es quedar sin interfaz."""
+    entradas = {"111": {"ExecutablePath": r"C:\py\pythonw.exe",
+                        "InitialTooltip": "VMax Panel - detenido"},
+                "222": {"ExecutablePath": r"C:\otra\app.exe",
+                        "InitialTooltip": "Otra cosa"}}
+    escritos = {}
+    puesto = tray.promover_icono(r"C:\py\pythonw.exe", "VMax Panel",
+                                 leer=lambda: entradas,
+                                 escribir=lambda k, v: escritos.__setitem__(k, v))
+    assert puesto is True
+    assert escritos == {"111": 1}, "promovio la entrada equivocada, o ninguna"
+
+
+def test_an_icon_the_user_hid_on_purpose_is_left_alone():
+    """Si el valor esta en 0, el usuario lo apago a mano en Configuracion. Volver a
+    prenderlo en cada arranque seria pelearle a su decision, que es justo lo que hace
+    insoportable al software que se cree importante."""
+    entradas = {"111": {"ExecutablePath": r"C:\py\pythonw.exe",
+                        "InitialTooltip": "VMax Panel", "IsPromoted": 0}}
+    escritos = {}
+    puesto = tray.promover_icono(r"C:\py\pythonw.exe", "VMax Panel",
+                                 leer=lambda: entradas,
+                                 escribir=lambda k, v: escritos.__setitem__(k, v))
+    assert puesto is False
+    assert escritos == {}
+
+
+def test_an_already_visible_icon_is_not_rewritten():
+    entradas = {"111": {"ExecutablePath": r"C:\py\pythonw.exe",
+                        "InitialTooltip": "VMax Panel", "IsPromoted": 1}}
+    escritos = {}
+    assert tray.promover_icono(r"C:\py\pythonw.exe", "VMax Panel",
+                               leer=lambda: entradas,
+                               escribir=lambda k, v: escritos.__setitem__(k, v)) is False
+    assert escritos == {}
+
+
+def test_promoting_never_raises_if_the_registry_is_not_there():
+    """Es cosmetico: una version de Windows sin esa clave, o un permiso denegado, no
+    puede impedir que la bandeja arranque."""
+    def leer_roto():
+        raise OSError("no existe la clave")
+    assert tray.promover_icono("x", "y", leer=leer_roto,
+                               escribir=lambda k, v: None) is False
+
+
+def test_after_promoting_the_icon_is_added_again(monkeypatch):
+    """Windows decide si el icono va a la barra o al menu oculto EN EL MOMENTO del
+    NIM_ADD. Promoverlo despues no lo mueve solo, asi que hay que volver a agregarlo
+    para que la barra lo re-evalue: sin eso el cambio recien se ve al proximo arranque.
+    """
+    shell = FakeShell()
+    t = _tray_con(shell, monkeypatch)
+    monkeypatch.setattr(tray, "promover_icono", lambda *a, **kw: True)
+    t._add_icon()
+    assert shell.adds == 2, "no volvio a agregar el icono despues de promoverlo"
+    assert tray.NIM_DELETE in shell.mensajes, "no borro el anterior: quedarian dos"
+
+
+def test_without_promotion_the_icon_is_added_once(monkeypatch):
+    shell = FakeShell()
+    t = _tray_con(shell, monkeypatch)
+    monkeypatch.setattr(tray, "promover_icono", lambda *a, **kw: False)
+    t._add_icon()
+    assert shell.adds == 1
