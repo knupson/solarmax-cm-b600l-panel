@@ -128,6 +128,7 @@ class Tray:
         self._editor_launcher = editor_launcher or self._default_editor
         self._hwnd = None
         self._nid = None
+        self._editor = None             # el proceso del editor, si hay uno vivo
         # La referencia al WNDPROC tiene que sobrevivir a __init__: si la
         # recolecta el GC, Windows llama a un puntero muerto en el primer
         # mensaje y el proceso se cae sin traceback.
@@ -257,16 +258,25 @@ class Tray:
         self.app.start()
 
     def _default_editor(self):
-        """El editor corre en su propio proceso.
+        """El editor corre en su propio proceso, y solo uno a la vez.
 
         Tkinter quiere ser el thread principal y aca el thread principal esta
         bombeando mensajes de Win32: meter los dos en el mismo proceso es la
         receta para un cuelgue. Un proceso aparte tambien significa que si el
         editor se cae, el panel sigue dibujando.
+
+        Uno solo porque dos editores sobre el mismo perfil se pisan los
+        guardados -- gana el ultimo y el otro cree que guardo -- y porque el
+        temporal de save_raw() tiene nombre fijo, o sea que asume un unico
+        escritor. Paso de verdad: quedaron dos ventanas abiertas sobre
+        vitals.json.
         """
-        subprocess.Popen([sys.executable, "-m", "vmaxpanel.editor",
-                          "--profile", str(self.app.profile_path)],
-                         creationflags=0x08000000)
+        if self._editor is not None and self._editor.poll() is None:
+            return                      # ya hay uno vivo
+        self._editor = subprocess.Popen(
+            [sys.executable, "-m", "vmaxpanel.editor",
+             "--profile", str(self.app.profile_path)],
+            creationflags=0x08000000)
 
     # --- bombeo de mensajes ---
 

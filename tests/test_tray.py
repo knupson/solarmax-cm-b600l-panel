@@ -39,3 +39,36 @@ def test_tooltip_never_exceeds_the_win32_limit():
     tip = _tip_with(FakeApp(paused=False, running=True, profile="P" * 400,
                             frames=1))
     assert len(tip) <= 127
+
+
+def test_the_tray_does_not_open_a_second_editor(monkeypatch):
+    """Dos editores sobre el mismo perfil se pisan los guardados: gana el
+    ultimo y el otro cree que guardo. Aparecio de verdad -- quedaron dos
+    ventanas abiertas sobre vitals.json."""
+    lanzados = []
+
+    class FakeProc:
+        def __init__(self):
+            self.vivo = True
+
+        def poll(self):
+            return None if self.vivo else 0
+
+    def fake_popen(*args, **kw):
+        p = FakeProc()
+        lanzados.append(p)
+        return p
+
+    monkeypatch.setattr(tray.subprocess, "Popen", fake_popen)
+    t = tray.Tray.__new__(tray.Tray)
+    t.app = FakeApp(paused=False, running=True)
+    t._editor = None
+
+    t._default_editor()
+    assert len(lanzados) == 1
+    t._default_editor()
+    assert len(lanzados) == 1, "abrio un segundo editor con uno ya vivo"
+
+    lanzados[0].vivo = False          # el usuario lo cerro
+    t._default_editor()
+    assert len(lanzados) == 2, "no volvio a abrir despues de que se cerro"
