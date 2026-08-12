@@ -67,8 +67,8 @@ métodos de lectura.** No agregar escrituras sin saber exactamente a qué regist
 
 ## Estado
 
-**Fase 1 de VMax Panel cerrada y mergeada a `main`** (2026-08-11, fast-forward desde
-`fase1-motor-data-driven`, 209 tests verdes). El paquete `vmaxpanel/` reemplaza el layout
+**Fases 1 y 3 completas, en `main`** (2026-08-12, 251 tests verdes). Fase 2 (fondos animados)
+es lo único que falta. El paquete `vmaxpanel/` reemplaza el layout
 hardcodeado de `daemon/panel.py` por un motor manejado por datos. Verificado contra el panel
 real: muestra el layout nuevo y editar el perfil se refleja sin reiniciar. El widget `rect`, los
 separadores del perfil y los 5 fixes de la revisión final entraron después de la revisión
@@ -87,37 +87,31 @@ Al retomar, leer en este orden:
 
 ### Pendiente
 
-Revisión final de la rama corrida (nivel high, 30 commits / 47 archivos). Los 5 hallazgos que
-rompían invariantes documentados están arreglados en `89fb271`. Los que quedaron, con el
-diagnóstico ya hecho y verificado:
+**Fase 3 implementada** (2026-08-12, `6661493`): bandeja + editor, sin dependencias nuevas.
+Ver `docs/superpowers/specs/2026-08-12-vmax-panel-fase3-design.md`. **El servicio de Windows no
+va y no volver a proponerlo**: sesión 0, sin acceso a la bandeja ni a ventanas.
 
-- **`registry.py:64` — no hay failover entre providers.** Cuando el provider dueño de una
-  métrica falla, `read()` la marca degradada y hace `continue`; el de menor prioridad que sirve
-  la misma métrica queda salteado por `self._resolution.get(mid) != p.id`. `cpu.clock` y
-  `cpu.name` los sirven `pdh` y `psutil`: si cae pdh, van a `--` con psutil vivo al lado.
-  Arreglo: recalcular la resolución cuando el dueño se degrada.
-- **`sidecar.py:88` — `close()` puede dejar el `powershell.exe` huérfano** que el docstring del
-  módulo dice que evita. Hace `terminate()` sin `wait()`, así que un caller que borra el
-  directorio enseguida todavía puede pegar contra el lock de `LibreHardwareMonitorLib.dll`. Y
-  hay carrera: si `close()` cae entre el chequeo de `_stop` y el `_spawn()` de `_run`, mata el
-  proceso viejo, el thread levanta uno nuevo y sale por el `return` sin matarlo. El `_proc` y
-  su `stdout` tampoco se cierran ni se cosechan entre reinicios.
-- **`engine.py:129` — el engine no vuelve a leer el perfil mientras no tiene layout válido.**
-  `_connect` tira `OSError` cuando `store.current is None`, y `reload_if_changed()` solo se
-  llama desde `_refresh_layout`, que solo corre dentro de `_serve()`. Arrancado con un perfil
-  inválido gira en el backoff para siempre y nunca levanta el archivo arreglado. En fase 3
-  (servicio que arranca antes de que el perfil exista) es el caso normal.
-- **`schema.py:173` — `panel.rotate` 90/270 valida en un panel no cuadrado.** Con `rotate: 90`
-  sobre el perfil 320x1480, `to_jpeg` emite un JPEG 1480x320 y `send_frame` lo escribe sin
-  chistar: basura en el panel, cero errores. Cruzar `rotate` contra `designed_for` o la
-  geometría del link.
-- **Flake** en `tests/test_loader.py::test_store_recovers_after_user_fixes_the_file` (1 de ~6
-  corridas de la suite completa). `ProfileStore.reload_if_changed()` detecta cambios solo por
-  `st_mtime_ns`: si dos escrituras caen en el mismo tick del filesystem, la segunda se pierde.
-  No es solo del test — es un agujero real del hot-reload. Sumar tamaño al criterio, o releer
-  cuando el mtime es igual al de la última lectura fallida.
-- Fases 2 (fondos animados) y 3 (servicio + tray + editor) no tienen plan todavía. El de
-  fase 2 arranca con un spike de throughput: cuántos fps traga el panel decide todo lo demás.
+Revisión final de la fase 1 corrida (nivel high, 30 commits / 47 archivos): 9 hallazgos,
+ninguno falso positivo. **Los 5 que rompían invariantes se arreglaron en `89fb271` y los otros
+5 en `9fb5c66`** — ya no queda nada de esa revisión pendiente. El diagnóstico de cada uno está
+en el mensaje de esos dos commits, que es el lugar donde buscarlo si algo se rompe otra vez:
+
+- `registry.py` — failover entre providers (arreglado)
+- `sidecar.py` — `close()` sin `wait()` y la carrera del respawn (arreglado)
+- `engine.py` — no relee el perfil sin layout válido (arreglado)
+- `engine.py` — `rotate` 90/270 que no encaja en el panel (arreglado)
+- `loader.py` — hot-reload por `st_mtime_ns`, ciego a dos escrituras en el mismo tick
+  (arreglado: ahora es un hash del contenido)
+
+- **Fase 2 (fondos animados) es lo único que queda sin plan.** Arranca con un spike de
+  throughput: cuántos fps traga el panel decide todo lo demás.
+- **Verificación visual pendiente:** el ícono de la bandeja y la ventana del editor no se
+  llegaron a mirar en pantalla — la máquina se bloqueó y en un escritorio bloqueado la captura
+  sale negra y `FindWindow` no enumera las ventanas del escritorio del usuario. Lo funcional sí
+  está verificado (la tarea levanta la bandeja, el motor toma COM3, el editor construye y
+  guarda).
+- El editor no tiene arrastrar-y-soltar ni UI para `fonts`/`background`/`rules`: eso sigue
+  siendo edición del JSON, que la bandeja abre con un clic.
 - **La RAM está corriendo a 5600, no a 6000**: una actualización de BIOS reseteó el XMP/EXPO y
   quedó en la base JEDEC. Si el kit es de 6000, hay que volver a activar el perfil en BIOS. El
   panel mostraba 6000 porque estaba **horneado** como un `label` en el perfil; ya se lee de
