@@ -52,6 +52,17 @@ def ventana(_ventana):
     return _ventana
 
 
+def metrica_mostrada(w):
+    """El id de metrica que el selector esta mostrando ahora.
+
+    El combo muestra la etiqueta amigable, no el id: el mapeo inverso es lo
+    que la ventana usa para escribir en el estado."""
+    combo = w._pickers.get("metric")
+    if combo is None:
+        return None
+    return w._metric_por_etiqueta.get(combo.get())
+
+
 def seleccionar(w, wid):
     ids = w.state.widget_ids()
     w.lista.selection_clear(0, "end")
@@ -63,15 +74,15 @@ def seleccionar(w, wid):
 def test_selecting_a_widget_shows_its_own_properties(ventana):
     seleccionar(ventana, "ssd-2")
     assert ventana._selected() == "ssd-2"
-    assert ventana._fields["metric"].get() == "disk.temp.2"
+    assert metrica_mostrada(ventana) == "disk.temp.2"
     assert ventana._fields["x"].get() == "162"
 
 
 def test_switching_selection_replaces_the_properties(ventana):
     seleccionar(ventana, "clock")
-    assert ventana._fields["metric"].get() == "clock.time"
+    assert metrica_mostrada(ventana) == "clock.time"
     seleccionar(ventana, "cpu-bar")
-    assert ventana._fields["metric"].get() == "cpu.load"
+    assert metrica_mostrada(ventana) == "cpu.load"
     assert "format" not in ventana._fields          # una barra no tiene format
     assert ventana._fields["w"].get() == "272"
 
@@ -140,7 +151,7 @@ def test_a_real_mouse_click_on_the_list_selects_that_widget(ventana):
     ventana.root.update()
 
     assert ventana._selected() == "cpu-load"
-    assert ventana._fields["metric"].get() == "cpu.load"
+    assert metrica_mostrada(ventana) == "cpu.load"
 
 
 def test_arrows_move_the_widget_only_when_not_editing_a_field(ventana):
@@ -166,3 +177,82 @@ def test_arrows_move_the_widget_only_when_not_editing_a_field(ventana):
     ventana.lista.event_generate("<Left>")
     ventana.root.update()
     assert ventana.state.widget("cpu-load")["x"] == x0 - 1
+
+
+def test_the_preview_grows_with_the_window(ventana):
+    """Una escala fija desperdicia una ventana maximizada: el panel es
+    320x1480 y en 0.36 se ve en miniatura. La vista previa tiene que usar el
+    alto disponible."""
+    ventana.root.geometry("900x600")
+    ventana.root.update()
+    chico = ventana._preview_img.height()
+    escala_chica = ventana._escala
+
+    ventana.root.geometry("1400x1000")
+    ventana.root.update()
+    grande = ventana._preview_img.height()
+
+    assert grande > chico, f"{chico} -> {grande} px de alto"
+    assert ventana._escala > escala_chica
+
+
+def test_the_preview_keeps_the_panel_aspect_ratio(ventana):
+    ventana.root.geometry("1400x1000")
+    ventana.root.update()
+    ancho, alto = ventana._preview_img.width(), ventana._preview_img.height()
+    assert abs(alto / ancho - 1480 / 320) < 0.05
+
+
+def test_resizing_does_not_loop_forever(ventana):
+    """Cambiar la imagen cambia el tamano del Label, que dispara otro
+    <Configure>: sin una guarda eso es un bucle de redibujo infinito."""
+    ventana._redibujos = 0
+    original = ventana._draw_preview
+
+    def contar():
+        ventana._redibujos += 1
+        original()
+
+    ventana._draw_preview = contar
+    ventana.root.geometry("1200x900")
+    for _ in range(6):
+        ventana.root.update()
+    assert ventana._redibujos <= 3, f"{ventana._redibujos} redibujos por un resize"
+
+
+def test_the_metric_field_is_a_picker_with_friendly_labels(ventana):
+    """El campo `metric` era texto libre: habia que saber de memoria que
+    existe "vol.D.free". Ahora es una lista con nombres amigables agrupados
+    por dispositivo."""
+    seleccionar(ventana, "cpu-load")
+    combo = ventana._pickers.get("metric")
+    assert combo is not None, "metric sigue siendo un campo de texto"
+    valores = list(combo.cget("values"))
+    assert valores, "el selector salio vacio"
+    # el valor mostrado es la etiqueta amigable, no el id
+    assert combo.get() != "cpu.load"
+    assert "CPU" in combo.get() or "carga" in combo.get().lower()
+    # y los grupos aparecen como encabezados no seleccionables
+    assert any(v.startswith("——") for v in valores), "no hay encabezados de grupo"
+
+
+def test_choosing_from_the_picker_sets_the_metric_id(ventana):
+    seleccionar(ventana, "cpu-load")
+    combo = ventana._pickers["metric"]
+    objetivo = next(v for v in combo.cget("values")
+                    if not v.startswith("——") and "GPU" in v.upper())
+    combo.set(objetivo)
+    ventana._on_pick_metric()
+    assert ventana.state.widget("cpu-load")["metric"].startswith("gpu.")
+    assert ventana.state.dirty is True
+
+
+def test_a_group_header_is_not_selectable_as_a_metric(ventana):
+    """Elegir un encabezado no puede escribir "—— CPU ——" como metrica."""
+    seleccionar(ventana, "cpu-load")
+    antes = ventana.state.widget("cpu-load")["metric"]
+    combo = ventana._pickers["metric"]
+    combo.set(next(v for v in combo.cget("values") if v.startswith("——")))
+    ventana._on_pick_metric()
+    assert ventana.state.widget("cpu-load")["metric"] == antes
+    assert ventana.state.errors == []

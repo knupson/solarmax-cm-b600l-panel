@@ -64,7 +64,7 @@ METRICS: dict[str, MetricSpec] = {m.id: m for m in [
     _n("gpu.power", "Consumo de GPU", "W", 0.0, 600.0),
     _n("gpu.vram", "VRAM usada", "%", 0.0, 100.0),
     _n("gpu.fan", "Fan de GPU", "RPM", 0.0, 4000.0),
-    _n("mem.load", "RAM usada", "%", 0.0, 100.0),
+    _n("mem.load", "Uso de RAM", "%", 0.0, 100.0),
     _n("mem.used", "RAM usada", "GiB", 0.0, 256.0),
     _n("mem.total", "RAM total", "GiB", 0.0, 256.0),
     # MT/s (megatransfers), no MHz: es la unidad que reporta SMBIOS y la que
@@ -142,6 +142,25 @@ _FAMILIAS = [
 ]
 
 
+# Nombre del grupo por prefijo de id. El prefijo es tecnico ("net", "mem") y
+# el grupo lo lee el usuario en el selector del editor, asi que no pueden ser
+# lo mismo. Un dispositivo concreto (un volumen, un fan con nombre) lo refina
+# el provider con groups().
+_GRUPOS = {
+    "cpu": "CPU", "gpu": "GPU", "mem": "Memoria RAM", "net": "Red",
+    "clock": "Reloj", "disk": "Discos", "vol": "Discos", "sys": "Sistema",
+    "core": "Núcleos de CPU", "fan": "Ventiladores", "mb": "Placa madre",
+}
+
+
+def group_for(mid) -> str:
+    """Grupo al que pertenece una metrica, en nombre amigable."""
+    if not isinstance(mid, str) or not mid:
+        return "Otras"
+    prefijo = mid.split(".", 1)[0]
+    return _GRUPOS.get(prefijo, prefijo.upper())
+
+
 def _familia(mid: str):
     """(label, unit, lo, hi) si `mid` pertenece a una familia, o None."""
     for patron, armar in _FAMILIAS:
@@ -214,9 +233,14 @@ def spec_for(mid) -> MetricSpec | None:
         return None
     if mid in METRICS:
         return METRICS[mid]
-    if _DISK_RE.match(mid):
-        return MetricSpec(mid, DISK_TEMP_SPEC.label, DISK_TEMP_SPEC.unit,
-                          "number", DISK_TEMP_SPEC.min, DISK_TEMP_SPEC.max)
+    m = _DISK_RE.match(mid)
+    if m:
+        # La etiqueta LLEVA el indice. Sin eso los tres discos comparten
+        # "Temperatura de disco" y el selector del editor no los puede
+        # distinguir: elegir uno escribe otro.
+        return MetricSpec(mid, f"Disco {m.group(1)} — temperatura",
+                          DISK_TEMP_SPEC.unit, "number",
+                          DISK_TEMP_SPEC.min, DISK_TEMP_SPEC.max)
     fam = _familia(mid)
     if fam is not None:
         label, unidad, lo, hi = fam

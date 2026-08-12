@@ -136,3 +136,32 @@ def test_the_slug_helper_is_reversible_enough_to_be_readable():
     assert metrics.slug("Wi-Fi 2") == "wi-fi-2"
     assert metrics.slug("Realtek PCIe GbE Family Controller") == \
         "realtek-pcie-gbe-family-controller"
+
+
+def test_registered_metrics_have_unique_labels():
+    """La etiqueta es lo que el usuario elige en el selector del editor: dos
+    metricas con la misma etiqueta son indistinguibles ahi, y elegir una
+    escribe la otra. mem.load y mem.used se llamaban las dos "RAM usada"."""
+    por_etiqueta = {}
+    for mid, spec in METRICS.items():
+        assert spec.label not in por_etiqueta, \
+            f"{mid} y {por_etiqueta.get(spec.label)} comparten {spec.label!r}"
+        por_etiqueta[spec.label] = mid
+
+
+def test_group_names_are_friendly_not_id_prefixes():
+    """El grupo tambien lo lee el usuario: "NET" y "MEM" son prefijos de id,
+    no nombres."""
+    assert metrics.group_for("net.down") == "Red"
+    assert metrics.group_for("mem.load") == "Memoria RAM"
+    assert metrics.group_for("clock.time") == "Reloj"
+    assert metrics.group_for("disk.temp.1") == "Discos"
+    assert metrics.group_for("vol.C.free") == "Discos"
+    assert metrics.group_for("core.2.temp") == "Núcleos de CPU"
+    assert metrics.group_for("fan.1.rpm") == "Ventiladores"
+    assert metrics.group_for("mb.temp.0") == "Placa madre"
+    assert metrics.group_for("sys.uptime") == "Sistema"
+    assert metrics.group_for("cpu.load") == "CPU"
+    assert metrics.group_for("gpu.load") == "GPU"
+    # un prefijo desconocido no puede quedar sin grupo
+    assert metrics.group_for("inventado.algo") == "INVENTADO"

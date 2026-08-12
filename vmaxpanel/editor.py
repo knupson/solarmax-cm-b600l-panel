@@ -18,7 +18,8 @@ from pathlib import Path
 from PIL import Image
 
 from .layout import loader, schema
-from .metrics import METRICS
+from .metrics import METRICS, group_for, spec_for
+from .providers.setup import build_registry_without_sensors
 from .render.renderer import Renderer
 
 # Campos que son numeros. Todo lo que no este aca se guarda como texto: un
@@ -109,6 +110,7 @@ class EditorState:
         self.dirty = False
         self._sample = demo_sample()
         self._last_good = None          # ultimo preview valido
+        self._cache_catalogo = None     # el catalogo cuesta consultar WMI
         self.reload()
 
     # --- carga y guardado ---
@@ -154,6 +156,62 @@ class EditorState:
 
     def fonts(self) -> list[str]:
         return sorted(self.raw.get("fonts", {}))
+
+    def metric_groups(self) -> dict:
+        """{dispositivo: [(id, etiqueta), ...]} para el selector de metricas.
+
+        Se consulta al registry, que es el unico que sabe que dispositivos hay
+        en ESTA maquina y como se llaman -- "vol.D.free" no sabe que la D se
+        llama JUEGOS. Si no hay backend de sensores (otra maquina, sin permisos,
+        sin DLLs), cae a las metricas registradas: el editor tiene que abrir
+        igual, con etiquetas genericas.
+
+        Se agregan tambien las metricas que el perfil YA usa aunque el registry
+        no las ofrezca. Si no, cambiar la metrica de un widget en una maquina
+        que no la sirve la haria desaparecer del selector y no se podria volver
+        atras.
+        """
+        catalogo, grupos = self._catalogo()
+        usadas = {w.get("metric") for w in self.raw.get("widgets", [])
+                  if w.get("metric")}
+        for mid in usadas:
+            if mid not in catalogo:
+                base = spec_for(mid)
+                catalogo[mid] = base
+                grupos.setdefault(mid, group_for(mid))
+
+        salida = {}
+        for mid, base in catalogo.items():
+            if base is None:
+                continue
+            etiqueta = base.label or mid
+            salida.setdefault(grupos.get(mid, "Otras"), []).append((mid, etiqueta))
+        for entradas in salida.values():
+            entradas.sort(key=lambda par: par[1].lower())
+        return dict(sorted(salida.items()))
+
+    def _catalogo(self):
+        """(catalogo, grupos) del registry, o de METRICS si no hay backend."""
+        if self._cache_catalogo is None:
+            catalogo, grupos = {}, {}
+            registry = None
+            try:
+                registry, _cliente = build_registry_without_sensors()
+                catalogo, grupos = registry.catalog(), registry.groups()
+            except Exception:
+                # Sin backend: el editor abre igual con las metricas
+                # registradas y etiquetas genericas.
+                catalogo = {mid: spec for mid, spec in METRICS.items()}
+                grupos = {mid: group_for(mid) for mid in METRICS}
+            finally:
+                if registry is not None:
+                    try:
+                        registry.close()
+                    except Exception:
+                        pass
+            self._cache_catalogo = (catalogo, grupos)
+        catalogo, grupos = self._cache_catalogo
+        return dict(catalogo), dict(grupos)
 
     # --- edicion ---
 
@@ -246,7 +304,7 @@ def _coerce(key, value):
 # (y testear) en una maquina sin Tk.
 # --------------------------------------------------------------------------
 
-PREVIEW_SCALE = 0.36            # 320x1480 -> 115x533, entra en una pantalla
+PREVIEW_SCALE = 0.36     # escala inicial, antes de que la ventana tenga tamano
 
 
 class EditorWindow:
@@ -267,7 +325,10 @@ class EditorWindow:
         except Exception:
             pass
         self._preview_img = None
+        self._escala = PREVIEW_SCALE
         self._fields = {}
+        self._pickers = {}
+        self._metric_por_etiqueta = {}
         self._build()
         self._refresh(select_first=True)
 
@@ -315,11 +376,16 @@ class EditorWindow:
         self.estado = ttk.Label(centro, text="", wraplength=380, justify="left")
         self.estado.pack(fill="x", pady=(6, 0))
 
-        der = ttk.Frame(raiz)
-        der.pack(side="left", fill="y")
-        ttk.Label(der, text="Vista previa").pack(anchor="w")
-        self.canvas = tk.Label(der, borderwidth=1, relief="solid")
-        self.canvas.pack()
+        self.der = ttk.Frame(raiz)
+        self.der.pack(side="left", fill="both", expand=True)
+        ttk.Label(self.der, text="Vista previa").pack(anchor="w")
+        self.canvas = tk.Label(self.der, borderwidth=1, relief="solid",
+                               anchor="n")
+        self.canvas.pack(fill="both", expand=True)
+        # El <Configure> se escucha en el CONTENEDOR, no en el Label: cambiar la
+        # imagen cambia el tamano del Label y eso dispararia otro Configure,
+        # o sea un bucle de redibujo.
+        self.der.bind("<Configure>", self._on_resize)
 
         self.root.report_callback_exception = self._report_error
         self.root.bind("<Control-s>", lambda e: self._save())
@@ -381,10 +447,43 @@ class EditorWindow:
         else:
             self.estado.config(text=f"{marca} sin errores", foreground="#006000")
 
+    def _escala_disponible(self) -> float:
+        """La escala mas grande a la que el frame entero entra en su hueco.
+
+        Se mide el contenedor y no la ventana: asi la vista previa aprovecha lo
+        que sobra cuando el usuario maximiza, que es todo el punto de un editor
+        -- juzgar un layout en miniatura no sirve.
+
+        Tope en 1.0: mas alla es upscaling borroso, y 1480 px de alto no entran
+        en una pantalla de 1080 de todos modos.
+        """
+        alto = self.der.winfo_height() - 28          # el rotulo "Vista previa"
+        ancho = self.der.winfo_width() - 6           # el borde del Label
+        d = self.state.raw.get("designed_for") or {}
+        pw = float(d.get("width") or 320) or 320
+        ph = float(d.get("height") or 1480) or 1480
+        if alto <= 1 or ancho <= 1:
+            return PREVIEW_SCALE                    # todavia sin geometria real
+        return max(0.05, min(1.0, ancho / pw, alto / ph))
+
+    def _on_resize(self, _evento=None):
+        """Redibuja solo si la escala cambio de verdad.
+
+        Un resize dispara muchos <Configure> seguidos y cada redibujo implica
+        reescalar una imagen de 320x1480 y convertirla a PhotoImage. El umbral
+        del 2% corta el ruido sin que se note el salto.
+        """
+        nueva = self._escala_disponible()
+        if abs(nueva - self._escala) / max(nueva, self._escala) > 0.02:
+            self._escala = nueva
+            self._draw_preview()
+
     def _draw_preview(self):
         img = self.state.preview()
-        chico = img.resize((int(img.width * PREVIEW_SCALE),
-                            int(img.height * PREVIEW_SCALE)), Image.LANCZOS)
+        self._escala = self._escala_disponible()
+        dims = (max(1, int(img.width * self._escala)),
+                max(1, int(img.height * self._escala)))
+        chico = img.resize(dims, Image.LANCZOS)
         # PhotoImage sin referencia viva se recolecta y el Label queda en
         # blanco: el clasico de Tkinter con imagenes.
         self._preview_img = _to_photoimage(chico, self.tk)
@@ -398,11 +497,18 @@ class EditorWindow:
         w = self.state.widget(wid) if wid else None
         if w is None:
             return
+        self._pickers = {}
         for fila, (clave, valor) in enumerate(w.items()):
             if clave in ("id", "type", "rules"):
                 continue
             self.ttk.Label(self.props, text=clave).grid(row=fila, column=0,
                                                         sticky="w")
+            if clave == "metric":
+                self._metric_picker(fila, valor)
+                continue
+            if clave == "font":
+                self._font_picker(fila, valor)
+                continue
             var = self.tk.StringVar(value="" if valor is None else str(valor))
             entrada = self.ttk.Entry(self.props, textvariable=var, width=32)
             # sticky="w", sin weight en la columna: con la ventana maximizada,
@@ -414,6 +520,72 @@ class EditorWindow:
             self._fields[clave] = var
 
     # --- acciones ---
+
+    # --- selectores ---
+
+    _ENCABEZADO = "——"
+
+    def _metric_picker(self, fila, actual):
+        """Combo de metricas con etiqueta amigable, agrupado por dispositivo.
+
+        Era un campo de texto libre: para poner el espacio libre de la D habia
+        que saber de memoria que el id es `vol.D.free`. Los encabezados de grupo
+        entran como items no seleccionables porque ttk.Combobox no tiene grupos
+        de verdad; _on_pick_metric() los ignora.
+        """
+        opciones, self._metric_por_etiqueta = [], {}
+        for dispositivo, entradas in self.state.metric_groups().items():
+            opciones.append(f"{self._ENCABEZADO} {dispositivo} {self._ENCABEZADO}")
+            for mid, etiqueta in entradas:
+                texto = f"   {etiqueta}"
+                opciones.append(texto)
+                self._metric_por_etiqueta[texto] = mid
+
+        combo = self.ttk.Combobox(self.props, values=opciones, width=44,
+                                  state="readonly")
+        actuales = [t for t, mid in self._metric_por_etiqueta.items() if mid == actual]
+        combo.set(actuales[0].strip() if actuales else (actual or ""))
+        if actuales:
+            combo.set(actuales[0])
+        combo.grid(row=fila, column=1, sticky="w", padx=4)
+        combo.bind("<<ComboboxSelected>>", lambda e: self._on_pick_metric())
+        self._pickers["metric"] = combo
+
+    def _on_pick_metric(self):
+        wid = self._selected()
+        combo = self._pickers.get("metric")
+        if wid is None or combo is None:
+            return
+        mid = self._metric_por_etiqueta.get(combo.get())
+        if mid is None:
+            # Un encabezado de grupo, o algo que no esta en el catalogo: se
+            # repone lo que el widget ya tenia en vez de escribir basura.
+            actual = (self.state.widget(wid) or {}).get("metric")
+            actuales = [t for t, m in self._metric_por_etiqueta.items() if m == actual]
+            if actuales:
+                combo.set(actuales[0])
+            return
+        self.state.set_field(wid, "metric", mid)
+        self._draw_preview()
+        self._show_errors()
+
+    def _font_picker(self, fila, actual):
+        """Los alias de fuente son un conjunto cerrado del propio layout: un
+        combo evita el error de tipear un alias que no existe."""
+        combo = self.ttk.Combobox(self.props, values=self.state.fonts(),
+                                  width=20, state="readonly")
+        combo.set(actual or "")
+        combo.grid(row=fila, column=1, sticky="w", padx=4)
+
+        def elegido(_e=None):
+            wid = self._selected()
+            if wid is not None:
+                self.state.set_field(wid, "font", combo.get())
+                self._draw_preview()
+                self._show_errors()
+
+        combo.bind("<<ComboboxSelected>>", elegido)
+        self._pickers["font"] = combo
 
     def _apply(self, clave):
         wid = self._selected()

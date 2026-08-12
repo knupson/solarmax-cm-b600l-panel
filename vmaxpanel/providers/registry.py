@@ -1,5 +1,5 @@
 """Resuelve cada id de metrica al provider disponible de mayor prioridad."""
-from ..metrics import UNAVAILABLE, is_metric, spec_for
+from ..metrics import UNAVAILABLE, group_for, is_metric, spec_for
 from .base import Provider
 
 # Mas especifico primero: si una placa Gigabyte sirve cpu.temp por GSA1, eso
@@ -88,12 +88,13 @@ class Registry:
     def groups(self) -> dict:
         """id -> dispositivo, para agrupar la lista del editor.
 
-        Lo que el provider no clasifique cae al prefijo del id en mayusculas
-        ("cpu.clock" -> "CPU"), que es una agrupacion pobre pero nunca vacia.
+        Lo que el provider no clasifique cae al grupo por prefijo de
+        metrics.group_for(), que ya devuelve un nombre amigable ("net" -> "Red")
+        en vez del prefijo crudo.
         """
         g = {}
         for mid in self._servers:
-            g[mid] = mid.split(".", 1)[0].upper()
+            g[mid] = group_for(mid)
         for p in self._available:
             try:
                 g.update(p.groups())

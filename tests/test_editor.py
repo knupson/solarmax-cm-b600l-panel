@@ -160,3 +160,70 @@ def test_saving_does_not_bloat_the_file(tmp_path):
     st.save()
     despues = len(st.path.read_text(encoding="utf-8").splitlines())
     assert despues <= antes * 1.2, f"{antes} -> {despues} lineas"
+
+
+# --- catalogo de metricas para el selector ---
+
+def test_the_state_exposes_metrics_grouped_by_device(tmp_path):
+    """El selector muestra "D: (JUEGOS) — libre" agrupado bajo "Disco D:", no
+    una lista plana de cien ids tecnicos."""
+    st = state_for(tmp_path)
+    grupos = st.metric_groups()
+    assert grupos, "el catalogo salio vacio"
+    # cada grupo trae pares (id, etiqueta) ordenados por etiqueta
+    for nombre, entradas in grupos.items():
+        assert isinstance(nombre, str) and nombre
+        for mid, etiqueta in entradas:
+            assert isinstance(mid, str) and isinstance(etiqueta, str)
+            assert etiqueta
+        assert [e[1] for e in entradas] == sorted(e[1] for e in entradas)
+
+
+def test_the_catalog_includes_the_metrics_the_profile_already_uses(tmp_path):
+    """Si una metrica en uso no esta en el selector, el usuario no puede
+    volver a elegirla despues de cambiarla."""
+    st = state_for(tmp_path)
+    todas = {mid for entradas in st.metric_groups().values() for mid, _ in entradas}
+    for w in st.raw["widgets"]:
+        if w.get("metric"):
+            assert w["metric"] in todas, w["metric"]
+
+
+def test_the_catalog_works_without_any_sensor_backend(tmp_path, monkeypatch):
+    """El editor tiene que abrir en una maquina sin sidecar ni WMI: el
+    catalogo cae a las metricas registradas."""
+    import vmaxpanel.editor as ed
+
+    def sin_nada():
+        raise OSError("sin backend")
+
+    monkeypatch.setattr(ed, "build_registry_without_sensors", sin_nada)
+    st = ed.EditorState(state_for(tmp_path).path)
+    grupos = st.metric_groups()
+    todas = {mid for entradas in grupos.values() for mid, _ in entradas}
+    assert "cpu.load" in todas and "clock.time" in todas
+
+
+def test_friendly_labels_win_over_the_generic_ones(tmp_path):
+    """La etiqueta del provider nombra el dispositivo real; la generica solo
+    repite el id. Si esta el volumen D, su etiqueta tiene que traer la letra."""
+    st = state_for(tmp_path)
+    etiquetas = {mid: et for entradas in st.metric_groups().values()
+                 for mid, et in entradas}
+    for mid, et in etiquetas.items():
+        if mid.startswith("vol."):
+            assert mid.split(".")[1] + ":" in et, (mid, et)
+
+
+def test_no_two_metrics_share_a_label_in_the_picker(tmp_path):
+    """Dos metricas con la misma etiqueta hacen que el selector no las pueda
+    distinguir: elegir una escribe la otra. Paso de verdad con disk.temp.0/1/2,
+    que compartian "Temperatura de disco", y solo se veia una corrida de cada
+    dos porque el orden de un set en Python varia entre procesos."""
+    st = state_for(tmp_path)
+    vistas = {}
+    for entradas in st.metric_groups().values():
+        for mid, etiqueta in entradas:
+            assert etiqueta not in vistas, \
+                f"{mid} y {vistas.get(etiqueta)} comparten la etiqueta {etiqueta!r}"
+            vistas[etiqueta] = mid
