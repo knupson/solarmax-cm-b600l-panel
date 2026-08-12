@@ -4,13 +4,13 @@
   "designed_for": {"width": 320, "height": 1480},
   "panel": {"rotate": 180, "brightness": 100, "fps": 1, "jpeg_quality": 82},
   "fonts": {
-    "hero": {"family": "Consolas", "size": 74, "bold": true},
-    "big": {"family": "Consolas", "size": 60},
-    "section": {"family": "Consolas", "size": 30, "bold": true},
-    "value": {"family": "Consolas", "size": 28},
-    "small": {"family": "Consolas", "size": 26},
-    "caption": {"family": "Consolas", "size": 20},
-    "tag": {"family": "Consolas", "size": 14}
+    "hero": {"family": "Consolas", "size": 74, "bold": true, "fallbacks": ["Cascadia Mono", "Courier New", "DejaVu Sans Mono"]},
+    "big": {"family": "Consolas", "size": 60, "fallbacks": ["Cascadia Mono", "Courier New", "DejaVu Sans Mono"]},
+    "section": {"family": "Consolas", "size": 30, "bold": true, "fallbacks": ["Cascadia Mono", "Courier New", "DejaVu Sans Mono"]},
+    "value": {"family": "Consolas", "size": 28, "fallbacks": ["Cascadia Mono", "Courier New", "DejaVu Sans Mono"]},
+    "small": {"family": "Consolas", "size": 26, "fallbacks": ["Cascadia Mono", "Courier New", "DejaVu Sans Mono"]},
+    "caption": {"family": "Consolas", "size": 20, "fallbacks": ["Cascadia Mono", "Courier New", "DejaVu Sans Mono"]},
+    "tag": {"family": "Consolas", "size": 14, "fallbacks": ["Cascadia Mono", "Courier New", "DejaVu Sans Mono"]}
   },
   "background": {"type": "gradient", "angle": 90, "stops": [{"at": 0.0, "color": "#101725"}, {"at": 0.45, "color": "#0B0F17"}, {"at": 1.0, "color": "#141A26"}]},
   "widgets": [

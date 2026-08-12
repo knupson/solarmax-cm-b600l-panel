@@ -223,3 +223,48 @@ def test_the_index_remembers_which_face_of_the_file_it_was():
     cara = r.index()["cambria math"]["regular"]
     assert cara.path.name.lower() == "cambria.ttc"
     assert cara.index == 1
+
+
+# --- cadena de alternativas por alias ---
+
+
+def test_a_font_falls_back_to_the_next_family_in_the_list():
+    """El perfil Apex pide Franklin Gothic Medium Cond, que viene con OFFICE y no con
+    Windows. En una maquina sin Office el layout se ve distinto y lo unico que hacia
+    la app era avisar. Con la cadena, el perfil declara con que reemplazarla y el
+    resultado se parece."""
+    r = FontResolver()
+    f = Font("NoExisteEnNingunaParte", 20,
+             fallbacks=("TampocoExiste", "Consolas"))
+    resuelta = r.resolve(f)
+    assert "consol" in resuelta.getname()[0].lower()
+
+
+def test_the_first_family_that_exists_wins():
+    r = FontResolver()
+    f = Font("Consolas", 20, fallbacks=("Arial",))
+    assert "consol" in r.resolve(f).getname()[0].lower()
+
+
+def test_a_family_with_no_fallback_that_exists_still_wins():
+    r = FontResolver()
+    assert "consol" in r.resolve(Font("Consolas", 20)).getname()[0].lower()
+
+
+def test_when_nothing_in_the_chain_exists_it_is_reported():
+    """Que el reemplazo sea silencioso seria peor que no tenerlo: el usuario ve otra
+    tipografia y no sabe por que."""
+    r = FontResolver()
+    f = Font("NoExiste1", 20, fallbacks=("NoExiste2",))
+    r.resolve(f)
+    assert any("NoExiste1" in m for m in r.missing())
+
+
+def test_the_substitution_that_was_used_is_reported(tmp_path):
+    """No alcanza con decir "falta X": hay que decir con QUE se dibujo, que es lo que
+    explica lo que se ve en pantalla."""
+    r = FontResolver()
+    f = Font("NoExisteEnNingunaParte", 20, fallbacks=("Consolas",))
+    r.resolve(f)
+    sust = r.substitutions()
+    assert sust.get("NoExisteEnNingunaParte", "").lower().startswith("consol")

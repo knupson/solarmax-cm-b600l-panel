@@ -77,6 +77,7 @@ class FontResolver:
         self._index: dict[str, dict[str, Cara]] | None = None
         self._cache: dict[tuple, ImageFont.FreeTypeFont] = {}
         self._missing: set[str] = set()
+        self._substitutions: dict[str, str] = {}
         self._unreadable_dirs: set[Path] = set()
 
     def index(self) -> dict[str, dict[str, Cara]]:
@@ -213,11 +214,41 @@ class FontResolver:
         return resolved
 
     def _pick_cara(self, font) -> Cara | None:
-        entry = self.index().get(font.family.lower())
-        if entry:
-            return entry.get("bold" if font.bold else "regular") or next(iter(entry.values()))
+        """La cara para este Font: su familia, o la primera de `fallbacks` que exista.
+
+        La cadena la declara el PERFIL, no el resolver: solo el que diseno el layout
+        sabe con que se parece a lo que queria. El resolver solo la recorre y anota
+        con que termino dibujando, porque un reemplazo silencioso es peor que ninguno
+        -- el usuario ve otra tipografia y no sabe por que.
+        """
+        cara = self._cara_de(font.family, font.bold)
+        if cara is not None:
+            return cara
         self._missing.add(font.family)
+        for alternativa in (font.fallbacks or ()):
+            cara = self._cara_de(alternativa, font.bold)
+            if cara is not None:
+                self._substitutions[font.family] = alternativa
+                return cara
         return self._first_bundled() or self._any_system_mono()
+
+    def _cara_de(self, familia, bold) -> Cara | None:
+        entry = self.index().get(str(familia).lower())
+        if not entry:
+            return None
+        # `or next(iter(...))`: una familia de una sola cara devuelve esa cara aunque
+        # se haya pedido bold. Es lo correcto -- dibujar con la regular se parece mas
+        # a lo pedido que caer al fallback generico -- pero conviene saberlo al leer
+        # un panel donde el "bold" no se ve bold.
+        return entry.get("bold" if bold else "regular") or next(iter(entry.values()))
+
+    def substitutions(self) -> dict:
+        """familia pedida -> familia con la que se dibujo.
+
+        Es lo que explica lo que se ve en pantalla. "Falta X" solo dice que algo esta
+        mal; "falta X, se uso Y" dice exactamente que estas mirando.
+        """
+        return dict(self._substitutions)
 
     def _first_bundled(self) -> Cara | None:
         if not BUNDLED.is_dir():

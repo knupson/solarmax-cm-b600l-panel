@@ -4,14 +4,14 @@
   "designed_for": {"width": 320, "height": 1480},
   "panel": {"rotate": 180, "brightness": 100, "fps": 30, "jpeg_quality": 88},
   "fonts": {
-    "hero": {"family": "Bahnschrift", "size": 66},
-    "big": {"family": "Bahnschrift", "size": 46},
-    "mid": {"family": "Bahnschrift", "size": 30},
-    "dato": {"family": "Franklin Gothic Medium Cond", "size": 21},
-    "dato-s": {"family": "Franklin Gothic Medium Cond", "size": 17},
-    "rotulo": {"family": "Franklin Gothic Demi Cond", "size": 16},
-    "eyebrow": {"family": "Franklin Gothic Demi Cond", "size": 22},
-    "micro": {"family": "Franklin Gothic Medium Cond", "size": 14}
+    "hero": {"family": "Bahnschrift", "size": 66, "fallbacks": ["Segoe UI", "Tahoma", "Arial"]},
+    "big": {"family": "Bahnschrift", "size": 46, "fallbacks": ["Segoe UI", "Tahoma", "Arial"]},
+    "mid": {"family": "Bahnschrift", "size": 30, "fallbacks": ["Segoe UI", "Tahoma", "Arial"]},
+    "dato": {"family": "Franklin Gothic Medium Cond", "size": 21, "fallbacks": ["Franklin Gothic Medium", "Bahnschrift", "Segoe UI", "Tahoma"]},
+    "dato-s": {"family": "Franklin Gothic Medium Cond", "size": 17, "fallbacks": ["Franklin Gothic Medium", "Bahnschrift", "Segoe UI", "Tahoma"]},
+    "rotulo": {"family": "Franklin Gothic Demi Cond", "size": 16, "fallbacks": ["Franklin Gothic Medium", "Bahnschrift", "Segoe UI Semibold", "Segoe UI", "Tahoma"]},
+    "eyebrow": {"family": "Franklin Gothic Demi Cond", "size": 22, "fallbacks": ["Franklin Gothic Medium", "Bahnschrift", "Segoe UI Semibold", "Segoe UI", "Tahoma"]},
+    "micro": {"family": "Franklin Gothic Medium Cond", "size": 14, "fallbacks": ["Franklin Gothic Medium", "Bahnschrift", "Segoe UI", "Tahoma"]}
   },
   "background": {"type": "solid", "color": "#2A1D16"},
   "widgets": [

@@ -1,10 +1,11 @@
+import copy
 import json
 import os
 from pathlib import Path
 
 import pytest
 
-from vmaxpanel.layout import loader, model
+from vmaxpanel.layout import loader, model, schema
 from tests.test_schema import MINIMAL
 
 
@@ -251,3 +252,27 @@ def test_every_background_type_survives_a_roundtrip(tmp_path):
         loader.save(loader.loads(json.dumps(raw)), path)
         otro = loader.load(path)
         assert otro.background.type == fondo["type"], fondo["type"]
+
+
+def test_font_fallbacks_survive_a_save(tmp_path):
+    """El editor guarda con dumps_layout: si la cadena no se serializa, guardar desde
+    el editor la borra en silencio y el perfil deja de ser portable sin que nadie lo
+    note."""
+    raw = copy.deepcopy(MINIMAL)
+    raw["fonts"]["mono-14"]["fallbacks"] = ["Cascadia Mono", "Courier New"]
+    p = tmp_path / "p.json"
+    loader.save_raw(raw, p)
+    vuelta = json.loads(p.read_text(encoding="utf-8"))
+    assert vuelta["fonts"]["mono-14"]["fallbacks"] == ["Cascadia Mono", "Courier New"]
+    assert schema.validate(vuelta) == []
+
+
+def test_to_dict_keeps_the_fallback_chain(tmp_path):
+    """to_dict va del MODELO al dict, que es otro camino que el de save_raw: si acá se
+    pierde, cualquier herramienta que serialice desde el modelo borra la cadena."""
+    raw = copy.deepcopy(MINIMAL)
+    raw["fonts"]["mono-14"]["fallbacks"] = ["Courier New"]
+    d = loader.to_dict(schema.build(raw))
+    assert d["fonts"]["mono-14"]["fallbacks"] == ["Courier New"]
+    assert "fallbacks" not in d["fonts"]["mono-bold-60"]     # sin cadena, sin clave
+    assert schema.validate(d) == []

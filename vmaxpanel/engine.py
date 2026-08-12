@@ -63,11 +63,33 @@ class Engine:
             "sn": self._link.serial_number if self._link else None,
             "fps": layout.panel.fps if layout else None,
             "resolution": self.registry.resolution(),
-            "unavailable": self.registry.unavailable(),
+            "unavailable": self._sin_datos(layout),
             "warnings": (self._renderer.warnings() if self._renderer else []) + self.store.errors,
             "frames": self.stats["frames"],
             "last_error": self._last_error,
         }
+
+    def _sin_datos(self, layout) -> dict:
+        """Metricas sin dato: las que el Registry sabe, mas las que el LAYOUT usa y
+        nadie sirve.
+
+        Las de familia (`fan.9.rpm`, `core.12.temp`, `vol.Z.free`) no se pueden
+        enumerar -- son un patron, no una lista --, asi que el Registry no puede
+        reportarlas por su cuenta. El unico que sabe cuales se usan de verdad es este
+        loop, que tiene el layout adelante. Sin esto, un perfil que pide una metrica
+        que esta maquina no tiene dibuja guiones y el estado dice que no falta nada:
+        exactamente la mentira de status que este proyecto existe para no cometer.
+        """
+        faltan = dict(self.registry.unavailable())
+        if layout is None:
+            return faltan
+        servidas = self.registry.resolution()
+        for w in layout.widgets:
+            mid = getattr(w, "metric", None)
+            if mid and mid not in servidas:
+                faltan.setdefault(mid, "el perfil la usa y ningun provider de esta "
+                                       "maquina la sirve")
+        return faltan
 
     def run(self):
         attempt = 0

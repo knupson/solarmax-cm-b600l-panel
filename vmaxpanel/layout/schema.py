@@ -137,6 +137,24 @@ def _is_num(v):
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
+def _check_fallbacks(errs, alias, v):
+    """`fallbacks` tiene que ser una lista de nombres de familia usables.
+
+    Se valida en vez de aceptar cualquier cosa porque el error se manifiesta lejos:
+    un fallback vacio o numerico no rompe nada al cargar, y recien se nota como "la
+    fuente no se reemplazo" en la maquina de otra persona.
+    """
+    if v is None:
+        return
+    if not isinstance(v, list):
+        errs.append(f"fonts.{alias}.fallbacks: se espera una lista de familias")
+        return
+    for i, fam in enumerate(v):
+        if not isinstance(fam, str) or not fam.strip():
+            errs.append(f"fonts.{alias}.fallbacks[{i}]: {fam!r} no es un nombre "
+                        f"de familia")
+
+
 def _check_color(errs, where, v):
     if not isinstance(v, str) or not _COLOR_RE.match(v):
         errs.append(f"{where}: color invalido {v!r}, se espera #RRGGBB")
@@ -258,6 +276,7 @@ def validate(raw) -> list[str]:
                 for k in spec:
                     if k not in FONT_KEYS:
                         errs.append(f"fonts.{alias}: clave desconocida {k!r}")
+                _check_fallbacks(errs, alias, spec.get("fallbacks"))
 
     bg = raw.get("background")
     if not isinstance(bg, dict) or bg.get("type") not in BACKGROUND_TYPES:
@@ -462,7 +481,8 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
 
 def build(raw) -> Layout:
     """Construye el modelo. Asume que validate(raw) devolvio []."""
-    fonts = {a: Font(s["family"], s["size"], bool(s.get("bold", False)))
+    fonts = {a: Font(s["family"], s["size"], bool(s.get("bold", False)),
+                     tuple(s.get("fallbacks") or ()))
              for a, s in raw["fonts"].items()}
     bgr = raw["background"]
     bg = Background(

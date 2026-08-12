@@ -47,6 +47,23 @@ def _finite_number(v):
     return math.isfinite(v)
 
 
+def _aviso_fuente(font, resolver) -> str:
+    """El aviso de una familia ausente, diciendo con QUE se dibujo si hubo reemplazo.
+
+    "falta X" obliga al usuario a adivinar que esta mirando; "falta X, se uso Y" le
+    dice exactamente lo que ve. Y si la cadena del perfil tampoco alcanzo, el aviso lo
+    dice, porque entonces lo que se ve es la fuente por defecto de PIL y no se parece
+    a nada de lo pedido.
+    """
+    usada = resolver.substitutions().get(font.family)
+    if usada:
+        return f"fuente no encontrada: {font.family} (se uso {usada})"
+    if font.fallbacks:
+        return (f"fuente no encontrada: {font.family}, y tampoco "
+                f"{', '.join(font.fallbacks)}")
+    return f"fuente no encontrada: {font.family}"
+
+
 class History:
     """Ventana deslizante por metrica, para los widgets de tipo graph."""
 
@@ -210,12 +227,12 @@ class Renderer:
         missing = {}
         for f in self.layout.fonts.values():
             if not self._fonts.is_available(f.family):
-                missing.setdefault(f.family.lower(), f.family)
+                missing.setdefault(f.family.lower(), f)
         avisos_fondo = (list(self._bg.warnings) if self._bg is not None
                         else list(getattr(self, "_avisos_fondo", [])))
         return (avisos_fondo
-                + [f"fuente no encontrada: {f}"
-                   for f in sorted(missing.values(), key=str.lower)]
+                + [_aviso_fuente(f, self._fonts)
+                   for f in sorted(missing.values(), key=lambda x: x.family.lower())]
                 + [f"directorio de fuentes ilegible: {d}"
                    for d in sorted(self._fonts.unreadable_dirs())])
 

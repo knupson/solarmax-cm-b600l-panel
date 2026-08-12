@@ -471,3 +471,32 @@ def test_a_missing_required_field_is_named_precisely():
     assert any("falta el campo obligatorio 'w'" in e for e in errs)
     assert not any("falta el campo obligatorio 'h'" in e for e in errs)
 
+
+
+# --- cadena de fuentes alternativas ---
+
+
+def test_a_font_can_declare_fallbacks():
+    """Un perfil que se comparte nombra fuentes que la otra maquina puede no tener.
+    La cadena la declara el perfil porque solo su autor sabe con que se parece."""
+    raw = copy.deepcopy(MINIMAL)
+    raw["fonts"]["mono-14"]["fallbacks"] = ["Cascadia Mono", "Courier New"]
+    assert schema.validate(raw) == []
+    lay = schema.build(raw)
+    assert lay.fonts["mono-14"].fallbacks == ("Cascadia Mono", "Courier New")
+
+
+def test_fallbacks_must_be_a_list_of_names():
+    raw = copy.deepcopy(MINIMAL)
+    raw["fonts"]["mono-14"]["fallbacks"] = "Courier New"
+    assert any("fallbacks" in e for e in schema.validate(raw))
+
+    raw["fonts"]["mono-14"]["fallbacks"] = [1, 2]
+    assert any("fallbacks" in e for e in schema.validate(raw))
+
+    raw["fonts"]["mono-14"]["fallbacks"] = ["  "]
+    assert any("fallbacks" in e for e in schema.validate(raw))
+
+
+def test_a_font_without_fallbacks_still_builds():
+    assert schema.build(MINIMAL).fonts["mono-14"].fallbacks == ()

@@ -191,3 +191,33 @@ def test_disk_metric_and_is_metric_agree():
     for malo in (-1, -5):
         with pytest.raises(ValueError):
             disk_metric(malo)
+
+
+def test_every_metric_the_shipped_profiles_use_exists():
+    """Vale mas que una lista de ids escrita a mano: un rename en METRICS no rompe
+    ningun test si los tests nombran 7 ids sueltos, pero SI rompe los perfiles que
+    vienen con el repo -- y eso es lo que el usuario ve. Cubre los 3 perfiles
+    completos, no una muestra."""
+    import json
+    from pathlib import Path
+    from vmaxpanel.metrics import is_metric
+
+    perfiles = sorted(Path("vmaxpanel/profiles").glob("*.json"))
+    assert perfiles, "no encontre los perfiles del repo"
+    for p in perfiles:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        usadas = {w["metric"] for w in raw["widgets"] if "metric" in w}
+        assert usadas, f"{p.name} no usa ninguna metrica"
+        for mid in sorted(usadas):
+            assert is_metric(mid), f"{p.name} usa {mid!r}, que ya no existe"
+
+
+def test_every_metric_spec_is_complete():
+    """Un spec a medias (sin label, sin unit) sale en el editor como una fila vacia y
+    en el panel como un valor sin contexto. Se chequea el catalogo entero, que es lo
+    que la lista de 7 ids no hacia."""
+    for mid, spec in METRICS.items():
+        assert spec.label and spec.label.strip(), mid
+        assert isinstance(spec.kind, str) and spec.kind, mid
+        if spec.max is not None and spec.min is not None:
+            assert spec.max > spec.min, mid

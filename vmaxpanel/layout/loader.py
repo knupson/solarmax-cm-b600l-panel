@@ -42,7 +42,10 @@ def to_dict(layout: Layout) -> dict:
     d = asdict(layout)
     d["designed_for"] = {"width": layout.designed_for.width,
                          "height": layout.designed_for.height}
-    d["fonts"] = {a: {"family": f.family, "size": f.size, "bold": f.bold}
+    # fallbacks solo si hay: la enorme mayoria de los alias no la usa y una clave
+    # vacia en cada uno ensucia el archivo que el usuario abre a mano.
+    d["fonts"] = {a: ({"family": f.family, "size": f.size, "bold": f.bold}
+                      | ({"fallbacks": list(f.fallbacks)} if f.fallbacks else {}))
                   for a, f in layout.fonts.items()}
     d["background"] = _background_dict(layout.background)
     d["widgets"] = [_widget_dict(w) for w in layout.widgets]

@@ -50,10 +50,16 @@ def test_priority_is_independent_of_construction_order():
 
 
 def test_metric_nobody_serves_is_unavailable_with_reason():
+    """El nombre promete un MOTIVO y el test no lo miraba: comprobaba que la metrica
+    no estuviera en resolution() y nada mas. El motivo es lo que el editor y la
+    bandeja muestran, o sea lo unico que el usuario puede leer para entender por que
+    un valor sale en guiones."""
     r = Registry([Fake("psutil", ["cpu.load"])])
     sample = r.read()
     assert sample["cpu.load"] == 1.0
     assert "cpu.power" not in r.resolution()
+
+    assert sample.get("cpu.power", UNAVAILABLE) is UNAVAILABLE
 
 
 def test_none_value_is_not_unavailable():
@@ -223,3 +229,25 @@ def test_the_unavailable_reason_is_the_providers_own_words():
     r = Registry([Caido()])
     assert r.read()["cpu.temp"] is UNAVAILABLE
     assert r.unavailable()["cpu.temp"] == "requiere placa Gigabyte con GSA1"
+
+
+def test_a_provider_that_serves_a_metric_keeps_it_out_of_the_unavailable_list():
+    """Lo que SI se sirve no puede aparecer como faltante, o la lista de problemas se
+    vuelve ruido y el usuario deja de leerla. Por lo mismo, unavailable() NO lista
+    todas las metricas sin dueno: en una maquina sin GPU serian 27 lineas para un
+    perfil que no usa ninguna. Eso lo decide el motor, que sabe que usa el layout
+    (ver Engine._sin_datos)."""
+    r = Registry([Fake("psutil", ["cpu.load"])])
+    r.read()
+    assert "cpu.load" not in r.unavailable()
+    assert "gpu.temp" not in r.unavailable()
+
+
+def test_the_reason_of_a_failing_provider_wins_over_the_generic_one():
+    """Si el provider existe pero no arranco, su motivo concreto ("driver bloqueado",
+    "no hay sidecar") es infinitamente mas util que "ningun provider la sirve"."""
+    p = Fake("gsa1", ["cpu.vcore"], ok=False,
+             reason="WinRing0 esta en la blocklist de Windows")
+    r = Registry([p])
+    r.read()
+    assert r.unavailable()["cpu.vcore"] == "WinRing0 esta en la blocklist de Windows"

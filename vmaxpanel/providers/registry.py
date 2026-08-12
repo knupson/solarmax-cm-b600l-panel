@@ -106,7 +106,21 @@ class Registry:
         return g
 
     def unavailable(self) -> dict[str, str]:
-        """metric id -> motivo, en lenguaje llano, para mostrar en el editor."""
+        """metric id -> motivo, en lenguaje llano, para mostrar en el editor.
+
+        Solo lo que tiene un motivo concreto: un provider que no arranco (con SU
+        motivo, "WinRing0 esta en la blocklist", que dice que hacer) y lo que se
+        degrado en la ultima muestra.
+
+        **A proposito NO lista todas las metricas que nadie sirve.** Lo intente y era
+        ruido: en una maquina sin GPU son 27 lineas de "sin datos" aunque el perfil no
+        use ni una metrica de GPU, y una lista de problemas que siempre tiene 27
+        entradas es una lista que el usuario deja de leer. Lo que importa es lo que el
+        layout ACTIVO usa y no se puede servir, y eso lo reporta Engine._sin_datos(),
+        que es el unico que tiene el layout adelante -- ademas de ser el unico camino
+        posible para las metricas de familia (fan.N.rpm), que son un patron y no se
+        pueden enumerar.
+        """
         return {**self._reasons, **self._degraded}
 
     def read(self):

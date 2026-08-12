@@ -417,3 +417,26 @@ def test_dropping_the_link_closes_the_renderer(tmp_path):
     eng._drop_link()
     assert cerrados == [True]
     assert eng._renderer is None
+
+
+def test_state_reports_a_metric_the_layout_uses_and_nobody_serves(tmp_path):
+    """El caso que quedaba silencioso: una metrica de FAMILIA (fan.9.rpm,
+    core.12.temp, vol.Z.free) que el perfil usa y ningun provider sirve. Las familias
+    no se pueden enumerar, asi que el Registry no puede listarlas por su cuenta -- el
+    unico que sabe cuales se usan de verdad es el motor, que tiene el layout adelante.
+    Sin esto el panel dibuja guiones y el estado dice "sin datos: {}"."""
+    raw = dict(MINIMAL)
+    raw["widgets"] = MINIMAL["widgets"] + [
+        {"id": "fantasma", "type": "text", "metric": "fan.9.rpm", "x": 10, "y": 10,
+         "font": "mono-14", "color": "#FFFFFF", "format": "{:.0f}"}]
+    eng, _, _ = engine(tmp_path, iterations=2, widgets=raw["widgets"])
+    eng.run()
+    faltan = eng.state()["unavailable"]
+    assert "fan.9.rpm" in faltan, faltan
+    assert faltan["fan.9.rpm"].strip()
+
+
+def test_a_metric_that_is_served_is_not_reported_as_missing(tmp_path):
+    eng, _, _ = engine(tmp_path, iterations=2)
+    eng.run()
+    assert "cpu.load" not in eng.state()["unavailable"]

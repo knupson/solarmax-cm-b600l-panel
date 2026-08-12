@@ -273,3 +273,26 @@ def test_warnings_still_answer_after_close():
     assert any("no-existe.png" in w for w in antes)
     r.close()
     assert r.warnings() == antes
+
+
+def test_warnings_say_which_family_was_used_instead():
+    """Decir "falta X" a secas obliga al usuario a adivinar qué está mirando. Con la
+    cadena declarada en el perfil, el aviso puede decir exactamente con qué se dibujó
+    -- y ese es el punto de tener la cadena."""
+    lay = layout(fonts={"mono-14": {"family": "NoExisteEnNingunaParte", "size": 14,
+                                    "fallbacks": ["Consolas"]},
+                        "mono-bold-60": {"family": "Consolas", "size": 60}})
+    r = Renderer(lay)
+    r.frame(SAMPLE)
+    avisos = " ".join(r.warnings())
+    assert "NoExisteEnNingunaParte" in avisos
+    assert "Consolas" in avisos, avisos
+
+
+def test_a_family_that_resolves_generates_no_warning():
+    lay = layout(fonts={"mono-14": {"family": "Consolas", "size": 14,
+                                    "fallbacks": ["Courier New"]},
+                        "mono-bold-60": {"family": "Consolas", "size": 60}})
+    r = Renderer(lay)
+    r.frame(SAMPLE)
+    assert not [w for w in r.warnings() if "Consolas" in w]

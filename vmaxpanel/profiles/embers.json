@@ -4,11 +4,11 @@
   "designed_for": {"width": 320, "height": 1480},
   "panel": {"rotate": 180, "brightness": 100, "fps": 30, "jpeg_quality": 88},
   "fonts": {
-    "hero": {"family": "Bahnschrift", "size": 66},
-    "big": {"family": "Bahnschrift", "size": 52},
-    "eyebrow": {"family": "Franklin Gothic Demi Cond", "size": 22},
-    "dato": {"family": "Franklin Gothic Medium Cond", "size": 21},
-    "micro": {"family": "Franklin Gothic Medium Cond", "size": 14}
+    "hero": {"family": "Bahnschrift", "size": 66, "fallbacks": ["Segoe UI", "Tahoma", "Arial"]},
+    "big": {"family": "Bahnschrift", "size": 52, "fallbacks": ["Segoe UI", "Tahoma", "Arial"]},
+    "eyebrow": {"family": "Franklin Gothic Demi Cond", "size": 22, "fallbacks": ["Franklin Gothic Medium", "Bahnschrift", "Segoe UI Semibold", "Segoe UI", "Tahoma"]},
+    "dato": {"family": "Franklin Gothic Medium Cond", "size": 21, "fallbacks": ["Franklin Gothic Medium", "Bahnschrift", "Segoe UI", "Tahoma"]},
+    "micro": {"family": "Franklin Gothic Medium Cond", "size": 14, "fallbacks": ["Franklin Gothic Medium", "Bahnschrift", "Segoe UI", "Tahoma"]}
   },
   "background": {"type": "video", "src": "embers.mp4", "fit": "cover", "fps": 30, "color": "#07080B"},
   "widgets": [

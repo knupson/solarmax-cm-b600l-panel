@@ -21,6 +21,12 @@ class Font:
     family: str
     size: int
     bold: bool = False
+    # Familias a probar si `family` no esta instalada, en orden. Existe porque un
+    # perfil compartido nombra fuentes que la otra maquina puede no tener: Apex pide
+    # Franklin Gothic Medium Cond, que viene con OFFICE y no con Windows. Sin la
+    # cadena, alla se ve otra tipografia y lo unico que la app podia hacer era
+    # avisar; con la cadena el perfil declara con que reemplazarla.
+    fallbacks: tuple = ()
 
 
 @dataclass(frozen=True)
