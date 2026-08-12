@@ -76,6 +76,17 @@ def _modulo(paquete, importable, para) -> Chequeo:
     return Chequeo(paquete, True, f"{v} - {para}")
 
 
+# El unico paso de la instalacion que no se puede automatizar: son DLL de terceros
+# (MPL-2.0 y MIT) que este repo no redistribuye. Decir "falta X" sin decir de donde se
+# saca deja al que recibe el repo en el mismo lugar que estaba.
+COMO_SENSORES = (
+    "opcional. Sin esto el panel anda igual (reloj, carga de CPU, temp y VCORE por "
+    "GSA1, RAM, discos, procesos) pero NO hay GPU, temperatura por nucleo, potencia "
+    "del paquete, temperatura de discos ni RPM de fans. Para tenerlos: baja "
+    "LibreHardwareMonitor de https://github.com/LibreHardwareMonitor/"
+    "LibreHardwareMonitor/releases y copia LibreHardwareMonitorLib.dll Y HidSharp.dll "
+    "(las dos: sin HidSharp al lado, Open() falla) a vmaxpanel/lib/")
+
 EN_USO = ("el puerto esta en uso: ya lo tiene otro proceso (la bandeja "
           "corriendo, o LCD Control). Cerra el que sobre; el panel lo maneja uno "
           "a la vez.")
@@ -120,10 +131,14 @@ def diagnosticar(profile_path, port=None) -> list:
         _modulo("psutil", "psutil", "CPU, RAM, red y discos"),
     ]
     checks.append(
-        Chequeo("sensores", DLL_SENSORES.exists(),
-                f"{DLL_SENSORES}" if DLL_SENSORES.exists() else
-                f"falta {DLL_SENSORES.name} en {DLL_SENSORES.parent}: sin eso no "
-                f"hay temperaturas, voltajes ni RPM"))
+        # ok None y no False: verificado en un clon limpio del repo -- los DLL estan
+        # gitignoreados, asi que es lo que recibe otro dueno del panel -- SIN el DLL el
+        # panel dibuja igual: reloj, carga de CPU, temp y VCORE (esos salen de GSA1, no
+        # del DLL), RAM, discos con tamanos reales, procesos. Marcarlo FALTA hacia que
+        # --instalar se negara a instalar, o sea que el que recibia el repo no podia
+        # arrancar NADA por unos sensores opcionales.
+        Chequeo("sensores", True if DLL_SENSORES.exists() else None,
+                f"{DLL_SENSORES}" if DLL_SENSORES.exists() else COMO_SENSORES))
 
     from .render import video
     ffmpeg = video.buscar_ffmpeg()

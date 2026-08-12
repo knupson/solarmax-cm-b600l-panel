@@ -347,3 +347,38 @@ def test_a_process_it_cannot_kill_is_reported(monkeypatch):
     texto = " ".join(lineas).lower()
     assert "no pude" in texto or "no se pudo" in texto
     assert "administrador" in texto
+
+
+def test_missing_sensors_dll_limits_but_does_not_block(perfil, monkeypatch):
+    """Verificado en un clon limpio del repo (los DLL estan gitignoreados, asi que es
+    exactamente lo que recibe otro dueno del panel): SIN el DLL el panel dibuja igual
+    -- reloj, carga de CPU, temp y VCORE por GSA1, RAM, discos, procesos -- y solo se
+    pierden GPU, por-nucleo, temperaturas de disco y RPM.
+
+    Marcarlo FALTA hacia que `--instalar` se negara a instalar, o sea que el que
+    recibia el repo no podia arrancar NADA por unos sensores opcionales."""
+    monkeypatch.setattr(install, "DLL_SENSORES", Path("no-existe/LibreHardwareMonitorLib.dll"))
+    checks = install.diagnosticar(perfil)
+    sensores = next(c for c in checks if c.nombre == "sensores")
+    assert sensores.ok is None, "bloquea la instalacion por algo opcional"
+    assert not install.bloquea(checks)
+
+
+def test_the_sensors_check_says_where_to_get_the_dll(perfil, monkeypatch):
+    """Decir "falta X" sin decir de donde se saca deja al que recibe el repo en el
+    mismo lugar que estaba. Es el unico paso de la instalacion que no se puede
+    automatizar (son DLL de terceros que no redistribuimos)."""
+    monkeypatch.setattr(install, "DLL_SENSORES", Path("no-existe/LibreHardwareMonitorLib.dll"))
+    detalle = next(c for c in install.diagnosticar(perfil)
+                   if c.nombre == "sensores").detalle
+    assert "LibreHardwareMonitor" in detalle
+    assert "github" in detalle.lower()
+    assert "HidSharp" in detalle, "sin HidSharp al lado, LHM.Open() falla"
+
+
+def test_the_sensors_check_lists_what_is_lost_without_it(perfil, monkeypatch):
+    monkeypatch.setattr(install, "DLL_SENSORES", Path("no-existe/x.dll"))
+    detalle = next(c for c in install.diagnosticar(perfil)
+                   if c.nombre == "sensores").detalle.lower()
+    for perdido in ("gpu", "nucleo", "rpm"):
+        assert perdido in detalle, perdido
