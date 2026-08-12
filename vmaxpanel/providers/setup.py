@@ -11,8 +11,8 @@ from .msr import MsrProvider
 from .psutil_provider import PsutilProvider
 from .registry import Registry
 from .sidecar import SidecarClient
-from .sidecar_providers import (Gsa1Provider, LhmProvider, PdhProvider,
-                                SmbiosProvider)
+from .sidecar_providers import (CpuLhmProvider, Gsa1Provider, LhmProvider,
+                                MoboProvider, PdhProvider, SmbiosProvider)
 from .wmi_provider import WmiProvider
 
 SIDECAR = Path(__file__).resolve().parent.parent / "sensors.ps1"
@@ -25,7 +25,8 @@ def build_registry(sidecar_script=SIDECAR, warmup=25.0):
         print("aviso: el sidecar no entrego datos; los sensores de hardware "
               "van a quedar no disponibles", file=sys.stderr)
     return Registry([PsutilProvider(), Gsa1Provider(client), PdhProvider(client),
-                     LhmProvider(client), SmbiosProvider(client), WmiProvider(),
+                     LhmProvider(client), SmbiosProvider(client),
+                     CpuLhmProvider(client), MoboProvider(client), WmiProvider(),
                      MsrProvider()]), client
 
 

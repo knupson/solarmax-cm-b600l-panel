@@ -5,6 +5,8 @@
 #   gsa1    Gigabyte GSA1 ACPI-WMI (driverless): temp CPU (id2), temp VRM (id4), VCore (EZV id5)
 #   pdh     % Processor Performance x base clock -> clock real de CPU
 #   lhm     LibreHardwareMonitor: GPU y temps de SSD por SMART
+#   cpulhm  LibreHardwareMonitor CPU: package power y por-nucleo (temp/clock/carga)
+#   mobo    SuperIO de la placa: fans y temperaturas
 #   smbios  Win32_PhysicalMemory: velocidad real de la RAM (estaba horneada en el perfil)
 #
 # SOLO lecturas. GSA1 tambien expone PIOWrite/MEMWrite/PCIWrite (escritura
@@ -42,6 +44,13 @@ try {
     $comp = New-Object LibreHardwareMonitor.Hardware.Computer
     $comp.IsGpuEnabled = $true
     $comp.IsStorageEnabled = $true
+    # CPU y placa: estaban APAGADOS, y por eso el proyecto tenia documentado
+    # que package power y fan de CPU "no se pueden leer". Se pueden: esta
+    # version de LibreHardwareMonitor (0.9.3.0) lee RAPL sin cargar ningun
+    # driver ring0 -- verificado con la lista de servicios abierta, no hay
+    # WinRing0 -- y los fans salen del SuperIO ITE IT8689E.
+    $comp.IsCpuEnabled = $true
+    $comp.IsMotherboardEnabled = $true
     $comp.Open()
 } catch { $comp = $null }
 
@@ -56,7 +65,8 @@ function Sensor($hw, $type, $name) {
 
 while ($true) {
     $out = [ordered]@{}
-    $caps = [ordered]@{ gsa1 = $false; pdh = $false; lhm = $false; smbios = $false }
+    $caps = [ordered]@{ gsa1 = $false; pdh = $false; lhm = $false; smbios = $false;
+                        cpulhm = $false; mobo = $false }
 
     # El unico cap que no se re-evalua contra una lectura nueva: SMBIOS se leyo
     # arriba y no cambia hasta el proximo arranque. Se emite igual en cada
@@ -92,11 +102,43 @@ while ($true) {
 
     if ($comp) {
         $l = [ordered]@{}
+        $cpuh = [ordered]@{}
+        $mobo = [ordered]@{}
         $disk = 0
         $lhmOk = $false
         foreach ($hw in $comp.Hardware) {
             $hw.Update()
             switch -Wildcard ("$($hw.HardwareType)") {
+                'Cpu' {
+                    # Package power: el dato que estaba dado por imposible.
+                    $cpuh.'cpu.power' = Sensor $hw 'Power' 'CPU Package'
+                    # Por nucleo, con la numeracion 1-based de LHM para que
+                    # coincida con lo que muestran las otras herramientas.
+                    foreach ($s in $hw.Sensors) {
+                        $n = $null
+                        if ($s.Name -match '^CPU Core #(\d+)$') { $n = $Matches[1] }
+                        if ($null -eq $n -or $null -eq $s.Value) { continue }
+                        switch ("$($s.SensorType)") {
+                            'Temperature' { $cpuh."core.$n.temp"  = [math]::Round($s.Value, 1) }
+                            'Clock'       { $cpuh."core.$n.clock" = [math]::Round($s.Value) }
+                        }
+                    }
+                    # La carga viene por THREAD ("CPU Core #3 Thread #2"): la
+                    # del nucleo es el promedio de sus threads, que es lo que
+                    # significa "cuanto se esta usando ese nucleo".
+                    $porNucleo = @{}
+                    foreach ($s in $hw.Sensors) {
+                        if ("$($s.SensorType)" -ne 'Load') { continue }
+                        if ($s.Name -notmatch '^CPU Core #(\d+) Thread #\d+$') { continue }
+                        if ($null -eq $s.Value) { continue }
+                        $k = $Matches[1]
+                        if (-not $porNucleo.ContainsKey($k)) { $porNucleo[$k] = @() }
+                        $porNucleo[$k] += [double]$s.Value
+                    }
+                    foreach ($k in $porNucleo.Keys) {
+                        $cpuh."core.$k.load" = [math]::Round(($porNucleo[$k] | Measure-Object -Average).Average, 1)
+                    }
+                }
                 'Gpu*' {
                     $l.'gpu.name'    = $hw.Name
                     $l.'gpu.load'    = Sensor $hw 'Load' 'GPU Core'
@@ -124,12 +166,44 @@ while ($true) {
                     if ($null -ne $t) { $lhmOk = $true }
                     $disk++
                 }
+                'Motherboard' {
+                    # Los sensores de la placa viven en el SuperIO, que cuelga
+                    # como SubHardware: el Motherboard en si reporta 0.
+                    $tmp = 0
+                    foreach ($sub in $hw.SubHardware) {
+                        $sub.Update()
+                        foreach ($s in $sub.Sensors) {
+                            if ($null -eq $s.Value) { continue }
+                            switch ("$($s.SensorType)") {
+                                'Fan' {
+                                    if ($s.Name -match '#(\d+)$') {
+                                        $mobo."fan.$($Matches[1]).rpm" = [math]::Round($s.Value)
+                                    }
+                                }
+                                'Temperature' {
+                                    $mobo."mb.temp.$tmp" = [math]::Round($s.Value, 1)
+                                    $tmp++
+                                }
+                            }
+                        }
+                    }
+                    # CPU_FAN es el primer conector en las placas Gigabyte, y en
+                    # esta maquina es el unico que gira con el equipo encendido
+                    # (los otros tres dan 0, sin nada conectado). Se expone
+                    # ademas como cpu.fan; los fan.N.rpm quedan disponibles por
+                    # si en otra placa el orden es distinto.
+                    if ($mobo.Contains('fan.1.rpm')) { $mobo.'cpu.fan' = $mobo.'fan.1.rpm' }
+                }
             }
         }
         # caps.lhm refleja si ESTA vuelta realmente saco algun sensor de GPU o
         # disco, no si Computer.Open() funciono al arrancar.
         $caps.lhm = $lhmOk
         $out.lhm = $l
+        # Cada namespace nuevo reporta su propia capacidad: que la GPU responda
+        # no dice nada sobre si el SuperIO de la placa esta accesible.
+        if ($cpuh.Count -gt 0) { $caps.cpulhm = $true; $out.cpulhm = $cpuh }
+        if ($mobo.Count -gt 0) { $caps.mobo = $true;   $out.mobo = $mobo }
     }
 
     $out.caps = $caps

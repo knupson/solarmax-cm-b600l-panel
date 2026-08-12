@@ -1,6 +1,6 @@
 import time
 
-from vmaxpanel.metrics import METRICS
+from vmaxpanel.metrics import METRICS, is_metric
 from vmaxpanel.providers.psutil_provider import PsutilProvider
 
 
@@ -13,7 +13,11 @@ def test_psutil_provider_probes_true():
 
 def test_psutil_declares_only_registered_metrics():
     p = PsutilProvider()
-    assert p.metrics() <= set(METRICS)
+    # is_metric y no "subset de METRICS": desde que hay familias por
+    # dispositivo (net.<adaptador>.down) un id valido no tiene por que estar en
+    # la tabla plana.
+    for mid in p.metrics():
+        assert is_metric(mid), mid
     assert {"cpu.load", "mem.used", "net.down", "clock.time"} <= p.metrics()
 
 
@@ -45,3 +49,22 @@ def test_psutil_also_serves_the_short_cpu_name():
     muestra = p.read()
     assert isinstance(muestra["cpu.name_short"], str)
     assert muestra["cpu.name_short"]
+
+
+def test_psutil_serves_network_rates_per_adapter():
+    """net.down/net.up son el total de la maquina. Con dos placas o con una
+    VPN levantada eso no dice de cual es el trafico."""
+    p = PsutilProvider()
+    porads = {m for m in p.metrics() if m.startswith("net.") and m.count(".") == 2}
+    assert porads, "no publico ninguna metrica de red por adaptador"
+    m = p.read()
+    for mid in porads:
+        assert mid in m
+        assert m[mid] is None or m[mid] >= 0
+    # y el catalogo trae el nombre real del adaptador, no el slug
+    cat = p.catalog()
+    assert any("Ethernet" in c.label or "Wi" in c.label
+               for mid, c in cat.items() if mid in porads), \
+        f"etiquetas: {[cat[m].label for m in porads]}"
+    grupos = p.groups()
+    assert all(grupos[mid].startswith("Red") for mid in porads)

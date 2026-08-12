@@ -1,5 +1,5 @@
 """Providers que leen del mismo SidecarClient, cada uno su namespace."""
-from ..metrics import short_cpu_name
+from ..metrics import MetricSpec, group_for, short_cpu_name, spec_for
 from .base import Provider
 from .sidecar import STALE_AFTER
 
@@ -95,6 +95,77 @@ class SmbiosProvider(_SidecarProvider):
     namespace = "smbios"
     served = {"mem.speed"}
     reason = "no se pudo leer Win32_PhysicalMemory"
+
+
+class _DinamicoPorInstancia(_SidecarProvider):
+    """Base de los providers cuyo conjunto de metricas se descubre solo.
+
+    Cuantos nucleos, cuantos fans y cuantas temperaturas de placa hay no se
+    sabe hasta ver la primera muestra, asi que `served` se lee del namespace en
+    vez de estar escrito a mano. Mismo patron que LhmProvider con los discos, y
+    con la misma trampa: `Registry` llama a `metrics()` una sola vez, en su
+    constructor, asi que lo que no este en esa primera muestra no aparece en
+    toda la corrida.
+    """
+
+    @property
+    def served(self):
+        return set(self._c.namespace(self.namespace))
+
+    def metrics(self) -> set[str]:
+        return set(self.served)
+
+    def catalog(self) -> dict:
+        """Etiqueta amigable por metrica, tomada de la familia de metrics.py."""
+        cat = {}
+        for mid in self.served:
+            base = spec_for(mid)
+            if base is not None:
+                cat[mid] = base
+        return cat
+
+    def groups(self) -> dict:
+        return {mid: group_for(mid) for mid in self.served}
+
+
+class CpuLhmProvider(_DinamicoPorInstancia):
+    """CPU por LibreHardwareMonitor: package power y por nucleo.
+
+    `cpu.power` estaba documentado en este proyecto como imposible de leer,
+    porque WinRing0 esta en la blocklist de drivers de Windows y sin MSR no hay
+    RAPL. La conclusion era erronea para el DLL que traemos: LHM 0.9.3.0 lo lee
+    sin cargar ningun driver -- verificado listando los servicios con el objeto
+    abierto -- y el sidecar simplemente nunca habia prendido `IsCpuEnabled`.
+    Comprobado ademas contra carga real: 11 W en reposo, 46 W al 43%.
+    """
+
+    id = "cpulhm"
+    namespace = "cpulhm"
+    reason = "LibreHardwareMonitor no expuso sensores de CPU"
+
+
+class MoboProvider(_DinamicoPorInstancia):
+    """Placa: fans y temperaturas del SuperIO (aca, un ITE IT8689E).
+
+    Los `fan.N.rpm` se exponen todos porque el mapeo conector -> ventilador
+    depende de la placa. `cpu.fan` lo agrega el sidecar desde el fan 1, que es
+    CPU_FAN en las placas Gigabyte y en esta maquina el unico que gira con el
+    equipo encendido.
+    """
+
+    id = "mobo"
+    namespace = "mobo"
+    reason = "no se pudo leer el SuperIO de la placa"
+
+    def catalog(self) -> dict:
+        cat = super().catalog()
+        # cpu.fan no es de una familia por instancia: su etiqueta sale de
+        # METRICS, pero conviene que diga de donde viene.
+        if "cpu.fan" in cat:
+            base = cat["cpu.fan"]
+            cat["cpu.fan"] = MetricSpec(base.id, "Fan de CPU (conector 1)",
+                                        base.unit, base.kind, base.min, base.max)
+        return cat
 
 
 class LhmProvider(_SidecarProvider):

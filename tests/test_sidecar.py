@@ -5,11 +5,12 @@ import time
 
 import pytest
 
-from vmaxpanel.metrics import UNAVAILABLE
+from vmaxpanel.metrics import UNAVAILABLE, is_metric
 from vmaxpanel.providers.msr import MsrProvider
 from vmaxpanel.providers.registry import Registry
 from vmaxpanel.providers.sidecar import SidecarClient
-from vmaxpanel.providers.sidecar_providers import (Gsa1Provider, LhmProvider,
+from vmaxpanel.providers.sidecar_providers import (CpuLhmProvider, Gsa1Provider,
+                                                  LhmProvider, MoboProvider,
                                                   PdhProvider, SmbiosProvider)
 
 SAMPLE = {
@@ -282,3 +283,66 @@ def test_pdh_provider_derives_the_short_cpu_name():
 def test_the_short_name_is_absent_when_there_is_no_name():
     c, _ = client_for({**SAMPLE, "pdh": {"cpu.clock": 4080}})
     assert PdhProvider(c).read().get("cpu.name_short") is None
+
+
+# --- providers de CPU (LHM) y placa ---
+
+MUESTRA_CPU = {"cpu.power": 11.4, "core.1.temp": 34.0, "core.1.clock": 4393,
+               "core.1.load": 19.6, "core.2.temp": 37.0, "core.2.clock": 4193,
+               "core.2.load": 8.0}
+MUESTRA_MOBO = {"mb.temp.0": 29.0, "mb.temp.1": 34.0, "fan.1.rpm": 868,
+                "fan.2.rpm": 0, "cpu.fan": 868}
+
+
+def cliente_completo():
+    return client_for({**SAMPLE, "cpulhm": MUESTRA_CPU, "mobo": MUESTRA_MOBO,
+                       "caps": {"gsa1": True, "pdh": True, "lhm": True,
+                                "cpulhm": True, "mobo": True}})[0]
+
+
+def test_cpu_lhm_provider_serves_package_power_and_per_core():
+    """cpu.power estaba documentado como imposible por WinRing0. LHM 0.9.3.0
+    lo lee sin ningun driver: el sidecar simplemente no tenia IsCpuEnabled."""
+    p = CpuLhmProvider(cliente_completo())
+    assert p.probe() is True
+    servidas = p.metrics()
+    assert "cpu.power" in servidas
+    assert {"core.1.temp", "core.1.clock", "core.1.load"} <= servidas
+    m = p.read()
+    assert m["cpu.power"] == 11.4
+    assert m["core.1.load"] == 19.6
+
+
+def test_mobo_provider_serves_fans_and_board_temps():
+    p = MoboProvider(cliente_completo())
+    servidas = p.metrics()
+    assert {"fan.1.rpm", "fan.2.rpm", "mb.temp.0", "cpu.fan"} <= servidas
+    assert p.read()["cpu.fan"] == 868
+
+
+def test_every_id_these_providers_serve_is_valid():
+    """Un id que no valida hace que Registry se caiga en el constructor."""
+    c = cliente_completo()
+    for p in (CpuLhmProvider(c), MoboProvider(c)):
+        for mid in p.metrics():
+            assert is_metric(mid), mid
+
+
+def test_their_catalogs_use_friendly_names_and_groups():
+    c = cliente_completo()
+    cpu, mobo = CpuLhmProvider(c), MoboProvider(c)
+    cat = {**cpu.catalog(), **mobo.catalog()}
+    grupos = {**cpu.groups(), **mobo.groups()}
+    assert "1" in cat["core.1.temp"].label
+    assert grupos["core.1.temp"] == "Núcleos de CPU"
+    assert grupos["fan.1.rpm"] == "Ventiladores"
+    # el fan del CPU se identifica, no queda como "Fan 1" a secas
+    assert "CPU" in cat["cpu.fan"].label.upper()
+    assert grupos["mb.temp.0"] == "Placa madre"
+
+
+def test_a_machine_without_these_sources_reports_why():
+    c, _ = client_for(SAMPLE)          # SAMPLE no trae cpulhm ni mobo
+    for p in (CpuLhmProvider(c), MoboProvider(c)):
+        assert p.probe() is False
+        assert p.unavailable_reason
