@@ -103,8 +103,13 @@ en el mensaje de esos dos commits, que es el lugar donde buscarlo si algo se rom
 - `loader.py` — hot-reload por `st_mtime_ns`, ciego a dos escrituras en el mismo tick
   (arreglado: ahora es un hash del contenido)
 
-- **Fase 2 (fondos animados) es lo único que queda sin plan.** Arranca con un spike de
-  throughput: cuántos fps traga el panel decide todo lo demás.
+- **Fase 2 (fondos animados) es lo único que queda sin plan.** El spike de throughput **ya está
+  hecho** (`docs/superpowers/specs/2026-08-12-vmax-panel-fase2-spike.md`, herramienta en
+  `research/spike_throughput.py`): nada del host es el cuello — 10 ms por frame extremo a
+  extremo, 100 fps de techo, y un fondo animado suma 0,5–7,7 ms según la estrategia. **Lo que
+  quedó sin medir es el refresco real del panel**, porque no aplica contrapresión: acepta 227 fps
+  de escritura sostenida y descarta lo que no dibuja. Para saberlo hay que filmar el panel con un
+  celular; es la única medición que falta y necesita a alguien delante del gabinete.
 - **Verificación visual pendiente:** el ícono de la bandeja y la ventana del editor no se
   llegaron a mirar en pantalla — la máquina se bloqueó y en un escritorio bloqueado la captura
   sale negra y `FindWindow` no enumera las ventanas del escritorio del usuario. Lo funcional sí
