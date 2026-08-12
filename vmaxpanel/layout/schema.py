@@ -238,6 +238,14 @@ def validate(raw) -> list[str]:
                 if k not in allowed_bg_keys:
                     errs.append(f"background: clave desconocida {k!r} para "
                                 f"type={t!r}")
+        # `color` se valida en CUALQUIER tipo que la admita, no solo en solid.
+        # En gradient/image/sequence es el relleno de letterbox y antes se
+        # aceptaba sin chequear: un valor roto ahi no fallaba, parse_hex lo
+        # degradaba en silencio a un gris. Con el editor ofreciendo el campo eso
+        # es un valor equivocado que nadie reporta. No hay ningun tipo de fondo
+        # donde algo que no sea #RRGGBB signifique algo.
+        if "color" in bg:
+            _check_color(errs, "background", bg["color"])
         if t == "solid":
             _check_color(errs, "background", bg.get("color"))
         elif t == "gradient":

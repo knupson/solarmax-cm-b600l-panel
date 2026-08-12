@@ -256,3 +256,63 @@ def test_a_group_header_is_not_selectable_as_a_metric(ventana):
     ventana._on_pick_metric()
     assert ventana.state.widget("cpu-load")["metric"] == antes
     assert ventana.state.errors == []
+
+
+def test_the_window_has_tabs_for_widgets_background_and_panel(ventana):
+    """El fondo y el panel no son widgets: meterlos en la misma columna
+    obligaria a elegir entre ver la lista o ver el fondo."""
+    pestanas = [ventana.tabs.tab(i, "text") for i in range(len(ventana.tabs.tabs()))]
+    assert pestanas == ["Widgets", "Fondo", "Panel"]
+
+
+def test_the_background_tab_shows_the_fields_of_the_current_type(ventana):
+    ventana._show_background()
+    ventana.root.update()
+    assert ventana._bg_type.get() == "gradient"
+    assert "angle" in ventana._bg_fields
+    assert "speed" not in ventana._bg_fields        # gradient no anima
+
+
+def test_switching_the_type_in_the_ui_redraws_the_fields(ventana):
+    ventana._bg_type.set("procedural")
+    ventana._on_pick_bg_type()
+    ventana.root.update()
+    assert ventana.state.raw["background"]["type"] == "procedural"
+    assert {"name", "speed", "period"} <= set(ventana._bg_fields)
+    assert ventana.state.errors == []
+
+
+def test_the_stops_editor_lists_one_row_per_stop(ventana):
+    ventana._show_background()
+    ventana.root.update()
+    assert len(ventana._stop_rows) == len(ventana.state.stops())
+    ventana._add_stop()
+    ventana.root.update()
+    assert len(ventana._stop_rows) == len(ventana.state.stops())
+
+
+def test_editing_a_stop_from_the_ui_reaches_the_state(ventana):
+    ventana._show_background()
+    ventana.root.update()
+    fila = ventana._stop_rows[0]
+    fila["color"].set("#FF0000")
+    ventana._apply_stop(0, "color")
+    assert ventana.state.stops()[0]["color"] == "#FF0000"
+    assert ventana.state.dirty is True
+
+
+def test_the_panel_tab_edits_fps(ventana):
+    ventana._show_panel()
+    ventana.root.update()
+    ventana._panel_fields["fps"].set("30")
+    ventana._apply_panel("fps")
+    assert ventana.state.raw["panel"]["fps"] == 30
+
+
+def test_an_animated_background_shows_a_hint_about_the_preview(ventana):
+    """La vista previa es un cuadro fijo: si el fondo se mueve, el usuario
+    tiene que saber que lo que ve no es una animacion detenida por un bug."""
+    ventana._bg_type.set("procedural")
+    ventana._on_pick_bg_type()
+    ventana.root.update()
+    assert "anima" in ventana._bg_hint.cget("text").lower()

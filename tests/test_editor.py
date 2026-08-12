@@ -227,3 +227,86 @@ def test_no_two_metrics_share_a_label_in_the_picker(tmp_path):
             assert etiqueta not in vistas, \
                 f"{mid} y {vistas.get(etiqueta)} comparten la etiqueta {etiqueta!r}"
             vistas[etiqueta] = mid
+
+
+# --- edicion del fondo y del panel ---
+
+def test_switching_background_type_leaves_it_valid(tmp_path):
+    """Cambiar de tipo tiene que dar un fondo que valide solo. Si el usuario
+    elige 'procedural' y queda invalido porque faltan stops, ve un error que no
+    cometio."""
+    st = state_for(tmp_path)
+    for tipo in ("solid", "gradient", "procedural", "sequence", "image"):
+        errores = st.set_background_type(tipo)
+        assert errores == [], f"{tipo}: {errores}"
+        assert st.raw["background"]["type"] == tipo
+
+
+def test_switching_to_procedural_keeps_the_existing_stops(tmp_path):
+    """El gradiente que el usuario ya afino no se pierde al animarlo: es
+    justamente el punto de que procedural parta del gradiente."""
+    st = state_for(tmp_path)
+    antes = [dict(s) for s in st.raw["background"]["stops"]]
+    st.set_background_type("procedural")
+    assert st.raw["background"]["stops"] == antes
+
+
+def test_background_fields_are_coerced(tmp_path):
+    st = state_for(tmp_path)
+    st.set_background_type("procedural")
+    assert st.set_background_field("speed", "45") == []
+    assert st.raw["background"]["speed"] == 45.0
+    assert st.set_background_field("name", "pulse") == []
+    assert st.raw["background"]["name"] == "pulse"
+
+
+def test_an_invalid_background_field_reports_and_does_not_save(tmp_path):
+    st = state_for(tmp_path)
+    errores = st.set_background_field("color", "verde")
+    assert errores
+    assert st.save() == errores
+
+
+def test_stops_can_be_added_edited_and_removed(tmp_path):
+    st = state_for(tmp_path)
+    n = len(st.raw["background"]["stops"])
+    assert st.add_stop() == []
+    assert len(st.raw["background"]["stops"]) == n + 1
+    assert st.set_stop(0, "color", "#FF0000") == []
+    assert st.raw["background"]["stops"][0]["color"] == "#FF0000"
+    assert st.set_stop(0, "at", "0.25") == []
+    assert st.raw["background"]["stops"][0]["at"] == 0.25
+    assert st.remove_stop(0) == []
+    assert len(st.raw["background"]["stops"]) == n
+
+
+def test_a_gradient_cannot_be_left_with_one_stop(tmp_path):
+    """Menos de dos paradas no es un degradado: el validador lo rechaza, asi
+    que borrar la penultima tiene que negarse en vez de dejar el perfil roto."""
+    st = state_for(tmp_path)
+    while len(st.raw["background"]["stops"]) > 2:
+        st.remove_stop(0)
+    errores = st.remove_stop(0)
+    assert errores
+    assert len(st.raw["background"]["stops"]) == 2
+
+
+def test_panel_fields_are_editable_and_validated(tmp_path):
+    st = state_for(tmp_path)
+    assert st.set_panel_field("fps", "30") == []
+    assert st.raw["panel"]["fps"] == 30
+    assert st.set_panel_field("brightness", "70") == []
+    errores = st.set_panel_field("fps", "120")
+    assert any("fps" in e for e in errores)
+
+
+def test_the_editor_publishes_the_background_fields_for_each_type(tmp_path):
+    """La UI dibuja los campos que el tipo elegido admite; si los inventara,
+    escribiria claves que el validador rechaza."""
+    st = state_for(tmp_path)
+    assert set(st.background_fields("solid")) == {"color"}
+    assert "stops" not in st.background_fields("solid")
+    assert set(st.background_fields("procedural")) >= {"name", "speed", "period",
+                                                       "angle"}
+    assert set(st.background_fields("sequence")) >= {"src", "fps", "fit"}
+    assert "speed" not in st.background_fields("sequence")

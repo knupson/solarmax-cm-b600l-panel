@@ -247,6 +247,123 @@ class EditorState:
         self.errors = schema.validate(self.raw)
         return list(self.errors)
 
+    # --- fondo ---
+    #
+    # Los campos que admite cada tipo salen de schema.BACKGROUND_KEYS, no de una
+    # lista escrita a mano aca: si la UI ofreciera un campo que el tipo no
+    # admite, escribiria una clave que el validador rechaza y el usuario veria
+    # un error que no cometio. `stops` se edita aparte porque es una lista.
+    _DEFAULTS_FONDO = {
+        "color": "#0B0F17", "angle": 90.0, "fit": "cover", "src": "fondos",
+        "name": "scroll", "speed": 20.0, "period": 6.0, "fps": 10.0,
+    }
+    _STOPS_DEFAULT = [{"at": 0.0, "color": "#101725"},
+                      {"at": 1.0, "color": "#141A26"}]
+
+    def background_fields(self, tipo=None) -> list[str]:
+        """Campos escalares que este tipo de fondo admite, en orden estable."""
+        tipo = tipo or (self.raw.get("background") or {}).get("type", "solid")
+        permitidas = schema.BACKGROUND_KEYS.get(tipo, {"type", "color"})
+        orden = ["name", "color", "angle", "speed", "period", "src", "fit", "fps"]
+        return [c for c in orden if c in permitidas]
+
+    def background_types(self) -> list[str]:
+        return sorted(schema.BACKGROUND_TYPES)
+
+    def has_stops(self, tipo=None) -> bool:
+        tipo = tipo or (self.raw.get("background") or {}).get("type", "solid")
+        return "stops" in schema.BACKGROUND_KEYS.get(tipo, set())
+
+    def set_background_type(self, tipo) -> list[str]:
+        """Cambia el tipo y completa lo que ese tipo necesita.
+
+        Se conservan las claves que el tipo nuevo tambien admite -- pasar de
+        'gradient' a 'procedural' no puede perder el degradado que el usuario ya
+        afino, que es justamente el punto de que procedural parta de ahi -- y se
+        descartan las que no, porque quedarian como claves desconocidas.
+        """
+        viejo = dict(self.raw.get("background") or {})
+        permitidas = schema.BACKGROUND_KEYS.get(tipo, {"type", "color"})
+        nuevo = {"type": tipo}
+        for clave in permitidas - {"type"}:
+            if clave == "stops":
+                stops = viejo.get("stops")
+                nuevo["stops"] = stops if (isinstance(stops, list) and len(stops) >= 2) \
+                    else [dict(s) for s in self._STOPS_DEFAULT]
+            elif clave in viejo:
+                nuevo[clave] = viejo[clave]
+            elif clave in self._DEFAULTS_FONDO:
+                nuevo[clave] = self._DEFAULTS_FONDO[clave]
+        self.raw["background"] = nuevo
+        self.dirty = True
+        self.errors = schema.validate(self.raw)
+        return list(self.errors)
+
+    def set_background_field(self, clave, valor) -> list[str]:
+        self.raw.setdefault("background", {})[clave] = _coerce_fondo(clave, valor)
+        self.dirty = True
+        self.errors = schema.validate(self.raw)
+        return list(self.errors)
+
+    # --- paradas del degradado ---
+
+    def stops(self) -> list:
+        return (self.raw.get("background") or {}).get("stops") or []
+
+    def add_stop(self) -> list[str]:
+        """Agrega una parada en el medio del hueco mas grande.
+
+        En el medio y no al final: una parada nueva encima de otra existente no
+        se ve, y el usuario no entiende que paso.
+        """
+        stops = self.raw.setdefault("background", {}).setdefault("stops", [])
+        if len(stops) < 2:
+            stops[:] = [dict(s) for s in self._STOPS_DEFAULT]
+        else:
+            ordenadas = sorted(stops, key=lambda s: s.get("at", 0))
+            hueco, donde = -1.0, 0.5
+            for a, b in zip(ordenadas, ordenadas[1:]):
+                d = b.get("at", 0) - a.get("at", 0)
+                if d > hueco:
+                    hueco, donde = d, (a.get("at", 0) + b.get("at", 0)) / 2
+            stops.append({"at": round(donde, 3), "color": "#3987E5"})
+        self.dirty = True
+        self.errors = schema.validate(self.raw)
+        return list(self.errors)
+
+    def remove_stop(self, i) -> list[str]:
+        """Nunca deja menos de dos: un degradado de una parada no es un
+        degradado y el validador lo rechaza."""
+        stops = self.stops()
+        if len(stops) <= 2:
+            return ["un degradado necesita al menos dos paradas"]
+        if not 0 <= i < len(stops):
+            return [f"no existe la parada {i}"]
+        del stops[i]
+        self.dirty = True
+        self.errors = schema.validate(self.raw)
+        return list(self.errors)
+
+    def set_stop(self, i, clave, valor) -> list[str]:
+        stops = self.stops()
+        if not 0 <= i < len(stops):
+            return [f"no existe la parada {i}"]
+        stops[i][clave] = float(valor) if clave == "at" else str(valor).strip()
+        self.dirty = True
+        self.errors = schema.validate(self.raw)
+        return list(self.errors)
+
+    # --- panel ---
+
+    def panel_fields(self) -> list[str]:
+        return ["fps", "brightness", "rotate", "jpeg_quality"]
+
+    def set_panel_field(self, clave, valor) -> list[str]:
+        self.raw.setdefault("panel", {})[clave] = _coerce(clave, valor)
+        self.dirty = True
+        self.errors = schema.validate(self.raw)
+        return list(self.errors)
+
     def move_widget(self, wid, dx, dy) -> list[str]:
         w = self.widget(wid)
         if w is None:
@@ -271,6 +388,24 @@ class EditorState:
         if self._last_good is None:
             return Image.new("RGB", (320, 1480), (0, 0, 0))
         return self._last_good
+
+
+def _coerce_fondo(clave, valor):
+    """Como _coerce, pero para las claves del fondo.
+
+    `fps` en el fondo es la cadencia de una secuencia y admite decimales; en el
+    panel es entero. Misma clave, tipo distinto segun donde este: de ahi que el
+    fondo tenga su propia conversion en vez de compartir la tabla.
+    """
+    if clave in ("angle", "speed", "period", "fps"):
+        s = str(valor).strip()
+        if s == "":
+            return None
+        try:
+            return float(s)
+        except ValueError:
+            return s
+    return str(valor).strip()
 
 
 def _coerce(key, value):
@@ -339,7 +474,18 @@ class EditorWindow:
         raiz = ttk.Frame(self.root, padding=8)
         raiz.pack(fill="both", expand=True)
 
-        izq = ttk.Frame(raiz)
+        # Pestanas: el fondo y el panel no son widgets, y meterlos en la misma
+        # columna obligaria a elegir entre ver la lista o ver el fondo.
+        self.tabs = ttk.Notebook(raiz)
+        self.tabs.pack(side="left", fill="both", expand=True)
+        tab_widgets = ttk.Frame(self.tabs, padding=6)
+        self.tab_fondo = ttk.Frame(self.tabs, padding=6)
+        self.tab_panel = ttk.Frame(self.tabs, padding=6)
+        self.tabs.add(tab_widgets, text="Widgets")
+        self.tabs.add(self.tab_fondo, text="Fondo")
+        self.tabs.add(self.tab_panel, text="Panel")
+
+        izq = ttk.Frame(tab_widgets)
         izq.pack(side="left", fill="y")
         ttk.Label(izq, text="Widgets").pack(anchor="w")
         self.lista = tk.Listbox(izq, width=24, height=28, exportselection=False)
@@ -353,7 +499,7 @@ class EditorWindow:
                        command=lambda t=tipo: self._add(t)).pack(side="left")
         ttk.Button(izq, text="Borrar", command=self._remove).pack(fill="x")
 
-        centro = ttk.Frame(raiz, padding=(12, 0))
+        centro = ttk.Frame(tab_widgets, padding=(12, 0))
         centro.pack(side="left", fill="both", expand=True)
         self.props = ttk.Frame(centro)
         self.props.pack(fill="both", expand=True)
@@ -376,6 +522,9 @@ class EditorWindow:
         self.estado = ttk.Label(centro, text="", wraplength=380, justify="left")
         self.estado.pack(fill="x", pady=(6, 0))
 
+        self._build_fondo()
+        self._build_panel()
+
         self.der = ttk.Frame(raiz)
         self.der.pack(side="left", fill="both", expand=True)
         ttk.Label(self.der, text="Vista previa").pack(anchor="w")
@@ -392,6 +541,183 @@ class EditorWindow:
         for tecla, (dx, dy) in (("<Left>", (-1, 0)), ("<Right>", (1, 0)),
                                 ("<Up>", (0, -1)), ("<Down>", (0, 1))):
             self.root.bind(tecla, lambda e, a=dx, b=dy: self._nudge(a, b))
+
+    # --- pestana Fondo ---
+
+    def _build_fondo(self):
+        ttk = self.ttk
+        cab = ttk.Frame(self.tab_fondo)
+        cab.pack(fill="x")
+        ttk.Label(cab, text="Tipo").pack(side="left")
+        self._bg_type = self.tk.StringVar()
+        combo = ttk.Combobox(cab, textvariable=self._bg_type, width=16,
+                             state="readonly", values=self.state.background_types())
+        combo.pack(side="left", padx=6)
+        combo.bind("<<ComboboxSelected>>", lambda e: self._on_pick_bg_type())
+
+        self._bg_hint = ttk.Label(self.tab_fondo, text="", wraplength=420,
+                                  justify="left", foreground="#606060")
+        self._bg_hint.pack(fill="x", pady=(4, 0))
+
+        self._bg_campos = ttk.Frame(self.tab_fondo)
+        self._bg_campos.pack(fill="x", pady=6)
+
+        self._bg_stops = ttk.Frame(self.tab_fondo)
+        self._bg_stops.pack(fill="both", expand=True)
+
+        self._bg_fields = {}
+        self._stop_rows = []
+
+    def _on_pick_bg_type(self):
+        self.state.set_background_type(self._bg_type.get())
+        self._show_background()
+        self._draw_preview()
+        self._show_errors()
+
+    def _show_background(self):
+        ttk = self.ttk
+        fondo = self.state.raw.get("background") or {}
+        tipo = fondo.get("type", "solid")
+        self._bg_type.set(tipo)
+
+        for hijo in self._bg_campos.winfo_children():
+            hijo.destroy()
+        self._bg_fields = {}
+        for fila, clave in enumerate(self.state.background_fields(tipo)):
+            ttk.Label(self._bg_campos, text=clave).grid(row=fila, column=0, sticky="w")
+            valor = fondo.get(clave, "")
+            if clave == "name":
+                control = ttk.Combobox(self._bg_campos, width=14, state="readonly",
+                                       values=list(schema.PROCEDURALES))
+                control.set(str(valor) or "scroll")
+                control.bind("<<ComboboxSelected>>",
+                             lambda e, k=clave, c=None: self._apply_bg(clave))
+                self._bg_fields[clave] = control
+            elif clave == "fit":
+                control = ttk.Combobox(self._bg_campos, width=14, state="readonly",
+                                       values=sorted(schema.FITS))
+                control.set(str(valor) or "cover")
+                control.bind("<<ComboboxSelected>>", lambda e, k=clave: self._apply_bg(k))
+                self._bg_fields[clave] = control
+            else:
+                var = self.tk.StringVar(value="" if valor is None else str(valor))
+                control = ttk.Entry(self._bg_campos, textvariable=var, width=24)
+                control.bind("<FocusOut>", lambda e, k=clave: self._apply_bg(k))
+                control.bind("<Return>", lambda e, k=clave: self._apply_bg(k))
+                self._bg_fields[clave] = var
+            control.grid(row=fila, column=1, sticky="w", padx=4)
+
+        self._show_stops()
+        self._bg_hint.config(text=self._pista_fondo(tipo))
+
+    def _pista_fondo(self, tipo) -> str:
+        """Aviso por tipo. El de los animados es importante: la vista previa es
+        UN cuadro, asi que un fondo que se mueve se ve quieto ahi y eso parece
+        un bug."""
+        if tipo in ("procedural", "sequence"):
+            return ("Fondo animado: la vista previa muestra un solo cuadro, así "
+                    "que acá se ve quieto. En el panel se anima. Conviene subir "
+                    "los fps del panel (pestaña Panel) para que se note.")
+        if tipo == "video":
+            return "El tipo 'video' todavía no está implementado: el panel va a mostrar un color plano."
+        if tipo == "sequence":
+            return "src es una carpeta con las imágenes, relativa a vmaxpanel/assets."
+        return ""
+
+    def _apply_bg(self, clave):
+        control = self._bg_fields.get(clave)
+        if control is None:
+            return
+        valor = control.get()
+        self.state.set_background_field(clave, valor)
+        self._draw_preview()
+        self._show_errors()
+
+    # --- paradas del degradado ---
+
+    def _show_stops(self):
+        ttk = self.ttk
+        for hijo in self._bg_stops.winfo_children():
+            hijo.destroy()
+        self._stop_rows = []
+        if not self.state.has_stops():
+            return
+        ttk.Label(self._bg_stops, text="Paradas del degradado").grid(
+            row=0, column=0, columnspan=4, sticky="w", pady=(6, 2))
+        for i, parada in enumerate(self.state.stops()):
+            fila = i + 1
+            ttk.Label(self._bg_stops, text=f"{i}").grid(row=fila, column=0)
+            at = self.tk.StringVar(value=str(parada.get("at", 0)))
+            color = self.tk.StringVar(value=str(parada.get("color", "#000000")))
+            e1 = ttk.Entry(self._bg_stops, textvariable=at, width=8)
+            e2 = ttk.Entry(self._bg_stops, textvariable=color, width=12)
+            e1.grid(row=fila, column=1, padx=2)
+            e2.grid(row=fila, column=2, padx=2)
+            for control, clave in ((e1, "at"), (e2, "color")):
+                control.bind("<FocusOut>",
+                             lambda e, j=i, k=clave: self._apply_stop(j, k))
+                control.bind("<Return>",
+                             lambda e, j=i, k=clave: self._apply_stop(j, k))
+            ttk.Button(self._bg_stops, text="−", width=3,
+                       command=lambda j=i: self._remove_stop(j)).grid(row=fila, column=3)
+            self._stop_rows.append({"at": at, "color": color})
+        ttk.Button(self._bg_stops, text="+ parada",
+                   command=self._add_stop).grid(row=len(self._stop_rows) + 1,
+                                                column=0, columnspan=3,
+                                                sticky="w", pady=4)
+
+    def _apply_stop(self, i, clave):
+        if not 0 <= i < len(self._stop_rows):
+            return
+        self.state.set_stop(i, clave, self._stop_rows[i][clave].get())
+        self._draw_preview()
+        self._show_errors()
+
+    def _add_stop(self):
+        self.state.add_stop()
+        self._show_stops()
+        self._draw_preview()
+        self._show_errors()
+
+    def _remove_stop(self, i):
+        errores = self.state.remove_stop(i)
+        self._show_stops()
+        self._draw_preview()
+        if errores:
+            self.estado.config(text=" / ".join(errores), foreground="#B00000")
+        else:
+            self._show_errors()
+
+    # --- pestana Panel ---
+
+    def _build_panel(self):
+        ttk = self.ttk
+        self._panel_fields = {}
+        ttk.Label(self.tab_panel,
+                  text="El panel refresca a 60 Hz: por encima de eso los cuadros "
+                       "se descartan.\nCosto medido: 1 fps ≈ 1% de un núcleo, "
+                       "30 ≈ 17%, 60 ≈ 37%.",
+                  justify="left", foreground="#606060").pack(anchor="w", pady=(0, 8))
+        campos = ttk.Frame(self.tab_panel)
+        campos.pack(fill="x")
+        for fila, clave in enumerate(self.state.panel_fields()):
+            ttk.Label(campos, text=clave).grid(row=fila, column=0, sticky="w")
+            var = self.tk.StringVar()
+            entrada = ttk.Entry(campos, textvariable=var, width=12)
+            entrada.grid(row=fila, column=1, sticky="w", padx=4)
+            entrada.bind("<FocusOut>", lambda e, k=clave: self._apply_panel(k))
+            entrada.bind("<Return>", lambda e, k=clave: self._apply_panel(k))
+            self._panel_fields[clave] = var
+
+    def _show_panel(self):
+        panel = self.state.raw.get("panel") or {}
+        for clave, var in self._panel_fields.items():
+            var.set(str(panel.get(clave, "")))
+
+    def _apply_panel(self, clave):
+        self.state.set_panel_field(clave, self._panel_fields[clave].get())
+        self._draw_preview()
+        self._show_errors()
 
     # --- refresco ---
 
@@ -436,6 +762,8 @@ class EditorWindow:
         if objetivo is not None:
             self.lista.selection_set(ids.index(objetivo))
         self._show_props()
+        self._show_background()
+        self._show_panel()
         self._draw_preview()
         self._show_errors()
 
