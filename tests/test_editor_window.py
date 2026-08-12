@@ -316,3 +316,53 @@ def test_an_animated_background_shows_a_hint_about_the_preview(ventana):
     ventana._on_pick_bg_type()
     ventana.root.update()
     assert "anima" in ventana._bg_hint.cget("text").lower()
+
+
+def test_clicking_the_preview_selects_that_widget(ventana):
+    """Hacer clic sobre el panel dibujado es la forma natural de elegir: la
+    lista de 47 nombres obliga a saber de memoria como se llama cada cosa."""
+    ventana.root.geometry("1200x900")
+    ventana.root.update()
+    barra = ventana.state.widget("cpu-bar")
+    px, py = ventana._a_pantalla(barra["x"] + 100, barra["y"] + 8)
+    ventana.canvas.event_generate("<Button-1>", x=px, y=py)
+    ventana.root.update()
+    assert ventana._selected() == "cpu-bar"
+    assert metrica_mostrada(ventana) == "cpu.load"
+
+
+def test_dragging_on_the_preview_moves_the_widget(ventana):
+    ventana.root.geometry("1200x900")
+    ventana.root.update()
+    w = ventana.state.widget("cpu-load")
+    x0, y0 = w["x"], w["y"]
+    px, py = ventana._a_pantalla(x0 + 5, y0 + 20)
+    ventana.canvas.event_generate("<Button-1>", x=px, y=py)
+    destino = ventana._a_pantalla(x0 + 45, y0 + 20)
+    ventana.canvas.event_generate("<B1-Motion>", x=destino[0], y=destino[1])
+    ventana.canvas.event_generate("<ButtonRelease-1>", x=destino[0], y=destino[1])
+    ventana.root.update()
+    assert ventana.state.widget("cpu-load")["x"] > x0 + 20
+    assert ventana.state.dirty is True
+
+
+def test_clicking_empty_space_keeps_the_selection(ventana):
+    """Un clic al vacio no puede deseleccionar: el panel de propiedades se
+    vaciaria y el usuario perderia lo que estaba editando."""
+    seleccionar(ventana, "cpu-load")
+    ventana.root.geometry("1200x900")
+    ventana.root.update()
+    px, py = ventana._a_pantalla(310, 1470)
+    ventana.canvas.event_generate("<Button-1>", x=px, y=py)
+    ventana.root.update()
+    assert ventana._selected() == "cpu-load"
+
+
+def test_screen_and_panel_coordinates_round_trip(ventana):
+    ventana.root.geometry("1200x900")
+    ventana.root.update()
+    for punto in ((0, 0), (100, 400), (319, 1479)):
+        px, py = ventana._a_pantalla(*punto)
+        vuelta = ventana._a_panel(px, py)
+        assert abs(vuelta[0] - punto[0]) <= 2, (punto, vuelta)
+        assert abs(vuelta[1] - punto[1]) <= 2, (punto, vuelta)

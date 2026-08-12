@@ -310,3 +310,84 @@ def test_the_editor_publishes_the_background_fields_for_each_type(tmp_path):
                                                        "angle"}
     assert set(st.background_fields("sequence")) >= {"src", "fps", "fit"}
     assert "speed" not in st.background_fields("sequence")
+
+
+# --- cajas y hit test, para arrastrar sobre la vista previa ---
+
+def test_every_widget_has_a_bounding_box(tmp_path):
+    st = state_for(tmp_path)
+    for wid in st.widget_ids():
+        caja = st.widget_bbox(wid)
+        assert caja is not None, wid
+        x0, y0, x1, y1 = caja
+        assert x1 > x0 and y1 > y0, (wid, caja)
+
+
+def test_a_text_box_follows_the_rendered_text(tmp_path):
+    """La caja de un texto sale de medir la fuente con el valor de demo, no de
+    un radio inventado: un reloj de 74 px y una etiqueta de 14 no pueden tener
+    la misma zona sensible."""
+    st = state_for(tmp_path)
+    reloj = st.widget_bbox("clock")
+    etiqueta = st.widget_bbox("cpu-temp-tag")
+    alto_reloj = reloj[3] - reloj[1]
+    alto_etiqueta = etiqueta[3] - etiqueta[1]
+    assert alto_reloj > alto_etiqueta * 2, (alto_reloj, alto_etiqueta)
+
+
+def test_a_bar_box_is_its_declared_size(tmp_path):
+    st = state_for(tmp_path)
+    barra = st.widget("cpu-bar")
+    x0, y0, x1, y1 = st.widget_bbox("cpu-bar")
+    assert (x0, y0) == (barra["x"], barra["y"])
+    assert x1 - x0 == barra["w"] and y1 - y0 == barra["h"]
+
+
+def test_hit_test_finds_the_widget_under_the_point(tmp_path):
+    st = state_for(tmp_path)
+    barra = st.widget("cpu-bar")
+    centro = (barra["x"] + barra["w"] // 2, barra["y"] + barra["h"] // 2)
+    assert st.hit_test(*centro) == "cpu-bar"
+
+
+def test_hit_test_returns_none_on_empty_space(tmp_path):
+    st = state_for(tmp_path)
+    assert st.hit_test(300, 1460) is None
+
+
+def test_hit_test_prefers_the_one_drawn_last(tmp_path):
+    """El orden de la lista es el orden de pintado: el de arriba es el que el
+    usuario ve y el que espera agarrar."""
+    st = state_for(tmp_path)
+    st.add_widget("rect", "tapa")
+    st.set_field("tapa", "x", "24")
+    st.set_field("tapa", "y", "316")
+    st.set_field("tapa", "w", "272")
+    st.set_field("tapa", "h", "16")
+    assert st.hit_test(100, 320) == "tapa"      # tapa a cpu-bar, que esta antes
+
+
+def test_dragging_moves_the_widget_to_the_point(tmp_path):
+    """Arrastrar mueve por DELTA, no reposiciona la esquina en el cursor: si no,
+    el widget salta al agarrarlo desde cualquier lugar que no sea su esquina."""
+    st = state_for(tmp_path)
+    x0, y0 = st.widget("cpu-load")["x"], st.widget("cpu-load")["y"]
+    st.begin_drag("cpu-load", x0 + 10, y0 + 5)
+    st.drag_to(x0 + 40, y0 + 25)
+    assert st.widget("cpu-load")["x"] == x0 + 30
+    assert st.widget("cpu-load")["y"] == y0 + 20
+    assert st.dirty is True
+
+
+def test_dragging_clamps_to_the_canvas(tmp_path):
+    """Un widget arrastrado fuera del lienzo desaparece del panel y no hay
+    forma de volver a agarrarlo."""
+    st = state_for(tmp_path)
+    st.begin_drag("cpu-load", 20, 248)
+    st.drag_to(-500, -500)
+    w = st.widget("cpu-load")
+    assert w["x"] >= 0 and w["y"] >= 0
+    st.drag_to(9999, 9999)
+    ancho = st.raw["designed_for"]["width"]
+    alto = st.raw["designed_for"]["height"]
+    assert w["x"] < ancho and w["y"] < alto

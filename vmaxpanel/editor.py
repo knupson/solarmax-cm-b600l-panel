@@ -17,7 +17,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from .layout import loader, schema
+from .layout import loader, model, schema
 from .metrics import METRICS, group_for, spec_for
 from .providers.setup import build_registry_without_sensors
 from .render.renderer import Renderer
@@ -111,6 +111,8 @@ class EditorState:
         self._sample = demo_sample()
         self._last_good = None          # ultimo preview valido
         self._cache_catalogo = None     # el catalogo cuesta consultar WMI
+        self._fuentes = None            # FontResolver, para medir cajas de texto
+        self._drag = None               # (id, offset x, offset y) del arrastre
         self.reload()
 
     # --- carga y guardado ---
@@ -246,6 +248,118 @@ class EditorState:
         self.dirty = True
         self.errors = schema.validate(self.raw)
         return list(self.errors)
+
+    # --- cajas, hit test y arrastre ---
+    #
+    # Todo en coordenadas del PANEL (320x1480), no de la vista previa: la ventana
+    # convierte dividiendo por su escala. Asi esta logica no depende de como se
+    # este mostrando.
+
+    def _canvas(self):
+        d = self.raw.get("designed_for") or {}
+        return int(d.get("width") or 320), int(d.get("height") or 1480)
+
+    def widget_bbox(self, wid):
+        """(x0, y0, x1, y1) de un widget, o None si no existe.
+
+        Para los textos se MIDE la fuente con el valor de demostracion en vez de
+        usar un radio fijo: el reloj de 74 px y una etiqueta de 14 no pueden
+        tener la misma zona sensible, y con un radio inventado agarrar el chico
+        al lado del grande seria imposible.
+        """
+        w = self.widget(wid)
+        if w is None:
+            return None
+        x, y = int(w.get("x", 0)), int(w.get("y", 0))
+        tipo = w.get("type")
+        if tipo in ("bar", "graph", "rect", "image"):
+            return (x, y, x + max(1, int(w.get("w", 1))),
+                    y + max(1, int(w.get("h", 1))))
+        if tipo == "arc":
+            r = max(1, int(w.get("r", 1)))
+            return (x - r, y - r, x + r, y + r)
+        ancho, alto = self._medir_texto(w)
+        # El ancla del renderer es "la"/"ma"/"ra": el alto cuelga hacia abajo y
+        # el ancho se reparte segun la alineacion.
+        alineacion = w.get("align", "left")
+        if alineacion == "center":
+            x0 = x - ancho // 2
+        elif alineacion == "right":
+            x0 = x - ancho
+        else:
+            x0 = x
+        return (x0, y, x0 + max(6, ancho), y + max(6, alto))
+
+    def _medir_texto(self, w):
+        """(ancho, alto) del texto que este widget dibujaria."""
+        from .render import widgets as W
+        from .render.fonts import FontResolver
+
+        if self._fuentes is None:
+            self._fuentes = FontResolver()
+        alias = w.get("font")
+        spec = (self.raw.get("fonts") or {}).get(alias) or {}
+        try:
+            fuente = self._fuentes.resolve(
+                model.Font(spec.get("family", "Consolas"),
+                           int(spec.get("size", 14)), bool(spec.get("bold"))), 1.0)
+        except Exception:
+            fuente = None
+        if w.get("type") == "label":
+            texto = str(w.get("text", ""))
+        else:
+            texto = W.format_value(schema.WIDGET_TYPES["text"](
+                id=w.get("id", "?"), type="text", x=0, y=0,
+                metric=w.get("metric", ""), font=alias or "",
+                format=w.get("format", "{}"),
+                humanize=w.get("humanize", "none")),
+                self._sample.get(w.get("metric")))
+        if fuente is None or not texto:
+            tam = int(spec.get("size", 14))
+            return max(6, len(texto or "") * tam // 2), tam
+        caja = fuente.getbbox(texto)
+        return max(1, caja[2] - caja[0]), max(1, caja[3] - caja[1])
+
+    def hit_test(self, x, y):
+        """Id del widget bajo el punto, o None.
+
+        Se recorre al REVES porque el orden de la lista es el orden de pintado:
+        el ultimo dibujado es el que el usuario ve arriba, y por lo tanto el que
+        espera agarrar.
+        """
+        for w in reversed(self.raw.get("widgets") or []):
+            caja = self.widget_bbox(w.get("id"))
+            if caja and caja[0] <= x <= caja[2] and caja[1] <= y <= caja[3]:
+                return w.get("id")
+        return None
+
+    def begin_drag(self, wid, x, y):
+        """Empieza un arrastre. Guarda el offset dentro del widget para mover
+        por delta: reposicionar la esquina en el cursor haria saltar al widget
+        en cuanto se lo agarra desde cualquier lugar que no sea su esquina."""
+        w = self.widget(wid)
+        if w is None:
+            return
+        self._drag = (wid, x - int(w.get("x", 0)), y - int(w.get("y", 0)))
+
+    def drag_to(self, x, y) -> list[str]:
+        if not self._drag:
+            return []
+        wid, dx, dy = self._drag
+        w = self.widget(wid)
+        if w is None:
+            return []
+        ancho, alto = self._canvas()
+        # Clampeado al lienzo: un widget arrastrado afuera desaparece del panel
+        # y no queda forma de volver a agarrarlo con el mouse.
+        w["x"] = max(0, min(ancho - 1, int(x - dx)))
+        w["y"] = max(0, min(alto - 1, int(y - dy)))
+        self.dirty = True
+        self.errors = schema.validate(self.raw)
+        return list(self.errors)
+
+    def end_drag(self):
+        self._drag = None
 
     # --- fondo ---
     #
@@ -535,12 +649,68 @@ class EditorWindow:
         # imagen cambia el tamano del Label y eso dispararia otro Configure,
         # o sea un bucle de redibujo.
         self.der.bind("<Configure>", self._on_resize)
+        # Arrastrar sobre la vista previa: es la forma natural de posicionar, y
+        # la lista de 47 nombres obliga a saber de memoria como se llama cada
+        # cosa.
+        self.canvas.bind("<Button-1>", self._on_preview_press)
+        self.canvas.bind("<B1-Motion>", self._on_preview_drag)
+        self.canvas.bind("<ButtonRelease-1>", self._on_preview_release)
 
         self.root.report_callback_exception = self._report_error
         self.root.bind("<Control-s>", lambda e: self._save())
         for tecla, (dx, dy) in (("<Left>", (-1, 0)), ("<Right>", (1, 0)),
                                 ("<Up>", (0, -1)), ("<Down>", (0, 1))):
             self.root.bind(tecla, lambda e, a=dx, b=dy: self._nudge(a, b))
+
+    # --- arrastre sobre la vista previa ---
+
+    def _offset_preview(self):
+        """(x, y) de la esquina de la imagen dentro del Label.
+
+        El Label esta anclado al norte y llena su hueco, asi que la imagen queda
+        centrada horizontalmente: sin descontar ese margen, el clic cae varios
+        pixeles corrido y agarra el widget de al lado.
+        """
+        ancho_label = self.canvas.winfo_width()
+        ancho_img = self._preview_img.width() if self._preview_img else 0
+        return max(0, (ancho_label - ancho_img) // 2), 0
+
+    def _a_panel(self, px, py):
+        """Coordenadas del Label -> coordenadas del panel (320x1480)."""
+        ox, oy = self._offset_preview()
+        k = self._escala or 1.0
+        return int(round((px - ox) / k)), int(round((py - oy) / k))
+
+    def _a_pantalla(self, x, y):
+        ox, oy = self._offset_preview()
+        k = self._escala or 1.0
+        return int(round(x * k)) + ox, int(round(y * k)) + oy
+
+    def _on_preview_press(self, evento):
+        x, y = self._a_panel(evento.x, evento.y)
+        wid = self.state.hit_test(x, y)
+        if wid is None:
+            # Un clic al vacio NO deselecciona: el panel de propiedades se
+            # vaciaria y el usuario perderia lo que estaba editando.
+            return
+        ids = self.state.widget_ids()
+        self.lista.selection_clear(0, "end")
+        self.lista.selection_set(ids.index(wid))
+        self.lista.see(ids.index(wid))
+        self._show_props()
+        self._show_errors()
+        self.state.begin_drag(wid, x, y)
+
+    def _on_preview_drag(self, evento):
+        x, y = self._a_panel(evento.x, evento.y)
+        self.state.drag_to(x, y)
+        self._draw_preview()
+        self._show_errors()
+
+    def _on_preview_release(self, _evento=None):
+        self.state.end_drag()
+        # Los campos x/y muestran el valor viejo hasta que se repintan.
+        self._show_props()
 
     # --- pestana Fondo ---
 
