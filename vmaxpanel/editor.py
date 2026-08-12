@@ -317,7 +317,7 @@ class EditorWindow:
         self.root.bind("<Control-s>", lambda e: self._save())
         for tecla, (dx, dy) in (("<Left>", (-1, 0)), ("<Right>", (1, 0)),
                                 ("<Up>", (0, -1)), ("<Down>", (0, 1))):
-            self.root.bind(tecla, lambda e, a=dx, b=dy: self._move(a, b))
+            self.root.bind(tecla, lambda e, a=dx, b=dy: self._nudge(a, b))
 
     # --- refresco ---
 
@@ -414,6 +414,18 @@ class EditorWindow:
         self.state.set_field(wid, clave, self._fields[clave].get())
         self._draw_preview()
         self._show_errors()
+
+    def _nudge(self, dx, dy):
+        """Flechas del teclado: mueven el widget, salvo que estes escribiendo.
+
+        El bind es de ventana, asi que sin este filtro la flecha llega a los
+        dos lados: corriges un digito en el campo `x` y de paso el widget se
+        desplaza un pixel. Es corrupcion del layout sin que se note.
+        """
+        foco = self.root.focus_get()
+        if foco is not None and foco.winfo_class() in ("TEntry", "Entry"):
+            return
+        self._move(dx, dy)
 
     def _move(self, dx, dy):
         wid = self._selected()

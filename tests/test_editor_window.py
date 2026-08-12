@@ -141,3 +141,28 @@ def test_a_real_mouse_click_on_the_list_selects_that_widget(ventana):
 
     assert ventana._selected() == "cpu-load"
     assert ventana._fields["metric"].get() == "cpu.load"
+
+
+def test_arrows_move_the_widget_only_when_not_editing_a_field(ventana):
+    """Las flechas estan bindeadas a la ventana para poder empujar un widget
+    de a 1 px. Pero con el foco en un campo de texto tienen que mover el
+    cursor y NADA MAS: escribir "182" en x y que la flecha izquierda
+    desplace el widget mientras corriges un digito es corrupcion silenciosa
+    del layout."""
+    seleccionar(ventana, "cpu-load")
+    x0 = ventana.state.widget("cpu-load")["x"]
+
+    campos = [c for c in ventana.props.winfo_children()
+              if c.winfo_class() in ("TEntry", "Entry")]
+    campos[0].focus_set()
+    ventana.root.update()
+    campos[0].event_generate("<Left>")
+    ventana.root.update()
+    assert ventana.state.widget("cpu-load")["x"] == x0, \
+        "la flecha movio el widget mientras se editaba un campo"
+
+    ventana.lista.focus_set()
+    ventana.root.update()
+    ventana.lista.event_generate("<Left>")
+    ventana.root.update()
+    assert ventana.state.widget("cpu-load")["x"] == x0 - 1
