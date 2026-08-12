@@ -12,24 +12,46 @@ faltando. is_available() es una consulta contra el indice, no un historial de
 llamadas, y da la misma respuesta la primera vez y la enesima. Nunca lanza: un
 layout ajeno no puede tumbar el render.
 
-Limitacion conocida: un .ttc puede empaquetar varias caras (ej. regular +
-bold) en un solo archivo, pero solo leemos la cara 0 para nombrar el archivo.
-En las fuentes de Windows observadas, las variantes de peso vienen en .ttc
-separados (msjh.ttc / msjhbd.ttc), no como caras extra de un mismo archivo,
-asi que esto no perdio ninguna variante en la practica. Si algun dia aparece
-un .ttc que si empaqueta pesos como caras adicionales, esa cara bold no se
-va a indexar; no vale la pena la complejidad de escanear todas las caras de
-todos los archivos para un caso que no se dio.
+Un .ttc empaqueta varias caras en un archivo y **se indexan todas**. La version
+anterior leia solo la cara 0, con el argumento de que en Windows los pesos vienen
+en archivos separados (msjh.ttc / msjhbd.ttc). Es cierto para los pesos y falso
+para las familias: msgothic.ttc trae MS Gothic, MS UI Gothic y MS PGothic como
+caras 0, 1 y 2; cambria.ttc esconde Cambria Math en la 1; simsun.ttc, NSimSun. Con
+la cara 0 sola, esas familias no existian para el motor -- un perfil que las
+pidiera caia al fallback y el aviso decia que faltaban, estando instaladas. Y
+Nirmala.ttc si empaqueta el bold como cara extra, o sea que el caso que "no se
+dio" tambien estaba en esta maquina. El costo es abrir cada .ttc unas pocas veces
+mas, una sola vez por proceso.
 """
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import ImageFont
 
 BUNDLED = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+# Tope de caras por archivo. El .ttc mas gordo de Windows tiene 6 (Nirmala); 16 da
+# margen de sobra y acota el escaneo por si un archivo raro devuelve caras para
+# siempre en vez de levantar.
+MAX_CARAS = 16
 _EXTS = (".ttf", ".otf", ".ttc")
 _BOLD_HINTS = ("bold", "bd", "black", "heavy", "semibold")
 _EXPLICIT_NONBOLD_STYLES = ("regular", "normal", "book", "roman", "light", "medium")
+
+
+@dataclass(frozen=True)
+class Cara:
+    """Un archivo de fuente y la cara de adentro.
+
+    `index` es casi siempre 0 -- un .ttf tiene una sola cara -- pero para un .ttc
+    es la unica forma de volver a abrir la cara correcta: PIL toma el indice al
+    abrir, no despues.
+    """
+    path: Path
+    index: int = 0
+
+    def open(self, size):
+        return ImageFont.truetype(os.fspath(self.path), size, index=self.index)
 
 
 def _system_font_dirs() -> list[Path]:
@@ -52,12 +74,12 @@ class FontResolver:
     def __init__(self, extra_dirs: list[Path] | None = None):
         # orden de precedencia: extra_dirs > empaquetadas > sistema
         self._dirs = [Path(d) for d in (extra_dirs or [])] + [BUNDLED] + _system_font_dirs()
-        self._index: dict[str, dict[str, Path]] | None = None
+        self._index: dict[str, dict[str, Cara]] | None = None
         self._cache: dict[tuple, ImageFont.FreeTypeFont] = {}
         self._missing: set[str] = set()
         self._unreadable_dirs: set[Path] = set()
 
-    def index(self) -> dict[str, dict[str, Path]]:
+    def index(self) -> dict[str, dict[str, Cara]]:
         if self._index is None:
             self._index = self._build_index()
         return self._index
@@ -85,8 +107,8 @@ class FontResolver:
         """
         return bool(self.index().get(family.lower()))
 
-    def _build_index(self) -> dict[str, dict[str, Path]]:
-        idx: dict[str, dict[str, Path]] = {}
+    def _build_index(self) -> dict[str, dict[str, Cara]]:
+        idx: dict[str, dict[str, Cara]] = {}
         for d in self._dirs:
             try:
                 if not d.is_dir():
@@ -110,26 +132,35 @@ class FontResolver:
             for path in paths:
                 if path.suffix.lower() not in _EXTS or not path.is_file():
                     continue
-                family, style = self._names(path)
-                if not family:
-                    continue
-                slot = "bold" if self._is_bold(style, path.stem) else "regular"
-                # setdefault: el primer directorio en _dirs que trae una
-                # familia/slot gana. Como extra_dirs va primero en la lista,
-                # una copia ahi pisa a la del sistema para la misma familia.
-                idx.setdefault(family.lower(), {}).setdefault(slot, path)
+                for cara, family, style in self._caras(path):
+                    slot = "bold" if self._is_bold(style, path.stem) else "regular"
+                    # setdefault: el primer directorio en _dirs que trae una
+                    # familia/slot gana. Como extra_dirs va primero en la lista,
+                    # una copia ahi pisa a la del sistema para la misma familia.
+                    idx.setdefault(family.lower(), {}).setdefault(slot, cara)
         return idx
 
     @staticmethod
-    def _names(path: Path) -> tuple[str | None, str]:
-        try:
-            f = ImageFont.truetype(os.fspath(path), 12)
-            family, style = f.getname()
-            return family or path.stem, style or ""
-        except Exception:
-            # un archivo corrupto o ilegible no debe tumbar el indexado
-            # completo; se lo salta y se sigue con el resto.
-            return None, ""
+    def _caras(path: Path):
+        """[(Cara, familia, estilo)] de todas las caras del archivo.
+
+        Solo los .ttc pueden traer mas de una, asi que para el resto esto abre el
+        archivo una vez y corta: pedir la cara 1 de un .ttf levanta y ese except
+        es el que termina el bucle.
+        """
+        fuera = []
+        for i in range(MAX_CARAS):
+            try:
+                f = ImageFont.truetype(os.fspath(path), 12, index=i)
+                family, style = f.getname()
+            except Exception:
+                # Se termino el archivo, o esta corrupto/ilegible. Ninguna de las
+                # dos puede tumbar el indexado completo: se corta y se sigue con
+                # el resto de los archivos, quedandose con las caras que si se
+                # leyeron.
+                break
+            fuera.append((Cara(path, i), family or path.stem, style or ""))
+        return fuera
 
     @staticmethod
     def _is_bold(style: str, stem: str) -> bool:
@@ -163,16 +194,16 @@ class FontResolver:
             return self._cache[key]
 
         try:
-            path = self._pick_path(font)
+            cara = self._pick_cara(font)
         except Exception:
             # un extra_dir roto, un permiso denegado, lo que sea: nunca
             # tumba el render, se anota como perdida y se cae al default.
             self._missing.add(font.family)
-            path = None
+            cara = None
 
         try:
-            if path is not None:
-                resolved = ImageFont.truetype(os.fspath(path), size)
+            if cara is not None:
+                resolved = cara.open(size)
             else:
                 resolved = ImageFont.load_default(size)
         except Exception:
@@ -181,22 +212,22 @@ class FontResolver:
         self._cache[key] = resolved
         return resolved
 
-    def _pick_path(self, font) -> Path | None:
+    def _pick_cara(self, font) -> Cara | None:
         entry = self.index().get(font.family.lower())
         if entry:
             return entry.get("bold" if font.bold else "regular") or next(iter(entry.values()))
         self._missing.add(font.family)
         return self._first_bundled() or self._any_system_mono()
 
-    def _first_bundled(self) -> Path | None:
+    def _first_bundled(self) -> Cara | None:
         if not BUNDLED.is_dir():
             return None
         for p in sorted(BUNDLED.iterdir()):
             if p.suffix.lower() in _EXTS and p.is_file():
-                return p
+                return Cara(p, 0)
         return None
 
-    def _any_system_mono(self) -> Path | None:
+    def _any_system_mono(self) -> Cara | None:
         for family in ("consolas", "cascadia mono", "courier new", "dejavu sans mono"):
             entry = self.index().get(family)
             if entry:

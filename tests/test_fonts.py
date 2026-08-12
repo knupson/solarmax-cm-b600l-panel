@@ -1,5 +1,7 @@
+import os
 from pathlib import Path
 
+import pytest
 from PIL import ImageFont
 
 from vmaxpanel.layout.model import Font
@@ -52,9 +54,9 @@ def test_extra_dirs_are_indexed(tmp_path):
     """Una fuente en extra_dirs se encuentra por su familia real, no por el archivo."""
     r = FontResolver()
     src = r.index()["consolas"]["regular"]
-    (tmp_path / "copia.ttf").write_bytes(src.read_bytes())
+    (tmp_path / "copia.ttf").write_bytes(src.path.read_bytes())
     r2 = FontResolver(extra_dirs=[tmp_path])
-    assert r2.index()["consolas"]["regular"] == tmp_path / "copia.ttf"
+    assert r2.index()["consolas"]["regular"].path == tmp_path / "copia.ttf"
     assert not r2.missing()
 
 
@@ -183,3 +185,41 @@ def test_warnings_do_not_duplicate_a_family_by_casing():
         model.Background(type="solid", color="#000000"), [])
     avisos = [w for w in Renderer(lay).warnings() if "fuente no encontrada" in w]
     assert len(avisos) == 1, avisos
+
+
+# --- caras multiples dentro de un .ttc ---
+
+WINFONTS = Path(os.environ.get("WINDIR", "")) / "Fonts"
+
+
+def _tiene(nombre):
+    return (WINFONTS / nombre).exists()
+
+
+@pytest.mark.skipif(not _tiene("msgothic.ttc"), reason="fuente de Windows ausente")
+def test_a_family_that_only_exists_as_a_later_face_is_indexed():
+    """msgothic.ttc empaqueta tres familias distintas -- MS Gothic, MS UI Gothic y
+    MS PGothic -- como caras 0, 1 y 2 del mismo archivo. Indexando solo la cara 0
+    las otras dos no existen para el motor: un perfil que las pida cae al
+    fallback y el aviso dice que la familia falta, cuando esta instalada."""
+    r = FontResolver()
+    assert r.is_available("MS UI Gothic")
+    assert r.is_available("MS PGothic")
+
+
+@pytest.mark.skipif(not _tiene("Nirmala.ttc"), reason="fuente de Windows ausente")
+def test_the_bold_face_of_a_ttc_resolves_to_that_face():
+    """Nirmala.ttc trae Regular en la cara 0 y Bold en la 1. Sin el indice de
+    cara, pedir bold devolvia el mismo archivo abierto en la cara 0 -- o sea la
+    regular, silenciosamente."""
+    r = FontResolver()
+    negrita = r.resolve(Font("Nirmala UI", 20, bold=True))
+    assert "bold" in negrita.getname()[1].lower()
+
+
+@pytest.mark.skipif(not _tiene("cambria.ttc"), reason="fuente de Windows ausente")
+def test_the_index_remembers_which_face_of_the_file_it_was():
+    r = FontResolver()
+    cara = r.index()["cambria math"]["regular"]
+    assert cara.path.name.lower() == "cambria.ttc"
+    assert cara.index == 1
