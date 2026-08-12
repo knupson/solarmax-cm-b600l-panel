@@ -6,6 +6,28 @@ SN del panel: `VMAXA170320*1480S261001155`.
 
 Escrito el 2026-08-11 porque la app vendor mostraba **CPU 100%** con carga real de 65%.
 
+## Empezar de cero
+
+En una máquina nueva, en este orden:
+
+```powershell
+git clone <este repo> && cd Solarmax_Display
+pip install -r requirements.txt
+python -m vmaxpanel --diagnostico            # dice qué falta y qué es opcional
+python -m vmaxpanel --save preview.png       # un PNG, sin tocar el panel: prueba que renderiza
+python -m vmaxpanel --profile vmaxpanel\profiles\apex.json --instalar   # consola de administrador
+```
+
+**Verificado clonando el repo limpio** (2026-08-12): las 575 pruebas pasan y el panel se
+dibuja completo *sin* las DLL de sensores — reloj, carga de CPU, temperatura y VCORE (esos
+salen de GSA1, no de las DLL), RAM, discos con tamaños reales, uptime y procesos. Lo que
+falta sin ellas es GPU, temperatura por núcleo, potencia del paquete, temperatura de discos
+y RPM de fans; el diagnóstico lo marca **opcional** y dice de dónde bajarlas. Es el único
+paso que no se puede automatizar: son de terceros y este repo no las redistribuye.
+
+`--instalar` necesita **consola de administrador** porque la tarea corre elevada (sin
+elevación no hay GSA1 ni SMART).
+
 ## Por qué existe
 
 `CpuUsage` y `CpuUse`, los únicos tokens de CPU de LCD Control, son

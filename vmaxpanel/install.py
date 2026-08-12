@@ -191,7 +191,13 @@ def xml_tarea(profile_path, log=None, python=None, usuario=None,
     python = Path(python) if python else _pythonw()
     usuario = usuario if usuario is not None else _usuario()
     cwd = Path(working_dir) if working_dir else HERE.parent
-    args = ["-u", "-m", "vmaxpanel.tray", "--profile", str(Path(profile_path))]
+    # resolve(): la ruta va ABSOLUTA al XML. Guardarla como la escribio el usuario
+    # (`--profile vmaxpanel\profilespex.json`) la deja relativa, y Windows la resuelve
+    # al logon contra el WorkingDirectory de la tarea: funciona de casualidad cuando
+    # coinciden, y apunta a otro lado si se instalo desde otra carpeta o si el repo se
+    # movio. Un recien llegado cae en eso sin hacer nada raro.
+    args = ["-u", "-m", "vmaxpanel.tray", "--profile",
+            str(Path(profile_path).resolve())]
     if log:
         args += ["--log", str(Path(log))]
     # escape() y no format() a mano: una ruta con & o < rompe el XML, y

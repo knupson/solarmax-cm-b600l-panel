@@ -382,3 +382,24 @@ def test_the_sensors_check_lists_what_is_lost_without_it(perfil, monkeypatch):
                    if c.nombre == "sensores").detalle.lower()
     for perdido in ("gpu", "nucleo", "rpm"):
         assert perdido in detalle, perdido
+
+
+def test_the_task_gets_an_absolute_profile_path(tmp_path, monkeypatch):
+    """La tarea guardaba la ruta tal cual la escribio el usuario. Con
+    `--instalar --profile vmaxpanel\profiles\apex.json` eso queda RELATIVO en el XML, y
+    funciona solo porque el WorkingDirectory de la tarea coincide de casualidad. Al
+    logon, Windows la resuelve contra ese directorio: instalar desde otra carpeta -- o
+    mover el repo -- deja la tarea apuntando a un perfil que no es. Un recien llegado
+    cae en esto sin hacer nada raro."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "perfiles").mkdir()
+    relativo = Path("perfiles") / "mio.json"
+    (tmp_path / relativo).write_text(json.dumps(MINIMAL), encoding="utf-8")
+
+    xml = install.xml_tarea(relativo, python=Path("C:/py/pythonw.exe"),
+                            usuario="DOM\\usuario")
+    ns = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
+    args = ET.fromstring(xml).find(".//t:Exec/t:Arguments", ns).text
+    ruta = args.split("--profile ", 1)[1].split(" --log")[0]
+    assert Path(ruta).is_absolute(), f"quedo relativa: {ruta!r}"
+    assert Path(ruta) == (tmp_path / relativo).resolve()
