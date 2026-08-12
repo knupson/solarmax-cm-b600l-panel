@@ -160,7 +160,15 @@ class Renderer:
             pass
 
     def close(self) -> None:
-        """Suelta los recursos del fondo. El renderer queda inservible."""
+        """Suelta los recursos del fondo. El renderer no dibuja mas, pero
+        warnings() sigue contestando: es lo que la bandeja pinta al abrir el menu,
+        desde OTRO hilo que el que baja el motor. "El motor se cerro justo cuando
+        abriste el menu" no puede ser una excepcion, y los avisos del fondo que se
+        cerro son justo el motivo por el que quedo asi.
+        """
+        bg = getattr(self, "_bg", None)
+        if bg is not None:
+            self._avisos_fondo = list(bg.warnings)
         self._cerrar_fondo()
         self._bg = None
 
@@ -203,7 +211,9 @@ class Renderer:
         for f in self.layout.fonts.values():
             if not self._fonts.is_available(f.family):
                 missing.setdefault(f.family.lower(), f.family)
-        return (list(self._bg.warnings)
+        avisos_fondo = (list(self._bg.warnings) if self._bg is not None
+                        else list(getattr(self, "_avisos_fondo", [])))
+        return (avisos_fondo
                 + [f"fuente no encontrada: {f}"
                    for f in sorted(missing.values(), key=str.lower)]
                 + [f"directorio de fuentes ilegible: {d}"

@@ -259,3 +259,17 @@ def test_centering_floor_divides_an_odd_leftover_pixel():
     assert im.getpixel((74, 50)) == fg
     assert im.getpixel((75, 50)) == bg              # margen derecho: 26px (75..100)
     assert im.getpixel((100, 50)) == bg
+
+
+def test_warnings_still_answer_after_close():
+    """`close()` suelta el fondo, y warnings() lo leia directo: una llamada
+    despues de cerrar tiraba AttributeError. Importa porque warnings() es lo que
+    la bandeja pinta al abrir el menu -- o sea que corre en otro hilo que el que
+    baja el motor, y "el panel se cerro justo cuando abriste el menu" no puede ser
+    una excepcion. Los avisos del fondo cerrado se conservan: son el motivo por el
+    que quedo asi, justo cuando el usuario lo va a leer."""
+    r = Renderer(layout(background={"type": "image", "src": "no-existe.png"}))
+    antes = r.warnings()
+    assert any("no-existe.png" in w for w in antes)
+    r.close()
+    assert r.warnings() == antes
