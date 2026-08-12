@@ -36,7 +36,6 @@ BUNDLED = Path(__file__).resolve().parent.parent / "assets" / "fonts"
 MAX_CARAS = 16
 _EXTS = (".ttf", ".otf", ".ttc")
 _BOLD_HINTS = ("bold", "bd", "black", "heavy", "semibold")
-_EXPLICIT_NONBOLD_STYLES = ("regular", "normal", "book", "roman", "light", "medium")
 
 
 @dataclass(frozen=True)
@@ -165,17 +164,23 @@ class FontResolver:
 
     @staticmethod
     def _is_bold(style: str, stem: str) -> bool:
+        """Si esta cara es la variante bold de su familia.
+
+        **El estilo que declara la fuente decide; el nombre de archivo es solo el
+        plan B.** Si la fuente dice cualquier estilo -- "Regular", "Italic", "Light
+        Italic", "Semilight" -- se le cree: es bold solo si ese estilo lo dice. El
+        nombre de archivo se mira unicamente cuando no hay estilo.
+
+        Antes esto era una whitelist de match exacto ("regular", "light", ...), y por
+        eso "Regular Italic" no matcheaba nada y caia al heuristico del nombre: ahi un
+        "bd" por casualidad (ERASBD.TTF es "Eras Bold ITC" con estilo *Regular*,
+        webdings.ttf tiene "bd" adentro) marcaba la cara como bold y la familia perdia
+        su regular. La regla nueva no necesita enumerar los estilos que existen, que
+        era el problema de fondo.
+        """
         style_l = style.lower().strip()
-        # El style que reporta la propia fuente es mas confiable que el
-        # nombre de archivo. Si dice explicitamente que es la variante
-        # regular (ej. Webdings, o "Eras Bold ITC" cuyo *estilo* es
-        # "Regular" aunque el *nombre de familia* diga "Bold"), no lo
-        # pisamos por una coincidencia de substring en el archivo (ej.
-        # "ERASBD.TTF", "webdings.ttf" contienen "bd" por casualidad).
-        if style_l in _EXPLICIT_NONBOLD_STYLES:
-            return False
-        if any(h in style_l for h in _BOLD_HINTS):
-            return True
+        if style_l:
+            return any(h in style_l for h in _BOLD_HINTS)
         return any(h in stem.lower() for h in _BOLD_HINTS)
 
     def missing(self) -> set[str]:
@@ -202,13 +207,24 @@ class FontResolver:
             self._missing.add(font.family)
             cara = None
 
-        try:
-            if cara is not None:
-                resolved = cara.open(size)
-            else:
-                resolved = ImageFont.load_default(size)
-        except Exception:
-            resolved = ImageFont.load_default(size)
+        resolved = None
+        for intento in (lambda: cara.open(size) if cara is not None else None,
+                        lambda: ImageFont.load_default(size),
+                        # Ultimo recurso SIN size: load_default(size) de Pillow
+                        # moderno abre una fuente con truetype por dentro, asi que si
+                        # lo que falla es truetype -- un TTF corrupto, un disco de red
+                        # caido -- el fallback falla por la MISMA razon y la excepcion
+                        # se escapaba de resolve(), matando el render. La variante sin
+                        # size (load_default_imagefont en Pillow 12) devuelve el
+                        # bitmap incrustado y no abre ningun archivo.
+                        getattr(ImageFont, "load_default_imagefont",
+                                ImageFont.load_default)):
+            try:
+                resolved = intento()
+            except Exception:
+                resolved = None
+            if resolved is not None:
+                break
 
         self._cache[key] = resolved
         return resolved

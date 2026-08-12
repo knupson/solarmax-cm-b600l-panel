@@ -268,3 +268,32 @@ def test_the_substitution_that_was_used_is_reported(tmp_path):
     r.resolve(f)
     sust = r.substitutions()
     assert sust.get("NoExisteEnNingunaParte", "").lower().startswith("consol")
+
+
+def test_a_compound_regular_style_is_not_treated_as_bold():
+    """La whitelist era de match EXACTO, asi que "Regular Italic" no matcheaba
+    "regular" y caia al heuristico del nombre de archivo -- donde un "bd" por
+    casualidad la marca bold. Una familia podia perder su cara regular por el nombre
+    del archivo."""
+    assert FontResolver._is_bold("Regular Italic", "ERASBD") is False
+    assert FontResolver._is_bold("Italic", "ERASBD") is False
+    assert FontResolver._is_bold("Light Italic", "algobd") is False
+    # y lo que SI es bold sigue siendo bold, aunque venga acompanado
+    assert FontResolver._is_bold("Bold Italic", "cualquiera") is True
+    assert FontResolver._is_bold("Semibold Condensed", "x") is True
+
+
+def test_a_font_file_that_cannot_be_opened_falls_back_without_raising(tmp_path,
+                                                                     monkeypatch):
+    """La rama de fallo de ImageFont.truetype en resolve() estaba cubierta "por
+    lectura" y por nada mas. Es la que evita que un TTF que se corrompio DESPUES del
+    indexado -- o un disco de red que se cayo en el medio -- tumbe el render."""
+    r = FontResolver()
+    r.index()                                   # indexa con la fuente sana
+
+    def truetype_roto(*a, **kw):
+        raise OSError("el archivo se fue")
+
+    monkeypatch.setattr(ImageFont, "truetype", truetype_roto)
+    f = r.resolve(Font("Consolas", 20))
+    assert f is not None                        # cayo al default de PIL, no levanto

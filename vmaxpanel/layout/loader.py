@@ -64,6 +64,12 @@ def _background_dict(bg) -> dict:
     permitidas = schema.BACKGROUND_KEYS.get(bg.type)
     if permitidas is None:
         permitidas = {"type", "color"}
+    if bg.type == "gradient":
+        # El validador ACEPTA color en un gradient (por tolerancia, ver
+        # BACKGROUND_KEYS) pero el modelo no lo lee: emitirlo agrega al archivo una
+        # clave que el usuario no escribio y que no hace nada. La tolerancia al leer
+        # no obliga a ensuciar al escribir.
+        permitidas = permitidas - {"color"}
     out = {"type": bg.type}
     for clave in sorted(permitidas - {"type"}):
         valor = getattr(bg, clave, None)

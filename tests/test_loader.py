@@ -276,3 +276,76 @@ def test_to_dict_keeps_the_fallback_chain(tmp_path):
     assert d["fonts"]["mono-14"]["fallbacks"] == ["Courier New"]
     assert "fallbacks" not in d["fonts"]["mono-bold-60"]     # sin cadena, sin clave
     assert schema.validate(d) == []
+
+
+# --- round-trip de todos los tipos, no de una muestra ---
+
+
+def _con(widgets=None, background=None):
+    raw = copy.deepcopy(MINIMAL)
+    if widgets is not None:
+        raw["widgets"] = widgets
+    if background is not None:
+        raw["background"] = background
+    return raw
+
+
+def test_every_widget_type_survives_a_round_trip(tmp_path):
+    """arc, graph e image no los round-trippeaba ningun test: el reviewer de fase 1 los
+    verifico A MANO y quedo anotado como minor. Un campo que se pierda al guardar
+    (paso: _is_default descartaba el color de un text) no lo nota nadie hasta que el
+    perfil vuelve distinto."""
+    widgets = [
+        {"id": "a", "type": "arc", "metric": "cpu.load", "x": 40, "y": 40, "r": 30,
+         "start_angle": 135.0, "sweep": 270.0, "fill": "#FF4D00",
+         "track": "#241812", "thickness": 8, "min": 0.0, "max": 100.0},
+        {"id": "g", "type": "graph", "metric": "cpu.load", "x": 10, "y": 100,
+         "w": 200, "h": 40, "color": "#FF4D00", "track": "#241812", "samples": 60,
+         "min": 0.0, "max": 100.0},
+        {"id": "i", "type": "image", "src": "logo.png", "x": 5, "y": 5,
+         "w": 32, "h": 32},
+        {"id": "r", "type": "rect", "x": 0, "y": 200, "w": 100, "h": 2,
+         "fill": "#3A2418"},
+    ]
+    raw = _con(widgets=widgets)
+    assert schema.validate(raw) == [], schema.validate(raw)
+    p = tmp_path / "p.json"
+    loader.save_raw(raw, p)
+    vuelta = json.loads(p.read_text(encoding="utf-8"))
+    assert schema.validate(vuelta) == []
+    for original in widgets:
+        guardado = next(w for w in vuelta["widgets"] if w["id"] == original["id"])
+        for k, v in original.items():
+            assert guardado[k] == v, f"{original['id']}.{k}: {guardado.get(k)!r} != {v!r}"
+
+
+def test_every_background_type_survives_a_round_trip(tmp_path):
+    fondos = [
+        {"type": "solid", "color": "#0A0705"},
+        {"type": "gradient", "angle": 90,
+         "stops": [{"at": 0.0, "color": "#000000"}, {"at": 1.0, "color": "#FFFFFF"}]},
+        {"type": "image", "src": "back.png", "fit": "cover", "color": "#000000"},
+        {"type": "sequence", "src": "cuadros", "fit": "cover", "fps": 12.5,
+         "color": "#000000"},
+        {"type": "video", "src": "loop.mp4", "fit": "contain", "fps": 30,
+         "color": "#07080B"},
+        {"type": "procedural", "name": "scroll", "speed": 150, "angle": 90,
+         "stops": [{"at": 0.0, "color": "#0A0705"}, {"at": 1.0, "color": "#6B2408"}]},
+    ]
+    for fondo in fondos:
+        raw = _con(background=fondo)
+        assert schema.validate(raw) == [], f"{fondo['type']}: {schema.validate(raw)}"
+        p = tmp_path / f"{fondo['type']}.json"
+        loader.save_raw(raw, p)
+        vuelta = json.loads(p.read_text(encoding="utf-8"))
+        assert vuelta["background"] == fondo, fondo["type"]
+
+        # Por el modelo -- el otro camino de serializacion -- el invariante es NO
+        # PERDER nada y seguir siendo valido, no "no agregar nada": to_dict sale del
+        # modelo, que tiene defaults (period=6.0), y no puede distinguir "ausente" de
+        # "igual al default". Perder un campo es un bug; emitir un default explicito
+        # es ruido, y el JSON que el usuario abre lo escribe save_raw, no este camino.
+        del_modelo = loader.to_dict(schema.build(raw))["background"]
+        for k, v in fondo.items():
+            assert del_modelo[k] == v, f"{fondo['type']}.{k} se perdio o cambio"
+        assert schema.validate(_con(background=del_modelo)) == [], fondo["type"]
