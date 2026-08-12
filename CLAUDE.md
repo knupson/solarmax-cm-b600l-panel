@@ -65,8 +65,8 @@ métodos de lectura.** No agregar escrituras sin saber exactamente a qué regist
 ## Estado
 
 **Fase 1 de VMax Panel implementada y revisada** (2026-08-11, rama
-`fase1-motor-data-driven`, 198 tests verdes; el widget `rect` y los separadores del perfil
-entraron después de la revisión inicial). El paquete `vmaxpanel/` reemplaza el layout
+`fase1-motor-data-driven`, 209 tests verdes; el widget `rect`, los separadores del perfil y los
+5 fixes de la revisión final entraron después de la revisión inicial). El paquete `vmaxpanel/` reemplaza el layout
 hardcodeado de `daemon/panel.py` por un motor manejado por datos. Verificado contra el panel
 real: muestra el layout nuevo y editar el perfil se refleja sin reiniciar.
 
@@ -83,12 +83,35 @@ Al retomar, leer en este orden:
 
 ### Pendiente
 
-- **La revisión final de toda la rama no se corrió** — último paso antes de cerrar la fase.
-- **Flake preexistente** en `tests/test_loader.py::test_store_recovers_after_user_fixes_the_file`
-  (1 de ~6 corridas de la suite completa). `ProfileStore.reload_if_changed()` detecta cambios
-  solo por `st_mtime_ns`: si dos escrituras caen en el mismo tick del filesystem, la segunda se
-  pierde. No es solo del test — es un agujero real del hot-reload. Sumar tamaño al criterio, o
-  releer cuando el mtime es igual al de la última lectura fallida.
+Revisión final de la rama corrida (nivel high, 30 commits / 47 archivos). Los 5 hallazgos que
+rompían invariantes documentados están arreglados en `89fb271`. Los que quedaron, con el
+diagnóstico ya hecho y verificado:
+
+- **`registry.py:64` — no hay failover entre providers.** Cuando el provider dueño de una
+  métrica falla, `read()` la marca degradada y hace `continue`; el de menor prioridad que sirve
+  la misma métrica queda salteado por `self._resolution.get(mid) != p.id`. `cpu.clock` y
+  `cpu.name` los sirven `pdh` y `psutil`: si cae pdh, van a `--` con psutil vivo al lado.
+  Arreglo: recalcular la resolución cuando el dueño se degrada.
+- **`sidecar.py:88` — `close()` puede dejar el `powershell.exe` huérfano** que el docstring del
+  módulo dice que evita. Hace `terminate()` sin `wait()`, así que un caller que borra el
+  directorio enseguida todavía puede pegar contra el lock de `LibreHardwareMonitorLib.dll`. Y
+  hay carrera: si `close()` cae entre el chequeo de `_stop` y el `_spawn()` de `_run`, mata el
+  proceso viejo, el thread levanta uno nuevo y sale por el `return` sin matarlo. El `_proc` y
+  su `stdout` tampoco se cierran ni se cosechan entre reinicios.
+- **`engine.py:129` — el engine no vuelve a leer el perfil mientras no tiene layout válido.**
+  `_connect` tira `OSError` cuando `store.current is None`, y `reload_if_changed()` solo se
+  llama desde `_refresh_layout`, que solo corre dentro de `_serve()`. Arrancado con un perfil
+  inválido gira en el backoff para siempre y nunca levanta el archivo arreglado. En fase 3
+  (servicio que arranca antes de que el perfil exista) es el caso normal.
+- **`schema.py:173` — `panel.rotate` 90/270 valida en un panel no cuadrado.** Con `rotate: 90`
+  sobre el perfil 320x1480, `to_jpeg` emite un JPEG 1480x320 y `send_frame` lo escribe sin
+  chistar: basura en el panel, cero errores. Cruzar `rotate` contra `designed_for` o la
+  geometría del link.
+- **Flake** en `tests/test_loader.py::test_store_recovers_after_user_fixes_the_file` (1 de ~6
+  corridas de la suite completa). `ProfileStore.reload_if_changed()` detecta cambios solo por
+  `st_mtime_ns`: si dos escrituras caen en el mismo tick del filesystem, la segunda se pierde.
+  No es solo del test — es un agujero real del hot-reload. Sumar tamaño al criterio, o releer
+  cuando el mtime es igual al de la última lectura fallida.
 - Fases 2 (fondos animados) y 3 (servicio + tray + editor) no tienen plan todavía. El de
   fase 2 arranca con un spike de throughput: cuántos fps traga el panel decide todo lo demás.
 - **Autostart pendiente**: la tarea `PanelVitals` (ver README, sección Autostart) todavía no
