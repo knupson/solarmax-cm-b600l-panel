@@ -72,3 +72,16 @@ def test_the_tray_does_not_open_a_second_editor(monkeypatch):
     lanzados[0].vivo = False          # el usuario lo cerro
     t._default_editor()
     assert len(lanzados) == 2, "no volvio a abrir despues de que se cerro"
+
+
+def test_the_icon_asset_ships_and_has_a_small_size_layer():
+    """Windows toma la capa que mas se acerca al tamano pedido. Sin una capa
+    de 16 px reduce la de 256 y en la bandeja queda un borron gris -- que es
+    como se veia antes, un espacio en blanco."""
+    from PIL import Image
+    assert tray.ICONO.exists(), f"falta el asset {tray.ICONO}"
+    with Image.open(tray.ICONO) as im:
+        tamanos = set(im.info.get("sizes", []))
+    assert (16, 16) in tamanos
+    assert (32, 32) in tamanos
+    assert (256, 256) in tamanos

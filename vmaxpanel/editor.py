@@ -258,6 +258,14 @@ class EditorWindow:
         self.state = state
         self.root = tk.Tk()
         self.root.title(f"VMax Panel — {state.path.name}")
+        # El mismo icono que la bandeja, para que la ventana no salga con el
+        # generico de Python en la barra de tareas. Si falta, no pasa nada.
+        try:
+            icono = Path(__file__).resolve().parent / "assets" / "vmaxpanel.ico"
+            if icono.exists():
+                self.root.iconbitmap(default=str(icono))
+        except Exception:
+            pass
         self._preview_img = None
         self._fields = {}
         self._build()

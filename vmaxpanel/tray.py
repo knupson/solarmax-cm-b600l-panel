@@ -37,6 +37,10 @@ NIF_MESSAGE, NIF_ICON, NIF_TIP = 0x01, 0x02, 0x04
 IDI_APPLICATION = 32512
 IMAGE_ICON = 1
 LR_DEFAULTSIZE = 0x0040
+LR_LOADFROMFILE = 0x0010
+SM_CXSMICON, SM_CYSMICON = 49, 50
+
+ICONO = Path(__file__).resolve().parent / "assets" / "vmaxpanel.ico"
 
 MF_STRING, MF_SEPARATOR, MF_GRAYED, MF_CHECKED = 0x0000, 0x0800, 0x0001, 0x0008
 TPM_RIGHTBUTTON = 0x0002
@@ -150,6 +154,21 @@ class Tray:
             raise OSError("no se pudo crear la ventana oculta de la bandeja")
 
     def _icon(self):
+        """El icono propio, y si falta, el genérico de Windows.
+
+        Se pide al tamano exacto de icono chico (SM_CXSMICON) en vez de
+        LR_DEFAULTSIZE: el default carga la capa de 32 px y deja que Windows
+        la reduzca, y a 16 px eso convierte las barras en un gris ilegible. El
+        .ico trae una capa dibujada para cada resolucion justamente para esto.
+        """
+        if ICONO.exists():
+            cx = user32.GetSystemMetrics(SM_CXSMICON) or 16
+            cy = user32.GetSystemMetrics(SM_CYSMICON) or 16
+            ruta = ctypes.cast(ctypes.c_wchar_p(str(ICONO)), ctypes.c_void_p)
+            h = user32.LoadImageW(None, ruta, IMAGE_ICON, cx, cy,
+                                  LR_LOADFROMFILE)
+            if h:
+                return h
         # IDI_APPLICATION es un id numerico donde la API espera un puntero a
         # nombre (MAKEINTRESOURCE): va como c_void_p, no como int.
         return user32.LoadImageW(None, ctypes.c_void_p(IDI_APPLICATION),
