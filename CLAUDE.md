@@ -147,11 +147,14 @@ en el mensaje de esos dos commits, que es el lugar donde buscarlo si algo se rom
   de sostener cada cadencia: 0,6% de un núcleo a 1 fps, 5,9% a 10, 17% a 30, 37% a 60. El
   validador topa `panel.fps` en 60. Para fondos animados conviene 30 por defecto: la mitad del
   costo y el salto perceptual de 30 a 60 en este panel es chico.
-- **Verificación visual pendiente:** el ícono de la bandeja y la ventana del editor no se
-  llegaron a mirar en pantalla — la máquina se bloqueó y en un escritorio bloqueado la captura
-  sale negra y `FindWindow` no enumera las ventanas del escritorio del usuario. Lo funcional sí
-  está verificado (la tarea levanta la bandeja, el motor toma COM3, el editor construye y
-  guarda).
+- **Verificación visual HECHA** (2026-08-12): el ícono está en la barra —comparado píxel a
+  píxel con `vmaxpanel.ico`— y la ventana del editor se capturó entera. De ahí salieron tres
+  bugs del ícono (ver el commit de la bandeja) y el tamaño inicial del editor.
+  **Dos trampas para capturar pantalla acá:** el origen de la pantalla virtual es `(0,-1080)`
+  —hay dos monitores, el primario NO es el de arriba— así que recortar como si fuera `(0,0)`
+  captura la barra del otro monitor y parece que no hay ningún ícono. Y para una ventana tapada
+  hay que usar `PrintWindow(hwnd, dc, PW_RENDERFULLCONTENT)`, que no la trae al frente y no
+  interrumpe al usuario.
 - El editor ya tiene arrastrar-y-soltar sobre la vista previa (con undo), pestañas de
   `fonts`/`background` y reglas de color. Lo que queda sin UI se edita en el JSON, que la
   bandeja abre con un clic.

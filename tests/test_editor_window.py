@@ -718,3 +718,28 @@ def test_the_choose_button_appears_only_for_backgrounds_with_a_file(ventana):
     ventana._on_pick_bg_type()
     ventana.root.update()
     assert hay_boton()
+
+
+def test_the_window_opens_big_enough_to_see_the_preview(ventana):
+    """Al abrir, la ventana venia con el tamano que Tkinter le diera: la lista de
+    widgets y las propiedades se comian el ancho y la vista previa quedaba en una
+    tirita de ~60 px para un panel de 320x1480. El usuario ya se habia quejado de ver
+    todo en miniatura y lo arregle para cuando MAXIMIZAS -- pero recien abierta seguia
+    mal, que es el 100% de las veces que se abre."""
+    ventana.root.update()
+    alto_pantalla = ventana.root.winfo_screenheight()
+    pedido = ventana._geometria_inicial(1920, alto_pantalla)
+    ancho, alto = (int(v) for v in pedido.split("+")[0].split("x"))
+    assert alto >= min(900, int(alto_pantalla * 0.8)), pedido
+    assert ancho >= 1000, pedido
+    # y no mas grande que la pantalla, que dejaria los botones del pie fuera de vista
+    assert alto <= alto_pantalla
+    assert ancho <= 1920
+
+
+def test_the_initial_size_fits_a_small_screen(ventana):
+    """En una pantalla de notebook 1366x768 no puede pedir 950 de alto: la barra de
+    acciones quedaria abajo del borde y no habria como guardar."""
+    pedido = ventana._geometria_inicial(1366, 768)
+    ancho, alto = (int(v) for v in pedido.split("+")[0].split("x"))
+    assert ancho <= 1366 and alto <= 768

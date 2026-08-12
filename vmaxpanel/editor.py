@@ -852,7 +852,32 @@ class EditorWindow:
         # _aplicar_pendientes().
         self._pendientes = set()
         self._build()
+        # El tamano inicial se pide explicito: sin esto Tkinter le da el minimo que
+        # necesitan los controles, la lista de widgets y las propiedades se comen el
+        # ancho, y la vista previa de un panel 320x1480 queda en una tirita de ~60 px.
+        # La escala responsive ya arreglaba el caso de maximizar; esto arregla el de
+        # abrir, que es el 100% de las veces.
+        self.root.geometry(self._geometria_inicial(
+            self.root.winfo_screenwidth(), self.root.winfo_screenheight()))
         self._refresh(select_first=True)
+
+    # Lo que necesita cada columna: la izquierda (lista + propiedades + mover) y la
+    # vista previa de un panel vertical con algo de aire. Medidos sobre la ventana real.
+    ANCHO_CONTROLES = 700
+    ANCHO_PREVIEW = 420
+
+    @staticmethod
+    def _geometria_inicial(ancho_pantalla, alto_pantalla) -> str:
+        """El "WxH" con el que conviene abrir, acotado a la pantalla.
+
+        Acotado y no fijo: en una notebook 1366x768 pedir 1200x950 deja la barra de
+        acciones abajo del borde, o sea sin forma de guardar. El 85% deja lugar para la
+        barra de tareas.
+        """
+        ancho = min(EditorWindow.ANCHO_CONTROLES + EditorWindow.ANCHO_PREVIEW,
+                    int(ancho_pantalla * 0.9))
+        alto = min(950, int(alto_pantalla * 0.85))
+        return f"{max(900, ancho)}x{max(600, alto)}"
 
     # --- construccion ---
 
