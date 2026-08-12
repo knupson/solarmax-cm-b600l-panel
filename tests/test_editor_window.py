@@ -113,3 +113,31 @@ def test_saving_from_the_window_persists(ventana):
     en_disco = json.loads(ventana.state.path.read_text(encoding="utf-8"))
     assert [w for w in en_disco["widgets"]
             if w["id"] == "cpu-load"][0]["color"] == "#00FF00"
+
+
+def test_a_real_mouse_click_on_the_list_selects_that_widget(ventana):
+    """El camino del usuario, con un clic de verdad en vez de un
+    <<ListboxSelect>> sintetico.
+
+    Importa la diferencia: event_generate de un evento virtual NO se despacha
+    si la ventana todavia no esta mapeada, asi que un test que solo usa el
+    evento sintetico pasa o no segun cuando se llamo a update() -- y una
+    verificacion a mano con ese metodo me hizo creer que el fix no andaba
+    cuando en realidad andaba.
+    """
+    ventana.lista.selection_clear(0, "end")
+    ventana.lista.see(0)
+    ventana.root.update()
+
+    fila = ventana.state.widget_ids().index("cpu-load")
+    ventana.lista.see(fila)
+    ventana.root.update()
+    caja = ventana.lista.bbox(fila)
+    assert caja is not None, "la fila no esta visible; see() no alcanzo"
+    x, y = caja[0] + 5, caja[1] + 2
+    ventana.lista.event_generate("<Button-1>", x=x, y=y)
+    ventana.lista.event_generate("<ButtonRelease-1>", x=x, y=y)
+    ventana.root.update()
+
+    assert ventana._selected() == "cpu-load"
+    assert ventana._fields["metric"].get() == "cpu.load"
