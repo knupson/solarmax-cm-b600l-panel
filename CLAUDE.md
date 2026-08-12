@@ -53,14 +53,15 @@ cd E:\Claude\Solarmax_Display\daemon
 python panel.py --save preview.png     # previsualizar sin tocar el panel
 ```
 
-**`stop.ps1` no conoce al motor nuevo:** barre por línea de comandos contra
-`panel\.py|sensors\.ps1`, así que mata el sidecar nuevo (`vmaxpanel/sensors.ps1` matchea) pero
-deja vivo el proceso `-m vmaxpanel`. Para ese, matar el `python.exe` correspondiente.
+**Para bajar el panel: `python -m vmaxpanel --parar`.** Detiene la tarea (si no, vuelve al
+siguiente logon), mata la bandeja/motor y mata el sidecar. `daemon/stop.ps1` **no sirve para el
+motor nuevo** —barre contra `panel\.py|sensors\.ps1`, así que se lleva el sidecar pero deja vivo
+el proceso `-m vmaxpanel`— y **no se puede arreglar**: `daemon/` es la vuelta atrás
+byte-idéntica.
 
-**Trampa recurrente:** un `powershell.exe` corriendo `sensors.ps1` que sobrevive al daemon
-se queda con `LibreHardwareMonitorLib.dll` tomado y bloquea mover o borrar el directorio.
-Filtrar procesos por `StartTime` no alcanza — usar `stop.ps1`, que barre por línea de
-comandos.
+**Trampa recurrente:** un `powershell.exe` corriendo `sensors.ps1` que sobrevive se queda con
+`LibreHardwareMonitorLib.dll` tomado y bloquea mover o borrar el directorio. Filtrar procesos por
+`StartTime` no alcanza — hay que barrer por línea de comandos, que es lo que hace `--parar`.
 
 ## Seguridad
 
@@ -171,9 +172,8 @@ Ver README, sección "Instalación y autostart". **No la reemplaza un servicio d
 diseño original** — un servicio corre en la sesión 0 y desde ahí no se puede mostrar ni un ícono
 de bandeja ni una ventana. Ver el spec de fase 3.
 
-**Con el autostart puesto, `stop.ps1` alcanza todavía menos:** además de no conocer al proceso
-de la bandeja, la tarea lo levanta de nuevo al siguiente logon. Para bajarlo de verdad,
-`Stop-ScheduledTask PanelVitals` y matar el `pythonw.exe`.
+**Con el autostart puesto, bajar el proceso no alcanza:** la tarea lo levanta de nuevo al
+siguiente logon. `--parar` hace las dos cosas.
 
 ### Nunca dejar una corrida de tests en background sin confirmar que murió
 
