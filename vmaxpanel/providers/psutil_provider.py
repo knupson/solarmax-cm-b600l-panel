@@ -79,6 +79,10 @@ class PsutilProvider(Provider):
     def _net_rate(self):
         c = psutil.net_io_counters()
         now = time.time()
+        # max(0.2, ...): la primera lectura puede caer a microsegundos de la
+        # linea base tomada en __init__, y dividir por un dt de ~0 convierte
+        # cualquier diferencia de bytes en una tasa absurda de gigabytes por
+        # segundo. Es una guarda contra la division, no una cadencia.
         dt = max(0.2, now - self._prev[2])
         down = (c.bytes_recv - self._prev[0]) / dt
         up = (c.bytes_sent - self._prev[1]) / dt
