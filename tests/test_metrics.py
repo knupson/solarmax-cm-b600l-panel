@@ -51,3 +51,34 @@ def test_mem_speed_is_a_known_metric():
     assert is_metric("mem.speed")
     spec = metrics.spec_for("mem.speed")
     assert spec.kind == "number" and spec.unit == "MT/s"
+
+
+# --- cpu.name_short: el nombre de CPU sin la basura de marketing ---
+
+def test_short_cpu_name_on_real_strings():
+    """Casos reales, no inventados: lo que devuelve Win32_Processor.Name en
+    distintas maquinas. El objetivo es familia + modelo, que es lo que sirve
+    en un panel de 320 px de ancho."""
+    casos = [
+        ("12th Gen Intel(R) Core(TM) i5-12400F", "Core i5-12400F"),
+        ("Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz", "Core i7-9750H"),
+        ("13th Gen Intel(R) Core(TM) i9-13900K", "Core i9-13900K"),
+        ("AMD Ryzen 5 5600X 6-Core Processor", "Ryzen 5 5600X"),
+        ("AMD Ryzen 9 7950X3D 16-Core Processor", "Ryzen 9 7950X3D"),
+        ("Intel(R) Xeon(R) E-2288G CPU @ 3.70GHz", "Xeon E-2288G"),
+    ]
+    for crudo, esperado in casos:
+        assert metrics.short_cpu_name(crudo) == esperado, crudo
+
+
+def test_short_cpu_name_leaves_an_unknown_string_usable():
+    """Un nombre que no matchea ningun patron no puede quedar vacio: mejor
+    el original que un hueco en el panel."""
+    assert metrics.short_cpu_name("Cortex-A72") == "Cortex-A72"
+    assert metrics.short_cpu_name("") == ""
+    assert metrics.short_cpu_name(None) is None
+
+
+def test_cpu_name_short_is_a_registered_text_metric():
+    assert is_metric("cpu.name_short")
+    assert metrics.spec_for("cpu.name_short").kind == "text"

@@ -12,7 +12,7 @@ GOLDEN = Path("tests/golden/vitals.png")
 
 SAMPLE = {
     "clock.time": "14:32", "clock.date": "LUN 11 AGO",
-    "cpu.name": "INTEL CORE i5-12400F", "cpu.load": 55.5, "cpu.temp": 48.0,
+    "cpu.name": "INTEL CORE i5-12400F", "cpu.name_short": "Core i5-12400F", "cpu.load": 55.5, "cpu.temp": 48.0,
     "cpu.clock": 4080.0, "cpu.vcore": 1.05, "cpu.vrm_temp": 41.0,
     "cpu.power": UNAVAILABLE, "cpu.fan": UNAVAILABLE,
     "gpu.name": "AMD RADEON RX 6800 XT", "gpu.load": 23.0, "gpu.temp": 51.0,

@@ -9,6 +9,7 @@ import time
 
 import psutil
 
+from ..metrics import short_cpu_name
 from .base import Provider
 
 DIAS = ["LUN", "MAR", "MIE", "JUE", "VIE", "SAB", "DOM"]
@@ -16,7 +17,7 @@ MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO",
          "SEP", "OCT", "NOV", "DIC"]
 
 _SERVED = {
-    "cpu.name", "cpu.load", "cpu.clock",
+    "cpu.name", "cpu.name_short", "cpu.load", "cpu.clock",
     "mem.load", "mem.used", "mem.total",
     "net.down", "net.up",
     "clock.time", "clock.date",
@@ -46,6 +47,12 @@ class PsutilProvider(Provider):
         freq = psutil.cpu_freq()
         return {
             "cpu.name": self._cpu_name.upper(),
+            # platform.processor() en Windows da "Intel64 Family 6 Model
+            # 151..." -- sin modelo que acortar. short_cpu_name() devuelve el
+            # original cuando no encuentra nada que sacar, asi que el widget
+            # muestra algo en vez de un hueco. El nombre lindo lo sirve el
+            # sidecar por PDH, que tiene mas prioridad que este provider.
+            "cpu.name_short": short_cpu_name(self._cpu_name).upper(),
             "cpu.load": psutil.cpu_percent(interval=None),
             "cpu.clock": float(freq.current) if freq else None,
             "mem.load": vm.percent,

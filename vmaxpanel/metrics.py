@@ -47,6 +47,7 @@ def _t(mid, label):
 
 METRICS: dict[str, MetricSpec] = {m.id: m for m in [
     _t("cpu.name", "Modelo de CPU"),
+    _t("cpu.name_short", "Modelo de CPU (corto)"),
     _n("cpu.load", "Carga de CPU", "%", 0.0, 100.0),
     _n("cpu.temp", "Temperatura de CPU", "°C", 0.0, 110.0),
     _n("cpu.clock", "Clock de CPU", "MHz", 0.0, 6000.0),
@@ -81,6 +82,42 @@ DISK_TEMP_SPEC = _n("disk.temp.N", "Temperatura de disco", "°C", 0.0, 100.0)
 
 def disk_metric(n: int) -> str:
     return f"disk.temp.{n}"
+
+
+# Basura de marketing en Win32_Processor.Name, en el orden en que se saca.
+# Todo generico: nada de "12th Gen" a mano, porque el perfil se comparte y la
+# regla tiene que servir en la maquina de cualquiera.
+_CPU_RUIDO = [
+    re.compile(r"\((?:R|TM|tm|C)\)"),            # (R) (TM) (C)
+    re.compile(r"[®™©]"),
+    re.compile(r"^\s*\d+(?:th|st|nd|rd)\s+Gen\s+", re.I),   # "12th Gen "
+    re.compile(r"\s*\bCPU\b\s*@.*$", re.I),      # " CPU @ 2.60GHz"
+    re.compile(r"\s*@.*$"),                      # " @ 3.70GHz" sin la palabra CPU
+    re.compile(r"\s*\b\d+-Core\b", re.I),        # " 6-Core"
+    re.compile(r"\s*\bProcessor\b", re.I),
+    re.compile(r"\b(?:Intel|AMD|Genuine\s*Intel|AuthenticAMD)\b", re.I),
+]
+
+
+def short_cpu_name(name):
+    """"12th Gen Intel(R) Core(TM) i5-12400F" -> "Core i5-12400F".
+
+    Deja familia + modelo, que es lo que cabe y lo que sirve en un panel de
+    320 px. Simetrico entre marcas: Intel queda "Core i5-12400F" y AMD queda
+    "Ryzen 5 5600X" -- en los dos casos la palabra de familia se conserva
+    porque es parte de como se llama el producto.
+
+    Un nombre que no matchea ningun patron se devuelve tal cual: mejor el
+    original largo que un hueco en el panel. None y "" pasan derecho para no
+    inventar un valor donde el provider no trajo dato.
+    """
+    if not isinstance(name, str) or not name.strip():
+        return name
+    s = name
+    for patron in _CPU_RUIDO:
+        s = patron.sub(" ", s)
+    s = re.sub(r"\s+", " ", s).strip(" ,;-")
+    return s or name
 
 
 def is_metric(mid) -> bool:

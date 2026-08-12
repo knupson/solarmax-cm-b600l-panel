@@ -69,7 +69,7 @@ def test_close_terminates_the_process():
 def test_providers_serve_their_own_namespace_only():
     c, _ = client_for(SAMPLE)
     assert Gsa1Provider(c).metrics() == {"cpu.temp", "cpu.vrm_temp", "cpu.vcore"}
-    assert PdhProvider(c).metrics() == {"cpu.clock", "cpu.name"}
+    assert PdhProvider(c).metrics() == {"cpu.clock", "cpu.name", "cpu.name_short"}
     lhm = LhmProvider(c).metrics()
     assert {"gpu.load", "gpu.temp", "disk.temp.0", "disk.temp.1"} <= lhm
     assert "cpu.temp" not in lhm
@@ -264,3 +264,21 @@ def test_close_does_not_leave_the_reader_thread_sleeping_out_the_backoff(monkeyp
     c.close()
     assert c._thread is not None
     assert not c._thread.is_alive(),         f"el hilo sigue durmiendo el backoff {time.time() - t0:.1f}s despues de close()"
+
+
+def test_pdh_provider_derives_the_short_cpu_name():
+    """La regla vive en Python y no en sensors.ps1: el sidecar sigue
+    emitiendo el nombre crudo y el provider deriva el corto. Asi la logica
+    tiene tests y no hay que duplicarla en PowerShell."""
+    c, _ = client_for({**SAMPLE, "pdh": {"cpu.clock": 4080,
+                                         "cpu.name": "12th Gen Intel(R) Core(TM) i5-12400F"}})
+    p = PdhProvider(c)
+    assert "cpu.name_short" in p.metrics()
+    muestra = p.read()
+    assert muestra["cpu.name"] == "12th Gen Intel(R) Core(TM) i5-12400F"
+    assert muestra["cpu.name_short"] == "Core i5-12400F"
+
+
+def test_the_short_name_is_absent_when_there_is_no_name():
+    c, _ = client_for({**SAMPLE, "pdh": {"cpu.clock": 4080}})
+    assert PdhProvider(c).read().get("cpu.name_short") is None

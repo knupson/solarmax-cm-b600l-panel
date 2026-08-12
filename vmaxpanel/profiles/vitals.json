@@ -18,7 +18,7 @@
     {"id": "date", "type": "text", "metric": "clock.date", "x": 24, "y": 104, "font": "caption", "color": "#898781", "format": "{}"},
     {"id": "cpu-rule", "type": "rect", "x": 24, "y": 164, "w": 272, "h": 1, "fill": "#242834"},
     {"id": "cpu-hdr", "type": "label", "text": "CPU", "x": 24, "y": 198, "font": "section", "color": "#FFFFFF"},
-    {"id": "cpu-name", "type": "text", "metric": "cpu.name", "x": 24, "y": 230, "font": "tag", "color": "#898781", "format": "{}"},
+    {"id": "cpu-name", "type": "text", "metric": "cpu.name_short", "x": 24, "y": 230, "font": "tag", "color": "#898781", "format": "{}"},
     {"id": "cpu-load", "type": "text", "metric": "cpu.load", "x": 20, "y": 248, "font": "big", "color": "#FFFFFF", "format": "{:.1f}%", "rules": [{"when": "> 90", "color": "#FF5555"}]},
     {"id": "cpu-bar", "type": "bar", "metric": "cpu.load", "x": 24, "y": 316, "w": 272, "h": 16, "radius": 5, "fill": "#3987E5", "track": "#242834"},
     {"id": "cpu-temp-tag", "type": "label", "text": "TEMP", "x": 22, "y": 362, "font": "tag", "color": "#898781"},

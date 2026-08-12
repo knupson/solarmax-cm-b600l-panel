@@ -1,4 +1,5 @@
 """Providers que leen del mismo SidecarClient, cada uno su namespace."""
+from ..metrics import short_cpu_name
 from .base import Provider
 from .sidecar import STALE_AFTER
 
@@ -55,10 +56,25 @@ class Gsa1Provider(_SidecarProvider):
 
 
 class PdhProvider(_SidecarProvider):
+    """Clock real de CPU y modelo, con el nombre corto derivado aca.
+
+    `cpu.name_short` se calcula en Python y no en sensors.ps1 a proposito: la
+    regla de que sacar de "12th Gen Intel(R) Core(TM) i5-12400F" tiene tests
+    (ver metrics.short_cpu_name) y no hay por que duplicarla en PowerShell,
+    donde ademas quedaria sin cobertura.
+    """
+
     id = "pdh"
     namespace = "pdh"
-    served = {"cpu.clock", "cpu.name"}
+    served = {"cpu.clock", "cpu.name", "cpu.name_short"}
     reason = "no se pudo leer el contador PDH % Processor Performance"
+
+    def read(self):
+        muestra = super().read()
+        nombre = muestra.get("cpu.name")
+        if nombre is not None:
+            muestra["cpu.name_short"] = short_cpu_name(nombre)
+        return muestra
 
 
 class SmbiosProvider(_SidecarProvider):

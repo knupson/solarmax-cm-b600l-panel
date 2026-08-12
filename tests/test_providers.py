@@ -33,3 +33,15 @@ def test_psutil_clock_and_date_are_strings():
     sample = PsutilProvider().read()
     assert len(sample["clock.time"]) == 5 and sample["clock.time"][2] == ":"
     assert isinstance(sample["clock.date"], str)
+
+
+def test_psutil_also_serves_the_short_cpu_name():
+    """psutil es el respaldo cuando el sidecar se cae, asi que tiene que
+    servir las mismas metricas de nombre. platform.processor() en Windows
+    devuelve "Intel64 Family 6 Model 151...", que no tiene modelo: el corto
+    no puede quedar vacio ni desaparecer."""
+    p = PsutilProvider()
+    assert "cpu.name_short" in p.metrics()
+    muestra = p.read()
+    assert isinstance(muestra["cpu.name_short"], str)
+    assert muestra["cpu.name_short"]
