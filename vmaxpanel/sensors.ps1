@@ -110,7 +110,19 @@ while ($true) {
                 }
                 'Storage' {
                     $t = Sensor $hw 'Temperature' 'Temperature'
-                    if ($null -ne $t) { $l."disk.temp.$disk" = $t; $disk++; $lhmOk = $true }
+                    # El indice sale de la POSICION del disco en la enumeracion,
+                    # no de cuantos contestaron. Antes se incrementaba solo
+                    # cuando habia lectura, asi que un SSD que falla una vuelta
+                    # CORRIA el indice de todos los que venian despues: los tres
+                    # numeros del panel cambiaban de significado entre muestras
+                    # sin que nada avisara. La clave se emite siempre, con null
+                    # si esta vuelta no hubo temperatura, para que el conjunto de
+                    # ids sea estable -- LhmProvider.served los descubre de la
+                    # primera muestra y un disco ausente ahi no volvia a
+                    # aparecer nunca.
+                    $l."disk.temp.$disk" = $t
+                    if ($null -ne $t) { $lhmOk = $true }
+                    $disk++
                 }
             }
         }

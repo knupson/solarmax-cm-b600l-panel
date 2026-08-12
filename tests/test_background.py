@@ -125,7 +125,10 @@ def test_frame_is_cached_and_returns_a_copy():
     s = src(model.Background(type="solid", color="#101010"))
     a, b = s.frame(), s.frame()
     assert a is not b                                  # mutar uno no ensucia el cache
-    assert list(a.getdata()) == list(b.getdata())
+    # tobytes() y no getdata(): getdata() esta deprecada desde Pillow 12 y se
+    # va en la 14, y su DeprecationWarning era la unica salida sucia de la
+    # corrida de tests.
+    assert a.tobytes() == b.tobytes()
 
 
 def test_repeated_frame_calls_do_not_multiply_warnings(tmp_path):

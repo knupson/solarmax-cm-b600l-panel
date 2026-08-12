@@ -60,9 +60,12 @@ class SidecarClient:
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._ready = threading.Event()
+        self._thread = None
 
     def start(self):
-        threading.Thread(target=self._run, daemon=True).start()
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name="vmaxpanel-sidecar")
+        self._thread.start()
         return self
 
     def _run(self):
@@ -105,7 +108,11 @@ class SidecarClient:
                 _kill(proc)
             if not self._restart or self._stop.is_set():
                 return
-            time.sleep(BACKOFF[min(attempt, len(BACKOFF) - 1)])
+            # _stop.wait y no time.sleep: el backoff llega a 10 s y time.sleep
+            # no se entera de close(), asi que el hilo lector seguia vivo todo
+            # ese rato despues de que alguien pidio la baja.
+            if self._stop.wait(BACKOFF[min(attempt, len(BACKOFF) - 1)]):
+                return
             attempt += 1
 
     def wait_ready(self, timeout=25.0) -> bool:
@@ -136,3 +143,15 @@ class SidecarClient:
         with self._lock:
             proc = self._proc
         _kill(proc)
+        # join: close() vuelve cuando el hilo lector realmente termino, no
+        # cuando se le pidio. Sin esto el llamador no tiene forma de saber
+        # cuando dejo de haber alguien tocando el proceso.
+        #
+        # Salvo que el que llama SEA el hilo lector: join() sobre el hilo
+        # actual tira RuntimeError, y close() no puede levantar nunca -- se
+        # usa en caminos de apagado y adentro de un finally. En ese caso el
+        # _stop ya alcanza: el propio hilo se va a encontrar la bandera al
+        # volver de aca.
+        t = self._thread
+        if t is not None and t is not threading.current_thread():
+            t.join(timeout=KILL_TIMEOUT)

@@ -1,5 +1,6 @@
 import io
 import json
+import threading
 import time
 
 import pytest
@@ -200,3 +201,66 @@ def test_close_during_a_respawn_does_not_leave_a_live_sidecar():
     assert procs, "nunca spawneo"
     assert all(p.terminated for p in procs), \
         f"{sum(1 for p in procs if not p.terminated)} sidecar(s) vivos sin dueno"
+
+
+def test_a_disk_without_a_reading_does_not_shift_the_others():
+    """El sidecar emite disk.temp.N por POSICION del disco en la enumeracion,
+    con null cuando esa vuelta no hubo lectura. Antes incrementaba el indice
+    solo cuando habia temperatura, asi que un SSD intermitente corria el
+    indice de todos los que venian despues y los tres numeros del panel
+    cambiaban de significado entre muestras."""
+    sample = {**SAMPLE, "lhm": {**SAMPLE["lhm"],
+                                "disk.temp.0": 34.0,
+                                "disk.temp.1": None,
+                                "disk.temp.2": 41.0}}
+    c, _ = client_for(sample)
+    r = Registry([LhmProvider(c)])
+    s = r.read()
+    assert s["disk.temp.0"] == 34.0
+    assert s["disk.temp.1"] is None          # ese disco, y solo ese, sin dato
+    assert s["disk.temp.2"] == 41.0
+
+
+def test_the_set_of_disk_ids_does_not_depend_on_which_disks_answered():
+    """served() se descubre de la primera muestra: si un disco no aparece
+    ahi, su id no vuelve a existir en toda la corrida. Por eso la clave se
+    emite siempre, incluso en null."""
+    sample = {**SAMPLE, "lhm": {**SAMPLE["lhm"],
+                                "disk.temp.0": None,
+                                "disk.temp.1": 36.0,
+                                "disk.temp.2": None}}
+    c, _ = client_for(sample)
+    assert {"disk.temp.0", "disk.temp.1", "disk.temp.2"} <= LhmProvider(c).metrics()
+
+
+def test_close_does_not_leave_the_reader_thread_sleeping_out_the_backoff(monkeypatch):
+    """El respawn dormia con time.sleep, que no se entera de _stop: tras
+    close() el hilo lector seguia vivo hasta 10 s (el backoff mas largo). Es
+    daemon, asi que no impide salir, pero se queda con el objeto y su handle
+    de mas -- y en la corrida de pytest deja hilos girando entre tests.
+
+    Se fuerza un backoff largo: con el de produccion el primer reintento
+    duerme 1 s y el test pasaria igual sin el arreglo. Y se mira EL hilo, no
+    threading.active_count(), porque otros tests de este modulo dejan hilos
+    dando vueltas y el contador global no prueba nada.
+    """
+    monkeypatch.setattr("vmaxpanel.providers.sidecar.BACKOFF", [30.0])
+    procs = []
+
+    def spawn():
+        p = FakeProc([])                 # stdout vacio: cae directo al respawn
+        procs.append(p)
+        return p
+
+    c = SidecarClient(script="ignored.ps1", spawn=spawn)
+    c.start()
+    deadline = time.time() + 3.0
+    while time.time() < deadline and not procs:
+        time.sleep(0.02)
+    assert procs, "nunca spawneo"
+    time.sleep(0.3)                      # que entre al sleep del backoff
+
+    t0 = time.time()
+    c.close()
+    assert c._thread is not None
+    assert not c._thread.is_alive(),         f"el hilo sigue durmiendo el backoff {time.time() - t0:.1f}s despues de close()"
