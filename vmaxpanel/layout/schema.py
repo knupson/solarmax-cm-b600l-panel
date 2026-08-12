@@ -13,14 +13,15 @@ from string import Formatter
 
 from ..metrics import is_metric
 from .model import (ArcWidget, Background, BarWidget, Font, GraphWidget,
-                    ImageWidget, LabelWidget, Layout, PanelCfg, Rule, Size,
-                    TextWidget, Widget)
+                    ImageWidget, LabelWidget, Layout, PanelCfg, RectWidget,
+                    Rule, Size, TextWidget, Widget)
 
 SUPPORTED_VERSION = 1
 
 WIDGET_TYPES = {
     "text": TextWidget, "label": LabelWidget, "bar": BarWidget,
     "arc": ArcWidget, "graph": GraphWidget, "image": ImageWidget,
+    "rect": RectWidget,
 }
 
 BACKGROUND_TYPES = {"solid", "gradient", "image", "sequence", "video", "procedural"}
@@ -56,6 +57,7 @@ REQUIRED = {
     "arc": ["metric", "r"],
     "graph": ["metric", "w", "h"],
     "image": ["src", "w", "h"],
+    "rect": ["w", "h"],
 }
 
 
@@ -279,7 +281,7 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
     if "font" in REQUIRED[t] and isinstance(w.get("font"), str) and w["font"] not in fonts:
         errs.append(f"{where}: alias de fuente desconocido {w['font']!r}")
 
-    for k in ("color", "fill", "track"):
+    for k in ("color", "fill", "track", "stroke"):
         if k in w:
             _check_color(errs, where, w[k])
 
@@ -309,6 +311,15 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
                             f"se espera un comparador como '> 85'")
             elif isinstance(r, dict):
                 _check_color(errs, f"{where} rules[{j}]", r.get("color"))
+
+    if t == "rect":
+        if w.get("fill") is None and w.get("stroke") is None:
+            errs.append(f"{where}: un rect necesita 'fill', 'stroke' o los dos; "
+                        f"sin ninguno no dibuja nada")
+        sw = w.get("stroke_width", 1)
+        if not _is_int(sw) or sw < 1:
+            errs.append(f"{where}: stroke_width debe ser entero >= 1, "
+                        f"es {sw!r}")
 
     for k in ("w", "h", "r", "thickness", "radius", "samples"):
         if k in w and not _is_int(w[k]):

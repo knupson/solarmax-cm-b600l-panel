@@ -218,3 +218,75 @@ def test_format_with_a_suffix_is_ignored_by_humanize_and_rejected():
     assert check("{}") == []
     assert check("{0}") == []
     assert any("humanize" in e and "format" in e for e in check("{} Mbps"))
+
+
+# --- rect: separadores y marcos ---
+
+RECT = {"id": "sep", "type": "rect", "x": 24, "y": 232, "w": 272, "h": 1,
+        "fill": "#242834"}
+
+
+def rect(**changes):
+    r = dict(RECT)
+    r.update(changes)
+    return with_widget(r)
+
+
+def test_rect_widget_is_valid_without_metric_or_font():
+    assert schema.validate(rect()) == []
+
+
+def test_build_returns_a_rect_widget():
+    lay = schema.build(rect(stroke="#FFFFFF", stroke_width=2, radius=4))
+    w = lay.widgets[0]
+    assert isinstance(w, model.RectWidget)
+    assert (w.w, w.h, w.radius) == (272, 1, 4)
+    assert (w.fill, w.stroke, w.stroke_width) == ("#242834", "#FFFFFF", 2)
+
+
+def test_rect_defaults_have_no_stroke():
+    w = schema.build(rect()).widgets[0]
+    assert w.stroke is None and w.radius == 0
+
+
+def test_rect_requires_w_and_h():
+    r = dict(RECT)
+    del r["h"]
+    errs = schema.validate(with_widget(r))
+    assert any("'h'" in e for e in errs)
+
+
+def test_rect_without_fill_or_stroke_is_rejected():
+    """Un rect sin ninguno de los dos no dibuja nada y no habria como
+    notarlo mirando el panel."""
+    r = dict(RECT)
+    del r["fill"]
+    errs = schema.validate(with_widget(r))
+    assert any("fill" in e and "stroke" in e for e in errs)
+
+
+def test_rect_rejects_an_invalid_stroke_color():
+    errs = schema.validate(rect(stroke="rojo"))
+    assert any("color invalido" in e for e in errs)
+
+
+def test_rect_rejects_a_null_fill():
+    errs = schema.validate(rect(fill=None, stroke="#FFFFFF"))
+    assert any("color invalido" in e for e in errs)
+
+
+def test_rect_rejects_a_non_integer_stroke_width():
+    errs = schema.validate(rect(stroke="#FFFFFF", stroke_width=1.5))
+    assert any("stroke_width" in e for e in errs)
+
+
+def test_rect_rejects_an_unknown_key():
+    errs = schema.validate(rect(metric="cpu.load"))
+    assert any("desconocida" in e and "metric" in e for e in errs)
+
+
+def test_rect_rejects_a_stroke_width_below_one():
+    """El render clampea a 1 px, asi que un 0 escrito en el layout se
+    dibujaria como 1 sin que nada avise de la diferencia."""
+    errs = schema.validate(rect(stroke="#FFFFFF", stroke_width=0))
+    assert any("stroke_width" in e for e in errs)

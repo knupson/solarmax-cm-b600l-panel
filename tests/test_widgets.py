@@ -299,3 +299,96 @@ def test_humanize_bytes_uses_binary_units():
 def test_unknown_humanizer_falls_back_to_format():
     w = text_widget(format="{:.0f}", humanize="inventado")
     assert widgets.format_value(w, 7.0) == "7"
+
+
+# --- rect: separadores y marcos ---
+
+def rect_widget(**kw):
+    base = dict(id="r", type="rect", x=10, y=20, w=100, h=1, fill="#FFFFFF")
+    base.update(kw)
+    return model.RectWidget(**base)
+
+
+WHITE = (255, 255, 255)
+BLUE = (57, 135, 229)
+
+
+def test_rect_fill_paints_exactly_w_by_h_pixels():
+    """En rect, w/h son el tamano real en px: un separador de h=1 mide una
+    fila, no dos. bar/graph heredan la caja inclusive de Pillow (h=16 -> 17
+    px) y quedan como estan; rect no puede, porque una hairline de 2px se
+    ve al doble de gruesa de lo pedido."""
+    im = canvas()
+    widgets.draw(im, rect_widget(), None, ctx())
+    px = im.load()
+    assert px[10, 20] == WHITE
+    assert px[109, 20] == WHITE
+    assert px[110, 20] == (0, 0, 0)          # ni un pixel de mas a lo ancho
+    assert px[10, 21] == (0, 0, 0)           # ni una fila de mas de alto
+
+
+def test_rect_stroke_only_leaves_the_interior_untouched():
+    im = canvas()
+    widgets.draw(im, rect_widget(w=50, h=40, fill=None, stroke="#FFFFFF"),
+                 None, ctx())
+    px = im.load()
+    assert px[10, 20] == WHITE               # borde superior izquierdo
+    assert px[59, 59] == WHITE               # borde inferior derecho
+    assert px[35, 40] == (0, 0, 0)           # el relleno no se dibuja
+
+
+def test_rect_draws_fill_and_stroke_together():
+    im = canvas()
+    widgets.draw(im, rect_widget(w=50, h=40, fill="#3987E5", stroke="#FFFFFF"),
+                 None, ctx())
+    px = im.load()
+    assert px[10, 20] == WHITE
+    assert px[35, 40] == BLUE
+
+
+def test_rect_stroke_width_thickens_the_border_inward():
+    im = canvas()
+    widgets.draw(im, rect_widget(w=50, h=40, fill="#3987E5", stroke="#FFFFFF",
+                                 stroke_width=3), None, ctx())
+    px = im.load()
+    assert px[12, 22] == WHITE               # tercera fila del borde
+    assert px[13, 23] == BLUE                # ya es relleno
+
+
+def test_rect_scales_with_the_context():
+    im = canvas(640, 400)
+    widgets.draw(im, rect_widget(w=100, h=1), None, ctx(scale=2.0))
+    px = im.load()
+    assert px[20, 40] == WHITE
+    assert px[219, 40] == WHITE
+    assert px[220, 40] == (0, 0, 0)
+
+
+def test_rect_hairline_survives_a_downscale():
+    """A escala < 1 un h=1 redondea a 0 px. Un separador que desaparece en
+    un panel mas chico que designed_for es una regresion silenciosa: el
+    layout se ve distinto sin que nada avise."""
+    im = canvas()
+    widgets.draw(im, rect_widget(w=100, h=1), None, ctx(scale=0.5))
+    assert im.getbbox() is not None
+
+
+def test_rect_with_negative_dimensions_does_not_crash():
+    im = canvas()
+    widgets.draw(im, rect_widget(w=-50, h=-10), None, ctx())
+    assert im.getbbox() is None              # no dibuja nada, tampoco revienta
+
+
+def test_rect_radius_larger_than_the_box_does_not_crash():
+    """Pillow rechaza un radio mayor que la mitad del lado menor. El
+    validador solo exige que radius sea entero, asi que el render clampea."""
+    im = canvas()
+    widgets.draw(im, rect_widget(w=20, h=4, radius=50), None, ctx())
+    assert im.getbbox() is not None
+
+
+def test_rect_without_fill_or_stroke_draws_nothing():
+    """schema.validate() lo rechaza, pero el render no vuelve a validar."""
+    im = canvas()
+    widgets.draw(im, rect_widget(fill=None), None, ctx())
+    assert im.getbbox() is None

@@ -145,6 +145,19 @@ def _size(ctx, v):
     return max(0, _s(ctx, v))
 
 
+def _span(ctx, v):
+    """Como _size(), pero un lado positivo nunca se escala hasta desaparecer.
+
+    A escala < 1 (un panel mas chico que designed_for) un separador de h=1
+    redondea a 0 px y la linea se pierde sin que nada avise: el layout se ve
+    distinto y no hay error en ningun lado. Un lado <= 0 sigue dando 0, que
+    es como el llamador sabe que no hay nada que dibujar.
+    """
+    if v <= 0:
+        return 0
+    return max(1, _s(ctx, v))
+
+
 _ANCHORS = {"left": "la", "center": "ma", "right": "ra"}
 
 
@@ -256,7 +269,39 @@ def _draw_image(img, g, w, value, ctx):
     img.paste(resized, (_s(ctx, w.x), _s(ctx, w.y)), resized)
 
 
+def _draw_rect(img, g, w, value, ctx):
+    """Divisores y marcos.
+
+    `w`/`h` son el tamano real en pixeles, de ahi el `- 1` en la esquina
+    opuesta: la caja de Pillow es inclusive, asi que [x, y, x+w, y+h]
+    dibujaria un pixel de mas por lado. bar/graph tienen esa caja de mas
+    desde fase 1 y se quedan como estan -- corregirlos moveria el perfil y
+    los goldens 1 px sin ganancia --, pero un separador de h=1 no puede
+    darse el lujo: se veria al doble del grosor pedido.
+    """
+    ww, hh = _span(ctx, w.w), _span(ctx, w.h)
+    if ww == 0 or hh == 0:
+        return
+    x, y = _s(ctx, w.x), _s(ctx, w.y)
+    box = [x, y, x + ww - 1, y + hh - 1]
+    # Pillow rechaza un radio mayor que la mitad del lado menor y el
+    # validador solo exige que radius sea entero, asi que se clampea aca.
+    radius = min(_size(ctx, w.radius), min(ww, hh) // 2)
+    if w.stroke:
+        outline, width = w.stroke, max(1, _s(ctx, w.stroke_width))
+    else:
+        outline, width = None, 0
+    if outline is None and not w.fill:
+        return                              # nada que dibujar; validate() ya lo rechaza
+    if radius > 0:
+        g.rounded_rectangle(box, radius=radius, fill=w.fill,
+                            outline=outline, width=width)
+    else:
+        g.rectangle(box, fill=w.fill, outline=outline, width=width)
+
+
 _DISPATCH = {
     "text": _draw_text, "label": _draw_label, "bar": _draw_bar,
     "arc": _draw_arc, "graph": _draw_graph, "image": _draw_image,
+    "rect": _draw_rect,
 }

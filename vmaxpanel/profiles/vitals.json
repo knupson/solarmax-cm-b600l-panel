@@ -27,6 +27,8 @@
     { "id": "date", "type": "text", "metric": "clock.date", "x": 24, "y": 104,
       "font": "caption", "color": "#898781", "format": "{}" },
 
+    { "id": "cpu-rule", "type": "rect", "x": 24, "y": 164, "w": 272, "h": 1,
+      "fill": "#242834" },
     { "id": "cpu-hdr", "type": "label", "text": "CPU", "x": 24, "y": 198,
       "font": "section", "color": "#FFFFFF" },
     { "id": "cpu-name", "type": "text", "metric": "cpu.name", "x": 24, "y": 230,
@@ -54,6 +56,8 @@
     { "id": "vrm", "type": "text", "metric": "cpu.vrm_temp", "x": 158, "y": 454,
       "font": "value", "color": "#86B6EF", "format": "{:.0f}°" },
 
+    { "id": "gpu-rule", "type": "rect", "x": 24, "y": 508, "w": 272, "h": 1,
+      "fill": "#242834" },
     { "id": "gpu-hdr", "type": "label", "text": "GPU", "x": 24, "y": 542,
       "font": "section", "color": "#FFFFFF" },
     { "id": "gpu-name", "type": "text", "metric": "gpu.name", "x": 24, "y": 574,
@@ -81,6 +85,8 @@
     { "id": "gpu-vram", "type": "text", "metric": "gpu.vram", "x": 158, "y": 798,
       "font": "value", "color": "#86B6EF", "format": "{:.0f}%" },
 
+    { "id": "ram-rule", "type": "rect", "x": 24, "y": 852, "w": 272, "h": 1,
+      "fill": "#242834" },
     { "id": "ram-hdr", "type": "label", "text": "RAM", "x": 24, "y": 886,
       "font": "section", "color": "#FFFFFF" },
     { "id": "mem-load", "type": "text", "metric": "mem.load", "x": 20, "y": 922,
@@ -96,6 +102,8 @@
     { "id": "mem-speed", "type": "label", "text": "6000", "x": 158, "y": 1056,
       "font": "value", "color": "#86B6EF" },
 
+    { "id": "sys-rule", "type": "rect", "x": 24, "y": 1132, "w": 272, "h": 1,
+      "fill": "#242834" },
     { "id": "sys-hdr", "type": "label", "text": "SYS", "x": 24, "y": 1166,
       "font": "section", "color": "#FFFFFF" },
     { "id": "down-tag", "type": "label", "text": "DOWN", "x": 22, "y": 1210,

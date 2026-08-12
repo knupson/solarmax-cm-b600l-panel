@@ -77,3 +77,18 @@ def test_end_to_end_frame_fits_the_panel_protocol():
     data = to_jpeg(Renderer(lay).frame(SAMPLE), lay.panel.rotate, lay.panel.jpeg_quality)
     assert data[:3] == b"\xff\xd8\xff" and data[-2:] == b"\xff\xd9"
     assert len(data) < 200_000          # entra holgado en un write serial
+
+
+def test_every_section_header_has_a_rule_above_it():
+    """Las lineas separadoras estaban horneadas en back.png, el arte del
+    vendor que el perfil propio ya no usa. Sin ellas las secciones quedan
+    flotando sin estructura."""
+    lay = loader.load(PROFILE)
+    rules = [w for w in lay.widgets if w.type == "rect"]
+    headers = [w for w in lay.widgets if w.type == "label" and w.font == "section"]
+    assert len(headers) == 4                 # CPU, GPU, RAM, SYS
+    assert len(rules) == len(headers)
+    for h in headers:
+        above = [r for r in rules if 0 < h.y - r.y <= 40]
+        assert len(above) == 1, f"{h.text} no tiene una regla arriba"
+        assert above[0].h == 1               # hairline, no una banda

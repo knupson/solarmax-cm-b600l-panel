@@ -65,7 +65,8 @@ métodos de lectura.** No agregar escrituras sin saber exactamente a qué regist
 ## Estado
 
 **Fase 1 de VMax Panel implementada y revisada** (2026-08-11, rama
-`fase1-motor-data-driven`, 178 tests verdes). El paquete `vmaxpanel/` reemplaza el layout
+`fase1-motor-data-driven`, 198 tests verdes; el widget `rect` y los separadores del perfil
+entraron después de la revisión inicial). El paquete `vmaxpanel/` reemplaza el layout
 hardcodeado de `daemon/panel.py` por un motor manejado por datos. Verificado contra el panel
 real: muestra el layout nuevo y editar el perfil se refleja sin reiniciar.
 
@@ -82,12 +83,12 @@ Al retomar, leer en este orden:
 
 ### Pendiente
 
-- **Decisión abierta, sin responder:** al ver el panel, el usuario notó que **se perdieron las
-  líneas separadoras**. Estaban horneadas en `back.png` (arte del vendor, ya no se usa) y
-  ningún widget de fase 1 dibuja líneas. Propuse un tipo `rect` (relleno o solo borde, con
-  radio) que cubre divisores y marcos; quedó por decidir si va ahora, en fase 2, o junto con
-  los minors. Pidió reiniciar la PC antes de contestar.
 - **La revisión final de toda la rama no se corrió** — último paso antes de cerrar la fase.
+- **Flake preexistente** en `tests/test_loader.py::test_store_recovers_after_user_fixes_the_file`
+  (1 de ~6 corridas de la suite completa). `ProfileStore.reload_if_changed()` detecta cambios
+  solo por `st_mtime_ns`: si dos escrituras caen en el mismo tick del filesystem, la segunda se
+  pierde. No es solo del test — es un agujero real del hot-reload. Sumar tamaño al criterio, o
+  releer cuando el mtime es igual al de la última lectura fallida.
 - Fases 2 (fondos animados) y 3 (servicio + tray + editor) no tienen plan todavía. El de
   fase 2 arranca con un spike de throughput: cuántos fps traga el panel decide todo lo demás.
 - **Autostart pendiente**: la tarea `PanelVitals` (ver README, sección Autostart) todavía no

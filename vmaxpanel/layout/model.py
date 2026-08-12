@@ -123,6 +123,26 @@ class ImageWidget(Widget):
 
 
 @dataclass
+class RectWidget(Widget):
+    """Rectangulo estatico: divisores, marcos y bloques de color.
+
+    No tiene `metric` ni `rules` a proposito -- es decoracion, no una
+    lectura. `w`/`h` son el tamano real en pixeles (h=1 es una linea de
+    1 px), a diferencia de bar/graph, que usan la caja inclusive de Pillow.
+
+    `fill` y `stroke` son opcionales por separado, pero al menos uno tiene
+    que estar: el validador rechaza un rect sin ninguno de los dos porque
+    no dibujaria nada y no habria forma de notarlo mirando el panel.
+    """
+    w: int = 0
+    h: int = 0
+    radius: int = 0
+    fill: str | None = None
+    stroke: str | None = None
+    stroke_width: int = 1
+
+
+@dataclass
 class Layout:
     version: int
     name: str

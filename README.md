@@ -127,6 +127,7 @@ intacto y es lo que corre hoy en producción — el cutover (autostart) todavía
 |---|---|
 | Posición, formato o color de un valor | `vmaxpanel/profiles/vitals.json` — se recarga en caliente al guardar |
 | Etiquetas de texto | widgets de tipo `label` en el mismo JSON |
+| Líneas separadoras, marcos, bloques de color | widgets de tipo `rect` en el mismo JSON |
 | Fondo | el bloque `background` del perfil |
 | Qué métricas existen | `vmaxpanel/metrics.py` |
 | De dónde sale cada métrica | `vmaxpanel/providers/` |
@@ -134,6 +135,28 @@ intacto y es lo que corre hoy en producción — el cutover (autostart) todavía
 
 El `daemon/panel.py` viejo (sin motor, todo hardcodeado) se sigue editando como antes: ver el
 historial de este archivo antes de la fase 1 si hace falta esa tabla.
+
+### El widget `rect`
+
+Cubre divisores, marcos y bloques de color. `fill` y `stroke` son opcionales por separado,
+pero al menos uno tiene que estar — un rect sin ninguno de los dos no dibuja nada, así que el
+validador lo rechaza en vez de dejarlo invisible.
+
+```json
+{ "id": "cpu-rule", "type": "rect", "x": 24, "y": 164, "w": 272, "h": 1, "fill": "#242834" }
+{ "id": "marco", "type": "rect", "x": 14, "y": 540, "w": 292, "h": 320,
+  "radius": 8, "stroke": "#242834", "stroke_width": 2 }
+```
+
+Dos cosas que no se adivinan:
+
+- **`w`/`h` son el tamaño real en píxeles**: `"h": 1` es una línea de 1 px. `bar` y `graph`
+  usan la caja inclusive de Pillow y quedan un píxel más grandes que lo escrito (`"h": 16` →
+  17 px); no se corrigieron para no mover el perfil ni los goldens, pero un separador no puede
+  darse ese lujo. El `radius` se clampea a la mitad del lado menor.
+- **El orden de la lista `widgets` es el orden de pintado.** No hay campo `z`: un `rect` con
+  `fill` puesto después de un texto lo tapa. Los separadores del perfil van antes del header
+  de su sección.
 
 ## Dependencias
 
