@@ -71,7 +71,7 @@ métodos de lectura.** No agregar escrituras sin saber exactamente a qué regist
 
 ## Estado
 
-**Las 3 fases completas, en `main`** (2026-08-12, 546 tests verdes). Fase 2 cerró con los fondos
+**Las 3 fases completas, en `main`** (2026-08-12, 572 tests verdes). Fase 2 cerró con los fondos
 animados (`procedural`, `sequence`) y los de **video** por ffmpeg externo. El paquete `vmaxpanel/`
 reemplaza el layout
 hardcodeado de `daemon/panel.py` por un motor manejado por datos. Verificado contra el panel
@@ -100,6 +100,14 @@ Al retomar, leer en este orden:
 | **`--estado`** | `python -m vmaxpanel --estado` | Lo publica el proceso a `vmaxpanel-estado.json` cada 5 s. Código 0 si dibuja, 1 si no |
 | **Elegir…** en el fondo | botón al lado de `src` | Copia el archivo a `vmaxpanel/assets/`, porque `safe_asset_path` rechaza todo lo de afuera |
 | Perfil **Embers** | bandeja → Perfil | Layout ralo a propósito: Apex tapa el fondo con sus bloques opacos |
+| **`--parar`** | `python -m vmaxpanel --parar` | Baja tarea + bandeja + sidecar. Reconoce lo suyo por línea de comandos, no por nombre de imagen. `daemon/stop.ps1` sigue sin servir y **no se puede tocar** |
+| **Fuentes alternativas** | `fonts.<alias>.fallbacks: [...]` | Los perfiles piden Franklin Gothic Cond, que viene con **Office**. La cadena la declara el perfil y el aviso dice con qué se dibujó. **No se empaqueta una fuente libre**: la copia de Cascadia que trae Windows tiene licencia de Microsoft, no la OFL de upstream |
+
+**El ledger de fase 1 quedó cerrado** (2026-08-12): los 32 minors diferidos están
+verificados como ya arreglados, arreglados, o descartados con motivo. No volver a
+triagearlos. De cubrirlos salieron dos bugs reales: el fallback de fuentes moría por la
+misma causa que el intento original (`load_default(size)` usa truetype por dentro) y una
+métrica de familia que el perfil usa y nadie sirve era completamente silenciosa.
 
 **Los generadores de assets están en `research/` y SÍ están versionados** (`!research/make_*.py`
 en el .gitignore): `embers.mp4` y `embers.json` salen de ahí, y un asset committeado sin su
