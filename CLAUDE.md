@@ -64,11 +64,12 @@ métodos de lectura.** No agregar escrituras sin saber exactamente a qué regist
 
 ## Estado
 
-**Fase 1 de VMax Panel implementada y revisada** (2026-08-11, rama
-`fase1-motor-data-driven`, 209 tests verdes; el widget `rect`, los separadores del perfil y los
-5 fixes de la revisión final entraron después de la revisión inicial). El paquete `vmaxpanel/` reemplaza el layout
+**Fase 1 de VMax Panel cerrada y mergeada a `main`** (2026-08-11, fast-forward desde
+`fase1-motor-data-driven`, 209 tests verdes). El paquete `vmaxpanel/` reemplaza el layout
 hardcodeado de `daemon/panel.py` por un motor manejado por datos. Verificado contra el panel
-real: muestra el layout nuevo y editar el perfil se refleja sin reiniciar.
+real: muestra el layout nuevo y editar el perfil se refleja sin reiniciar. El widget `rect`, los
+separadores del perfil y los 5 fixes de la revisión final entraron después de la revisión
+inicial de las 12 tareas.
 
 **`daemon/` quedó byte-idéntico a propósito** — es la vuelta atrás de toda la fase.
 `git diff 50e146e -- daemon/` tiene que seguir dando vacío.
