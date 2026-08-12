@@ -237,3 +237,47 @@ def test_switching_to_a_broken_profile_is_refused(tmp_path):
 def test_switching_to_the_same_profile_is_a_no_op(tmp_path):
     app, _ = app_for(tmp_path)
     assert app.set_profile(app.profile_path) == []
+
+
+# --- brillo ---
+
+def test_brightness_options_and_writing(tmp_path):
+    """El brillo vive en el perfil y el motor lo aplica en cada recarga, asi que
+    cambiarlo NO necesita reiniciar: es el mejor candidato para el menu."""
+    app, _ = app_for(tmp_path)
+    assert [v for v, _ in app.brightness_options()] == [25, 50, 75, 100]
+    assert app.brightness() == 100
+    assert app.set_brightness(50) == []
+    assert app.brightness() == 50
+    assert json.loads(app.profile_path.read_text(encoding="utf-8"))["panel"]["brightness"] == 50
+
+
+def test_brightness_out_of_range_is_refused(tmp_path):
+    app, _ = app_for(tmp_path)
+    assert app.set_brightness(150)
+    assert app.brightness() == 100
+
+
+def test_problems_lists_what_is_wrong_right_now(tmp_path):
+    """La bandeja necesita UNA lista de problemas para mostrar. Hoy el estado
+    tiene warnings, unavailable y last_error en tres campos distintos y el menu
+    solo miraba dos."""
+    app, _ = app_for(tmp_path)
+    app.profile_path.write_text("{roto", encoding="utf-8")
+    app.start()
+    try:
+        assert wait_until(lambda: app.problems())
+        assert any("perfil" in p.lower() or "json" in p.lower()
+                   for p in app.problems())
+    finally:
+        app.stop()
+
+
+def test_problems_is_empty_when_everything_is_fine(tmp_path):
+    app, _ = app_for(tmp_path)
+    app.start()
+    try:
+        assert wait_until(lambda: app.state()["frames"] >= 1)
+        assert app.problems() == []
+    finally:
+        app.stop()

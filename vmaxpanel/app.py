@@ -199,11 +199,7 @@ class PanelApp:
 
     def fps(self):
         """El fps que dice el perfil en disco, o None si no se puede leer."""
-        try:
-            crudo = json.loads(self.profile_path.read_text(encoding="utf-8"))
-            return (crudo.get("panel") or {}).get("fps")
-        except Exception:
-            return None
+        return self._campo_panel("fps")
 
     def set_fps(self, valor) -> list:
         """Escribe el fps en el perfil. Devuelve los errores que lo impidieron.
@@ -217,16 +213,78 @@ class PanelApp:
         Si el perfil no se puede leer no se escribe nada: pisarlo con un fps
         nuevo destruiria lo que haya quedado ahi.
         """
+        return self._escribir_panel("fps", valor)
+
+    # --- brillo ---
+    #
+    # Vive en el perfil, y el motor lo reaplica en cada recarga en caliente
+    # (_refresh_layout llama a link.set_brightness), asi que cambiarlo NO
+    # necesita reiniciar nada. Es el ajuste mas barato de exponer.
+    BRILLOS = (25, 50, 75, 100)
+
+    def brightness_options(self) -> list:
+        return [(v, f"{v}%") for v in self.BRILLOS]
+
+    def brightness(self):
+        return self._campo_panel("brightness")
+
+    def set_brightness(self, valor) -> list:
+        return self._escribir_panel("brightness", valor)
+
+    def _campo_panel(self, clave):
         try:
-            crudo = json.loads(self.profile_path.read_text(encoding="utf-8"))
+            crudo = json.loads(Path(self.profile_path).read_text(encoding="utf-8"))
+            return (crudo.get("panel") or {}).get(clave)
+        except Exception:
+            return None
+
+    def _escribir_panel(self, clave, valor) -> list:
+        """Escribe un campo de `panel` en el perfil, validando antes.
+
+        Mismo criterio que set_fps: un perfil invalido en disco lo rechaza el
+        motor y se queda con el anterior, o sea que el usuario habria "cambiado"
+        algo que el panel ignora. Y si el perfil no se puede leer no se escribe
+        nada, porque pisarlo destruiria lo que haya quedado ahi.
+        """
+        ruta = Path(self.profile_path)
+        try:
+            crudo = json.loads(ruta.read_text(encoding="utf-8"))
         except Exception as e:
             return [f"no se pudo leer el perfil: {e}"]
-        crudo.setdefault("panel", {})["fps"] = valor
+        crudo.setdefault("panel", {})[clave] = valor
         errores = schema.validate(crudo)
         if errores:
             return errores
-        loader.save_raw(crudo, self.profile_path)
+        loader.save_raw(crudo, ruta)
         return []
+
+    # --- problemas, en una sola lista ---
+
+    def problems(self) -> list:
+        """Todo lo que anda mal ahora, junto y en lenguaje llano.
+
+        El estado los tenia repartidos en tres campos -- warnings, unavailable y
+        last_error -- y el menu miraba solo dos, asi que un perfil rechazado no
+        aparecia en ninguna parte de la interfaz: quedaba en el log y nada mas.
+        Un problema que el usuario no puede ver es un problema que no existe
+        hasta que lo confunde.
+        """
+        st = self.state()
+        fuera = []
+        if st.get("last_error"):
+            fuera.append(st["last_error"])
+        fuera.extend(st.get("warnings") or [])
+        faltan = st.get("unavailable") or {}
+        if faltan:
+            fuera.append(f"sin datos: {', '.join(sorted(faltan))}")
+        # Se deduplica conservando el orden: el mismo aviso puede venir del
+        # renderer y del store.
+        vistos, unicos = set(), []
+        for p in fuera:
+            if p not in vistos:
+                vistos.add(p)
+                unicos.append(p)
+        return unicos
 
     # --- estado para la bandeja ---
 

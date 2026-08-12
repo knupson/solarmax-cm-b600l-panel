@@ -58,6 +58,7 @@ CMD_QUIT = 1007
 # solaparan con los ids fijos, elegir un fps ejecutaria otra cosa.
 CMD_FPS_BASE = 1100
 CMD_PROFILE_BASE = 1200
+CMD_BRIGHT_BASE = 1300
 
 # LRESULT es del tamano de un puntero: en 64 bits, c_long (32) TRUNCA el valor
 # de retorno. Y sin argtypes declarados, ctypes asume int de 32 bits para cada
@@ -221,18 +222,23 @@ class Tray:
             titulo = f"{panel} · {st.get('frames', 0)} frames"
         user32.AppendMenuW(menu, MF_STRING | MF_GRAYED, CMD_STATE, titulo)
 
-        error = st.get("last_error")
-        if error:
-            user32.AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, f"⚠ {error[:60]}")
-        faltan = st.get("unavailable") or {}
-        if faltan:
-            user32.AppendMenuW(menu, MF_STRING | MF_GRAYED, 0,
-                               f"sin datos: {', '.join(sorted(faltan))[:60]}")
+        # Los problemas van arriba, antes de cualquier accion: si algo anda mal,
+        # es lo primero que el usuario tiene que leer al abrir el menu.
+        for linea in self._problem_lines():
+            user32.AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, linea)
 
         user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, MF_STRING, CMD_TOGGLE,
                            "Reanudar" if st.get("paused") else "Pausar (suelta el puerto)")
         user32.AppendMenuW(menu, MF_STRING, CMD_RESTART, "Reiniciar el motor")
+
+        # Submenu de brillo: el motor lo reaplica en cada recarga, asi que no
+        # necesita reiniciar nada.
+        subb = user32.CreatePopupMenu()
+        for cmd, etiqueta, actual in self._brightness_entries():
+            user32.AppendMenuW(subb, MF_STRING | (MF_CHECKED if actual else 0),
+                               cmd, etiqueta)
+        user32.AppendMenuW(menu, MF_STRING | MF_POPUP, subb, "Brillo")
 
         # Submenu de perfiles: es lo primero que alguien quiere cambiar.
         subp = user32.CreatePopupMenu()
@@ -291,6 +297,28 @@ class Tray:
     def _editor_abierto(self) -> bool:
         return self._editor is not None and self._editor.poll() is None
 
+    MAX_PROBLEMAS = 4
+    ANCHO_LINEA = 70
+
+    def _problem_lines(self):
+        """Los problemas, recortados para que quepan como entradas de menu.
+
+        Se topean en cuatro mas un contador: veinte avisos convierten el menu en
+        un muro ilegible, y el que necesita los veinte abre el log.
+        """
+        problemas = list(self.app.problems())
+        lineas = [f"⚠ {p[:self.ANCHO_LINEA]}" for p in problemas[:self.MAX_PROBLEMAS]]
+        resto = len(problemas) - self.MAX_PROBLEMAS
+        if resto > 0:
+            lineas.append(f"… y {resto} mas (ver el log)")
+        return lineas
+
+    def _brightness_entries(self):
+        """[(comando, etiqueta, es_el_actual)] del submenu de brillo."""
+        actual = self.app.brightness()
+        return [(CMD_BRIGHT_BASE + i, etiqueta, valor == actual)
+                for i, (valor, etiqueta) in enumerate(self.app.brightness_options())]
+
     def _profile_entries(self):
         """[(comando, nombre, es_el_actual)] para el submenu de perfiles."""
         actual = Path(self.app.profile_path)
@@ -308,6 +336,13 @@ class Tray:
         return salida
 
     def _dispatch(self, cmd):
+        if CMD_BRIGHT_BASE <= cmd < CMD_BRIGHT_BASE + 16:
+            opciones = self.app.brightness_options()
+            i = cmd - CMD_BRIGHT_BASE
+            if 0 <= i < len(opciones):
+                threading.Thread(target=self.app.set_brightness,
+                                 args=(opciones[i][0],), daemon=True).start()
+            return
         if CMD_PROFILE_BASE <= cmd < CMD_PROFILE_BASE + 32:
             perfiles = self.app.profiles()
             i = cmd - CMD_PROFILE_BASE

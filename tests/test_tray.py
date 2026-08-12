@@ -198,3 +198,65 @@ def test_the_profile_and_fps_command_ranges_do_not_overlap():
     for i in range(32):
         assert tray.CMD_PROFILE_BASE + i not in range(tray.CMD_FPS_BASE,
                                                       tray.CMD_FPS_BASE + 64)
+
+
+def test_the_menu_lists_the_problems_reported_by_the_app():
+    """Un problema que el usuario no puede ver es un problema que no existe
+    hasta que lo confunde: el perfil rechazado quedaba solo en el log."""
+    class AppConProblemas(FakeApp):
+        def problems(self):
+            return ["perfil rechazado: metrica desconocida 'x'",
+                    "fuente no encontrada: Bahnschrift",
+                    "sin datos: cpu.power"]
+
+    t = tray.Tray.__new__(tray.Tray)
+    t.app = AppConProblemas(paused=False, running=True)
+    lineas = t._problem_lines()
+    assert len(lineas) == 3
+    assert any("rechazado" in x for x in lineas)
+    for x in lineas:
+        assert len(x) <= 74, x       # una entrada de menu no puede ser un parrafo
+
+
+def test_no_problems_shows_a_single_ok_line():
+    class AppSana(FakeApp):
+        def problems(self):
+            return []
+
+    t = tray.Tray.__new__(tray.Tray)
+    t.app = AppSana(paused=False, running=True)
+    assert t._problem_lines() == []
+
+
+def test_too_many_problems_are_capped_with_a_counter():
+    """Veinte avisos convierten el menu en un muro ilegible."""
+    class AppRota(FakeApp):
+        def problems(self):
+            return [f"problema {i}" for i in range(20)]
+
+    t = tray.Tray.__new__(tray.Tray)
+    t.app = AppRota(paused=False, running=True)
+    lineas = t._problem_lines()
+    assert len(lineas) <= 5
+    assert "16" in lineas[-1] or "mas" in lineas[-1].lower()
+
+
+def test_the_brightness_submenu_marks_the_current_value():
+    class AppConBrillo(FakeApp):
+        def brightness_options(self):
+            return [(25, "25%"), (50, "50%"), (100, "100%")]
+
+        def brightness(self):
+            return 50
+
+        def set_brightness(self, v):
+            self.pedido = v
+            return []
+
+    t = tray.Tray.__new__(tray.Tray)
+    t.app = AppConBrillo(paused=False, running=True)
+    t._editor = None
+    entradas = t._brightness_entries()
+    assert [e[2] for e in entradas] == [False, True, False]
+    t._dispatch(tray.CMD_BRIGHT_BASE + 2)
+    assert t.app.pedido == 100
