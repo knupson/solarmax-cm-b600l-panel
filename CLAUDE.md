@@ -71,7 +71,7 @@ métodos de lectura.** No agregar escrituras sin saber exactamente a qué regist
 
 ## Estado
 
-**Las 3 fases completas, en `main`** (2026-08-12, 469 tests verdes). Fase 2 cerró con los fondos
+**Las 3 fases completas, en `main`** (2026-08-12, 546 tests verdes). Fase 2 cerró con los fondos
 animados (`procedural`, `sequence`) y los de **video** por ffmpeg externo. El paquete `vmaxpanel/`
 reemplaza el layout
 hardcodeado de `daemon/panel.py` por un motor manejado por datos. Verificado contra el panel
@@ -89,6 +89,21 @@ Al retomar, leer en este orden:
 | `docs/superpowers/specs/2026-08-11-vmax-panel-app-design.md` | Diseño de las 3 fases |
 | `docs/superpowers/plans/2026-08-11-vmax-panel-fase1.md` | Plan de fase 1, 12 tareas |
 | `.superpowers/sdd/2026-08-11-vmax-panel-fase1/progress.md` | **Ledger**: cada tarea, cada fix round, decisiones del usuario, ~15 minors diferidos. Gitignored |
+
+### Lo que se agregó el 2026-08-12 (después de cerrar las 3 fases)
+
+| Qué | Cómo se usa | Lo que no se adivina |
+|---|---|---|
+| Fondos de **video** | `background.type: "video"` | ffmpeg **externo** (instalado, Gyan.FFmpeg 9.0). El ciclo de vida es lo delicado: `set_layout()` cierra el fondo anterior y `_drop_link()` el renderer, o cada guardado deja un ffmpeg huérfano |
+| **Instalador** | `--diagnostico` / `--instalar` / `--desinstalar` | Registra por XML, no `/SC ONLOGON`: hay que desactivar las guardas de batería, el límite de 72 h, y usar `RunLevel HighestAvailable` (sin elevación no hay GSA1 ni SMART) |
+| **Exportar/importar** | `--exportar` / `--importar`, botones en el editor, ítem en la bandeja | `.vmaxpanel` = zip con perfil + assets. Las fuentes NO viajan (son de Microsoft): se listan y se avisa cuál falta al importar |
+| **`--estado`** | `python -m vmaxpanel --estado` | Lo publica el proceso a `vmaxpanel-estado.json` cada 5 s. Código 0 si dibuja, 1 si no |
+| **Elegir…** en el fondo | botón al lado de `src` | Copia el archivo a `vmaxpanel/assets/`, porque `safe_asset_path` rechaza todo lo de afuera |
+| Perfil **Embers** | bandeja → Perfil | Layout ralo a propósito: Apex tapa el fondo con sus bloques opacos |
+
+**Los generadores de assets están en `research/` y SÍ están versionados** (`!research/make_*.py`
+en el .gitignore): `embers.mp4` y `embers.json` salen de ahí, y un asset committeado sin su
+generador es un binario huérfano.
 
 ### Pendiente
 

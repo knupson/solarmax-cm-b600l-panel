@@ -73,6 +73,19 @@ def _vivo(pid) -> bool:
         return False
 
 
+def _fps(v) -> str:
+    """30.0 -> "30", 0.5 -> "0.5".
+
+    El modelo guarda fps como float a proposito: 0.5 es un cuadro cada dos segundos
+    y es la cadencia mas barata que hay. Pero "30.0 fps" en pantalla es el tipo
+    interno asomando, y eso se arregla al mostrar -- no cambiando el contrato por
+    algo cosmetico, que fue justo lo que estuve por hacer.
+    """
+    if not isinstance(v, (int, float)) or isinstance(v, bool):
+        return "?"
+    return f"{v:g}"
+
+
 def describe(estado, ahora=None, vivo=None) -> str:
     """El estado en texto, para imprimir. Nunca levanta."""
     if not estado:
@@ -96,10 +109,13 @@ def describe(estado, ahora=None, vivo=None) -> str:
         cabeza = "dibujando"
     else:
         cabeza = "DETENIDO"
-    lineas.append(f"{cabeza} — perfil {estado.get('profile') or '?'}, "
+    # Sin em dash ni caracteres fuera de ASCII: esto se imprime en la consola de
+    # Windows, que en un sistema en espanol es cp850 y no tiene U+2014. Salia un "?"
+    # justo en la salida que existe para diagnosticar.
+    lineas.append(f"{cabeza} - perfil {estado.get('profile') or '?'}, "
                   f"panel {estado.get('panel') or '?'}, "
                   f"{estado.get('frames') or 0} frames, "
-                  f"{estado.get('fps') or '?'} fps")
+                  f"{_fps(estado.get('fps'))} fps")
     lineas.append(f"publicado hace {edad:.0f} s (pid {pid})")
     if edad > VIEJO and estado.get("running"):
         # Un proceso puede estar vivo y no publicar: un motor trabado en una

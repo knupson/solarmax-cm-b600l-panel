@@ -227,3 +227,23 @@ def test_a_status_file_that_cannot_be_written_is_reported_once(tmp_path, capsys)
     salida = capsys.readouterr().err
     assert "no se pudo publicar" in salida, "no aviso que no podia escribir"
     assert salida.count("no se pudo publicar") == 1, "lo repitio en cada latido"
+
+
+def test_the_fps_is_shown_without_a_pointless_decimal(archivo):
+    """El modelo guarda fps como float a proposito (0.5 = un cuadro cada dos
+    segundos es una cadencia valida), pero "30.0 fps" en pantalla es el tipo interno
+    asomando. Se formatea al mostrar, que es donde corresponde -- no cambiando el
+    contrato por algo cosmetico."""
+    archivo.write({"running": True, "profile": "Apex", "frames": 9, "fps": 30.0})
+    texto = status.describe(archivo.read(), ahora=archivo._clock(),
+                            vivo=lambda p: True)
+    assert "30 fps" in texto
+    assert "30.0" not in texto
+
+
+def test_a_fractional_fps_keeps_its_decimal(archivo):
+    """Y al revés: si de verdad son 0.5, hay que verlo."""
+    archivo.write({"running": True, "frames": 1, "fps": 0.5})
+    texto = status.describe(archivo.read(), ahora=archivo._clock(),
+                            vivo=lambda p: True)
+    assert "0.5 fps" in texto
