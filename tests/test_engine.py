@@ -402,3 +402,18 @@ def test_the_rejection_is_not_logged_once_per_frame(tmp_path, capsys):
     capturado = capsys.readouterr()
     salida = capturado.out + capturado.err
     assert salida.lower().count("rechaz") <= 1, salida
+
+
+def test_dropping_the_link_closes_the_renderer(tmp_path):
+    """El renderer es el dueno del fondo, y un fondo de video tiene un ffmpeg
+    atras. El engine descarta el renderer cada vez que se cae el link (y al
+    terminar run()), asi que si no lo cierra, cada reconexion deja un decoder
+    huerfano -- el mismo patron que este proyecto ya tuvo con el sidecar."""
+    eng, made, _ = engine(tmp_path, iterations=1)
+    eng.run()
+    assert made[0].closed
+    cerrados = []
+    eng._renderer = type("R", (), {"close": lambda self: cerrados.append(True)})()
+    eng._drop_link()
+    assert cerrados == [True]
+    assert eng._renderer is None

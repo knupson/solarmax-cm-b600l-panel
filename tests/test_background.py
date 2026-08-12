@@ -1,3 +1,5 @@
+import time
+
 from PIL import Image
 
 from vmaxpanel.layout import model
@@ -114,14 +116,25 @@ def test_image_path_traversal_degrades_safely_instead_of_escaping(tmp_path):
     assert any("invalida" in w for w in s.warnings)
 
 
-def test_video_still_degrades_with_a_warning():
-    """`sequence` y `procedural` ya estan implementados (ver
-    test_background_animado.py). `video` sigue afuera: no hay decoder en la
-    stdlib y sumar una dependencia va contra el criterio del proyecto. Un
-    perfil compartido que lo use tiene que seguir abriendo igual."""
-    s = src(model.Background(type="video", src="x.mp4"))
-    assert s.frame().size == (64, 200)
-    assert any("no esta implementado" in w for w in s.warnings)
+def test_video_without_ffmpeg_degrades_and_says_how_to_fix_it(monkeypatch):
+    """El video necesita ffmpeg, que es externo y puede no estar. Un perfil
+    compartido que use video tiene que seguir abriendo igual en esa maquina:
+    color plano, y el aviso con el comando para instalarlo -- no una excepcion,
+    y no un aviso que solo diga "ffmpeg" y deje al usuario donde estaba."""
+    from vmaxpanel.render import video
+    monkeypatch.setattr(video, "buscar_ffmpeg", lambda: None)
+    s = src(model.Background(type="video", src="x.mp4", color="#0A0B0C"))
+    assert s.frame().getpixel((0, 0)) == (10, 11, 12)
+    # El aviso lo pone el hilo lector, asi que se espera con una fecha limite en
+    # vez de un sleep fijo: un sleep corto de mas hace el test flaky y uno largo
+    # de mas lo hace lento por nada.
+    limite = time.monotonic() + 5.0
+    while time.monotonic() < limite and not s.warnings:
+        s.frame()
+    try:
+        assert any(video.COMO_INSTALAR in w for w in s.warnings), s.warnings
+    finally:
+        s.close()
 
 
 def test_frame_is_cached_and_returns_a_copy():

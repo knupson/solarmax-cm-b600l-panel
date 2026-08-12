@@ -173,6 +173,16 @@ class Engine:
                 self._link.close()
             except Exception:
                 pass
+        # El renderer tambien se cierra, no solo se olvida: es el dueno del
+        # fondo, y un fondo de video tiene un ffmpeg atras. Soltar la referencia
+        # sin cerrar dejaria un decoder corriendo por cada reconexion, esperando
+        # que el recolector de basura lo limpie -- el mismo patron de proceso
+        # huerfano que ya paso con el sidecar de sensores.
+        if self._renderer is not None:
+            try:
+                self._renderer.close()
+            except Exception:
+                pass
         self._link = None
         self._renderer = None
 

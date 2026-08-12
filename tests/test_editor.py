@@ -584,3 +584,41 @@ def test_the_operators_offered_are_the_ones_the_validator_accepts(tmp_path):
     st = state_for(tmp_path)
     for op in st.rule_operators():
         assert st.set_rule("cpu-load", 0, "op", op) == [], op
+
+
+# --- pistas por tipo de fondo ---
+
+
+def test_the_video_hint_says_ffmpeg_is_needed(monkeypatch):
+    """La pista es el unico lugar donde el usuario se entera de que el video
+    depende de un ejecutable externo. Si falta, tiene que decir COMO conseguirlo:
+    un aviso que diga "necesita ffmpeg" y nada mas lo deja donde estaba."""
+    from vmaxpanel import editor
+    from vmaxpanel.render import video
+    monkeypatch.setattr(video, "buscar_ffmpeg", lambda: None)
+    pista = editor.pista_fondo("video")
+    assert "ffmpeg" in pista
+    assert "winget" in pista
+
+
+def test_the_video_hint_confirms_ffmpeg_when_it_is_there(monkeypatch):
+    from vmaxpanel import editor
+    from vmaxpanel.render import video
+    monkeypatch.setattr(video, "buscar_ffmpeg", lambda: r"C:\bin\ffmpeg.exe")
+    pista = editor.pista_fondo("video")
+    assert "ffmpeg" in pista
+    assert "winget" not in pista
+
+
+def test_the_sequence_hint_explains_that_src_is_a_folder():
+    """Estaba escrito pero era inalcanzable: la guarda de arriba capturaba
+    'sequence' junto con 'procedural' y devolvia antes, asi que el usuario nunca
+    veia la unica linea que le explicaba que src es una carpeta."""
+    from vmaxpanel import editor
+    assert "carpeta" in editor.pista_fondo("sequence")
+
+
+def test_a_static_background_has_no_hint():
+    from vmaxpanel import editor
+    assert editor.pista_fondo("solid") == ""
+    assert editor.pista_fondo("gradient") == ""

@@ -157,3 +157,100 @@ def test_a_frame_is_always_a_copy():
     src, _ = fuente(type="procedural", name="scroll", stops=STOPS, speed=10.0)
     a, b = src.frame(), src.frame()
     assert a is not b
+
+
+# --- video ---
+
+def test_video_uses_the_video_source(tmp_path, monkeypatch):
+    """El fondo 'video' deja de degradar a color plano: delega en ffmpeg."""
+    from PIL import Image as I
+    import vmaxpanel.render.background as bg
+
+    class FalsoVideo:
+        creado = []
+
+        def __init__(self, ruta, size, fps=30.0, **kw):
+            FalsoVideo.creado.append((str(ruta), tuple(size) if not hasattr(size, "width")
+                                      else (size.width, size.height), fps))
+            self.warnings = []
+            self.cerrado = False
+
+        def start(self):
+            return self
+
+        def frame(self):
+            return I.new("RGB", (64, 200), (7, 8, 9))
+
+        def close(self):
+            self.cerrado = True
+
+    monkeypatch.setattr(bg, "VideoSource", FalsoVideo)
+    (tmp_path / "clip.mp4").write_bytes(b"")
+    src = BackgroundSource(model.Background(type="video", src="clip.mp4", fps=24),
+                           TAM, tmp_path, clock=Reloj())
+    assert src.animated is True
+    assert src.frame().getpixel((0, 0)) == (7, 8, 9)
+    assert FalsoVideo.creado[0][1] == (64, 200)      # al tamano del panel
+    assert FalsoVideo.creado[0][2] == 24
+
+
+def test_video_falls_back_to_solid_while_there_is_no_frame(tmp_path, monkeypatch):
+    """El primer cuadro tarda: ffmpeg tiene que arrancar. Hasta que llegue, un
+    color plano en vez de un frame negro sin explicacion."""
+    import vmaxpanel.render.background as bg
+
+    class SinFrames:
+        def __init__(self, *a, **kw):
+            self.warnings = ["falta ffmpeg para los fondos de video"]
+
+        def start(self):
+            return self
+
+        def frame(self):
+            return None
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(bg, "VideoSource", SinFrames)
+    src = BackgroundSource(model.Background(type="video", src="clip.mp4",
+                                           color="#123456"),
+                           TAM, tmp_path, clock=Reloj())
+    img = src.frame()
+    assert img.size == (64, 200)
+    assert img.getpixel((0, 0)) == (0x12, 0x34, 0x56)
+    assert any("ffmpeg" in w for w in src.warnings)
+
+
+def test_closing_the_background_closes_the_video(tmp_path, monkeypatch):
+    """Un ffmpeg huerfano sigue decodificando para nadie. El Renderer cambia de
+    fondo en cada set_layout, asi que sin close() cada recarga en caliente
+    dejaria un proceso mas."""
+    import vmaxpanel.render.background as bg
+    cerrados = []
+
+    class Falso:
+        def __init__(self, *a, **kw):
+            self.warnings = []
+
+        def start(self):
+            return self
+
+        def frame(self):
+            return None
+
+        def close(self):
+            cerrados.append(True)
+
+    monkeypatch.setattr(bg, "VideoSource", Falso)
+    src = BackgroundSource(model.Background(type="video", src="clip.mp4"),
+                           TAM, tmp_path, clock=Reloj())
+    src.frame()
+    src.close()
+    assert cerrados == [True]
+
+
+def test_a_static_background_close_is_harmless():
+    src, _ = fuente(type="solid", color="#101010")
+    src.frame()
+    src.close()

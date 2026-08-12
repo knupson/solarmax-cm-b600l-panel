@@ -1,7 +1,9 @@
-"""Fondos: solid, gradient, image (estaticos) y procedural, sequence (animados).
+"""Fondos: solid, gradient, image (estaticos) y procedural, sequence, video
+(animados).
 
-`video` sigue sin implementar y degrada a color plano con un aviso, en vez de
-fallar: un perfil compartido que lo use tiene que seguir abriendo.
+`video` delega en ffmpeg como proceso externo (ver render/video.py) y degrada a
+color plano -- con un aviso que dice como instalarlo -- si no esta: un perfil
+compartido que use video tiene que seguir abriendo en una maquina sin ffmpeg.
 
 Los estaticos se cachean porque no cambian entre frames mientras el layout sea
 el mismo; el loop de render solo copia el cache y le dibuja los widgets encima.
@@ -24,10 +26,10 @@ from pathlib import Path
 from PIL import Image, ImageEnhance
 
 from ..layout.schema import safe_asset_path
+from .video import VideoSource
 
 FALLBACK = (10, 12, 16)
-SIN_IMPLEMENTAR = {"video"}
-ANIMADOS = {"procedural", "sequence"}
+ANIMADOS = {"procedural", "sequence", "video"}
 PROCEDURALES = ("scroll", "pulse")
 EXT_CUADROS = (".png", ".jpg", ".jpeg", ".bmp", ".gif")
 
@@ -61,6 +63,7 @@ class BackgroundSource:
         self._cache = None
         self._tira = None          # el gradiente y su espejo, para el scroll
         self._cuadros = None       # rutas de una sequence, leidas una sola vez
+        self._video = None         # el ffmpeg del fondo de video, si hay uno
         # monotonic y no time(): un ajuste de hora del sistema -- o el cambio de
         # horario -- no puede hacer saltar la animacion hacia atras.
         self._clock = clock or time.monotonic
@@ -82,6 +85,8 @@ class BackgroundSource:
     # --- animados ---
 
     def _animado(self, t) -> Image.Image:
+        if self.bg.type == "video":
+            return self._video_frame()
         if self.bg.type == "sequence":
             return self._sequence(t)
         if self.bg.name == "scroll":
@@ -144,6 +149,42 @@ class BackgroundSource:
         k = 0.775 + 0.225 * math.cos(2 * math.pi * fase)
         return ImageEnhance.Brightness(self._cache).enhance(k)
 
+    def _video_frame(self) -> Image.Image:
+        """El ultimo cuadro que entrego ffmpeg, o un color plano mientras no haya.
+
+        El video NO usa el reloj inyectado: lo marca ffmpeg, que ya pacea la
+        salida al ritmo natural del archivo. Pedirle un cuadro por tiempo
+        implicaria bufferear el video entero o hacer seek por cuadro, y las dos
+        cosas son peores que dejar que el decoder haga su trabajo.
+        """
+        if self._video is None:
+            seguro = safe_asset_path(self.bg.src) if self.bg.src else None
+            if seguro is None:
+                self._avisar(f"fondo 'video' con ruta invalida o fuera del "
+                             f"directorio de assets: {self.bg.src!r}")
+                return self._solid()
+            self._video = VideoSource(self.assets_dir / seguro, self.size,
+                                      fps=self.bg.fps).start()
+        for aviso in self._video.warnings:
+            self._avisar(aviso)
+        img = self._video.frame()
+        return img if img is not None else self._solid()
+
+    def close(self):
+        """Suelta lo que este fondo tenga abierto.
+
+        Hoy solo el ffmpeg de un video, pero el metodo existe para todos: el
+        Renderer descarta y recrea el BackgroundSource en cada set_layout, o sea
+        en cada recarga en caliente, y sin un close() cada una dejaria un ffmpeg
+        mas decodificando para nadie. Es exactamente el patron de proceso
+        huerfano que este proyecto ya tuvo con el sidecar de sensores.
+        """
+        if self._video is not None:
+            try:
+                self._video.close()
+            finally:
+                self._video = None
+
     def _lista_cuadros(self):
         """Rutas de los cuadros, ordenadas y leidas una sola vez.
 
@@ -197,11 +238,6 @@ class BackgroundSource:
         # warnings que agregan las ramas de aca abajo no se duplican aunque
         # frame() se llame muchas veces.
         t = self.bg.type
-        if t in SIN_IMPLEMENTAR:
-            self.warnings.append(
-                f"fondo de tipo {t!r} todavia no esta implementado; "
-                f"se usa un color plano")
-            return self._solid()
         if t == "gradient":
             return self._gradient()
         if t == "image":

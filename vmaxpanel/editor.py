@@ -711,6 +711,37 @@ class EditorState:
         return self._last_good
 
 
+ANIMADO = ("Fondo animado: la vista previa muestra un solo cuadro, así que acá "
+           "se ve quieto. En el panel se anima. Conviene subir los fps del "
+           "panel (pestaña Panel) para que se note.")
+
+
+def pista_fondo(tipo) -> str:
+    """Aviso por tipo de fondo, o "" si no hace falta ninguno.
+
+    Funcion de modulo y no metodo de la ventana: es texto puro, decidido por el
+    tipo y por si ffmpeg esta instalado, y asi se prueba sin abrir Tkinter.
+
+    El de los animados importa: la vista previa es UN cuadro, asi que un fondo
+    que se mueve se ve quieto ahi y eso parece un bug.
+    """
+    if tipo == "procedural":
+        return ANIMADO
+    if tipo == "sequence":
+        return (ANIMADO + " src es una carpeta con las imágenes, relativa a "
+                "vmaxpanel/assets.")
+    if tipo == "video":
+        # La ruta se consulta en cada llamada -- no se cachea al importar --
+        # porque el usuario puede instalar ffmpeg con el editor abierto, y la
+        # pista tiene que dejar de pedirlo cuando reabra la pestaña.
+        from .render.video import COMO_INSTALAR, buscar_ffmpeg
+        if buscar_ffmpeg() is None:
+            return ANIMADO + " " + COMO_INSTALAR
+        return (ANIMADO + " src es un video relativo a vmaxpanel/assets: mp4, "
+                "webm, mkv, gif, lo que ffmpeg sepa abrir.")
+    return ""
+
+
 def _coerce_fondo(clave, valor):
     """Como _coerce, pero para las claves del fondo.
 
@@ -991,21 +1022,7 @@ class EditorWindow:
             control.grid(row=fila, column=1, sticky="w", padx=4)
 
         self._show_stops()
-        self._bg_hint.config(text=self._pista_fondo(tipo))
-
-    def _pista_fondo(self, tipo) -> str:
-        """Aviso por tipo. El de los animados es importante: la vista previa es
-        UN cuadro, asi que un fondo que se mueve se ve quieto ahi y eso parece
-        un bug."""
-        if tipo in ("procedural", "sequence"):
-            return ("Fondo animado: la vista previa muestra un solo cuadro, así "
-                    "que acá se ve quieto. En el panel se anima. Conviene subir "
-                    "los fps del panel (pestaña Panel) para que se note.")
-        if tipo == "video":
-            return "El tipo 'video' todavía no está implementado: el panel va a mostrar un color plano."
-        if tipo == "sequence":
-            return "src es una carpeta con las imágenes, relativa a vmaxpanel/assets."
-        return ""
+        self._bg_hint.config(text=pista_fondo(tipo))
 
     def _apply_bg(self, clave):
         control = self._bg_fields.get(clave)

@@ -56,6 +56,28 @@ def test_set_layout_rebuilds_the_background_cache():
     assert r.frame({}).getpixel((5, 5)) == (0, 255, 0)
 
 
+def test_set_layout_closes_the_previous_background():
+    """Cada recarga en caliente pasa por set_layout(), y un fondo de video tiene
+    un ffmpeg atras. Sin cerrar el anterior, editar el perfil diez veces deja
+    diez ffmpeg decodificando para nadie -- el mismo proceso huerfano que este
+    proyecto ya tuvo con el sidecar de sensores."""
+    r = Renderer(layout())
+    viejo = r._bg
+    cerrados = []
+    viejo.close = lambda: cerrados.append(True)
+    r.set_layout(layout())
+    assert cerrados == [True]
+    assert r._bg is not viejo
+
+
+def test_renderer_close_closes_the_background():
+    r = Renderer(layout())
+    cerrados = []
+    r._bg.close = lambda: cerrados.append(True)
+    r.close()
+    assert cerrados == [True]
+
+
 def test_warnings_surface_missing_fonts_and_assets():
     lay = layout(fonts={"mono-14": {"family": "NoExiste", "size": 14},
                         "mono-bold-60": {"family": "NoExiste", "size": 60}})
@@ -139,18 +161,19 @@ def test_warnings_reports_a_font_alias_unused_by_any_widget():
     assert any("NoExiste" in w for w in r.warnings())
 
 
-def test_warnings_surfaces_the_unimplemented_background_notice_before_any_frame():
+def test_warnings_surfaces_a_degraded_background_before_any_frame():
     # Mismo principio que las fuentes: BackgroundSource solo agrega sus
     # warnings la primera vez que se construye el fondo (_build(), llamado
     # de adentro de frame()). set_layout() ahora fuerza ese build de una
     # vez, asi que warnings() tiene que ver el aviso SIN haber llamado
     # frame() todavia.
     #
-    # 'video' y no 'sequence': sequence y procedural ya estan implementados
-    # (ver test_background_animado.py), asi que ya no avisan nada. video sigue
-    # afuera porque no hay decoder en la stdlib.
-    r = Renderer(layout(background={"type": "video", "src": "x.mp4"}))
-    assert any("no esta implementado" in w for w in r.warnings())
+    # Un 'image' con un archivo que no existe: es la degradacion que queda
+    # siempre disponible para probar esto. video/sequence/procedural ya estan
+    # todos implementados, asi que ninguno avisa nada por el solo hecho de
+    # existir.
+    r = Renderer(layout(background={"type": "image", "src": "no-existe.png"}))
+    assert any("no-existe.png" in w for w in r.warnings())
 
 
 def _full_bleed_layout(dw, dh, color="#3987E5", bg="#0F1218"):

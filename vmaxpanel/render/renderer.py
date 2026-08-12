@@ -117,6 +117,11 @@ class Renderer:
         # designed_for) no hace falta la capa RGBA intermedia para centrar.
         self._exact_fit = self._content_size == (self.size.width, self.size.height)
 
+        # El fondo anterior se cierra ANTES de crear el nuevo: un fondo de video
+        # tiene un ffmpeg atras, y set_layout() es el camino de la recarga en
+        # caliente, o sea que sin esto cada edicion del perfil sumaria un proceso
+        # decodificando para nadie.
+        self._cerrar_fondo()
         self._bg = BackgroundSource(layout.background, self.size, self.assets_dir)
         # Fuerza el build del fondo ahora, no en el primer frame(): _build()
         # es quien agrega los warnings de fondo degradado (asset faltante,
@@ -136,6 +141,28 @@ class Renderer:
         # adentro del loop de render.
         for font in layout.fonts.values():
             self._fonts.resolve(font, self.scale)
+
+    def _cerrar_fondo(self) -> None:
+        """Cierra el fondo activo si hay uno.
+
+        getattr y no self._bg directo: __init__ llama a set_layout(), asi que la
+        primera vuelta pasa por aca antes de que el atributo exista. Y se traga
+        las excepciones porque esto corre en el camino de la recarga en caliente:
+        un fondo que no se deja cerrar no puede impedir que entre el layout
+        nuevo.
+        """
+        bg = getattr(self, "_bg", None)
+        if bg is None:
+            return
+        try:
+            bg.close()
+        except Exception:
+            pass
+
+    def close(self) -> None:
+        """Suelta los recursos del fondo. El renderer queda inservible."""
+        self._cerrar_fondo()
+        self._bg = None
 
     def set_panel_size(self, panel_size: Size | None) -> None:
         self._panel_size = panel_size
