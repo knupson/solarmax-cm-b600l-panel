@@ -357,3 +357,48 @@ def test_a_rotation_that_does_not_fit_the_panel_is_refused_instead_of_sent(tmp_p
     assert [w for w in made[0].writes if w[:3] == b"\xff\xd8\xff"] == []
     assert eng.stats["frames"] == 0
     assert "rotate" in (eng.state()["last_error"] or "")
+
+
+def test_a_rejected_hot_reload_is_reported_instead_of_silent(tmp_path, capsys):
+    """El invariante "un JSON roto no apaga el panel" hacia que un perfil
+    rechazado fuera COMPLETAMENTE silencioso: el motor seguia dibujando el
+    layout viejo y nada avisaba. Paso dos veces con el usuario mirando el panel
+    y preguntando por que no cambiaba nada, y las dos veces la causa fue la
+    misma -- una metrica nueva que el proceso vivo no conoce.
+    """
+    eng, made, _ = engine(tmp_path, iterations=4)
+    path = tmp_path / "vitals.json"
+
+    original = eng._render_once
+
+    def patched():
+        if eng.stats["frames"] == 1:
+            path.write_text(json.dumps(dict(MINIMAL, widgets=[
+                {"id": "x", "type": "text", "metric": "no.existe", "x": 1, "y": 1,
+                 "font": "mono-14", "color": "#FFFFFF", "format": "{}"}])),
+                encoding="utf-8")
+        return original()
+
+    eng._render_once = patched
+    eng.run()
+
+    # Una sola llamada: readouterr() DRENA el buffer, asi que una segunda
+    # devuelve vacio y concatenar las dos pierde justo el stream que importa.
+    capturado = capsys.readouterr()
+    salida = capturado.out + capturado.err
+    assert "rechaz" in salida.lower(), salida
+    assert "no.existe" in salida
+    assert eng.state()["profile"] == "Test"      # sigue con el bueno
+    assert eng.stats["frames"] == 4              # y sin dejar de dibujar
+
+
+def test_the_rejection_is_not_logged_once_per_frame(tmp_path, capsys):
+    """A 30 fps, un aviso por cuadro son 1800 lineas por minuto en el log."""
+    eng, made, _ = engine(tmp_path, iterations=6)
+    path = tmp_path / "vitals.json"
+    path.write_text("{roto", encoding="utf-8")
+    eng.store.reload_if_changed()
+    eng.run()
+    capturado = capsys.readouterr()
+    salida = capturado.out + capturado.err
+    assert salida.lower().count("rechaz") <= 1, salida

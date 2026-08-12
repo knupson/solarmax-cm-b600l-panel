@@ -8,6 +8,7 @@ sin releer sensores 10 veces por segundo.
 El transporte se inyecta (`link_factory`), asi que el loop entero se testea con
 FakeTransport, sin el panel enchufado.
 """
+import sys
 import time
 from dataclasses import dataclass
 
@@ -46,6 +47,7 @@ class Engine:
         # esta separacion de cadencias existe para evitar.
         self._last_sample_at = None
         self._last_error = None
+        self._rechazo_avisado = None
         self.stats = {"frames": 0, "reconnects": 0}
 
     # --- ciclo de vida ---
@@ -229,11 +231,39 @@ class Engine:
                 f"pero el panel es {g.width}x{g.height}: usa 0 o 180")
 
     def _refresh_layout(self):
-        changed, _errors = self.store.reload_if_changed()
+        changed, errors = self.store.reload_if_changed()
+        if errors:
+            self._reportar_rechazo(errors)
+        elif changed:
+            self._rechazo_avisado = None
         if changed and self._renderer is not None:
             layout = self.store.current
             self._renderer.set_layout(layout)
             self._link.set_brightness(layout.panel.brightness)
+
+    def _reportar_rechazo(self, errors):
+        """Avisa que se rechazo un perfil, una sola vez por contenido.
+
+        El invariante "un JSON roto no apaga el panel" tenia un costo escondido:
+        un perfil rechazado era COMPLETAMENTE silencioso. El motor seguia
+        dibujando el layout anterior y no quedaba rastro en ningun lado, asi que
+        desde afuera se ve como "edite el perfil y el panel no cambio". Paso dos
+        veces con el usuario mirando el panel, y las dos por el mismo motivo: una
+        metrica nueva que el proceso vivo no conoce, porque el codigo cambio
+        despues de que arranco.
+
+        Una sola vez por contenido de error: a 30 fps, un aviso por cuadro son
+        1800 lineas por minuto. Se resetea cuando entra un layout bueno, asi que
+        el proximo rechazo vuelve a avisar.
+        """
+        firma = tuple(errors)
+        if firma == getattr(self, "_rechazo_avisado", None):
+            return
+        self._rechazo_avisado = firma
+        print(f"perfil rechazado, se mantiene el anterior: {'; '.join(errors)}",
+              file=sys.stderr)
+        print("  si acabas de agregar una metrica, este proceso arranco antes y "
+              "no la conoce: hay que reiniciar la bandeja.", file=sys.stderr)
 
     def _refresh_sample(self):
         now = self._clock.time()
