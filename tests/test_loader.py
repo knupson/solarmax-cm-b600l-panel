@@ -139,3 +139,33 @@ def test_optional_fields_that_default_to_none_are_not_emitted(tmp_path):
     assert "stroke" not in sep
     assert [w for w in written["widgets"] if w["id"] == "bar"][0].get("min", "ausente") == "ausente"
     assert loader.load(path).widgets[-1].fill == "#242834"
+
+
+def test_reload_detects_a_change_that_lands_in_the_same_filesystem_tick(tmp_path):
+    """El criterio era solo st_mtime_ns. Dos escrituras en el mismo tick del
+    filesystem dejaban el mtime igual y la segunda se perdia: el editor de
+    fase 3 guarda dos veces seguidas y el panel se queda con la primera. Es
+    el flake de test_store_recovers_after_user_fixes_the_file y tambien un
+    agujero real del hot-reload."""
+    import os
+    path = write(tmp_path, MINIMAL)
+    store = loader.ProfileStore(path)
+    assert store.load_now() == []
+    before = os.stat(path)
+
+    raw = json.loads(json.dumps(MINIMAL))
+    raw["name"] = "Editado"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))   # mismo tick
+
+    changed, errors = store.reload_if_changed()
+    assert changed is True and errors == []
+    assert store.current.name == "Editado"
+
+
+def test_reload_reports_no_change_when_the_file_is_untouched(tmp_path):
+    path = write(tmp_path, MINIMAL)
+    store = loader.ProfileStore(path)
+    store.load_now()
+    assert store.reload_if_changed() == (False, [])
+    assert store.reload_if_changed() == (False, [])

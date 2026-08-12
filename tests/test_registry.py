@@ -107,3 +107,62 @@ def test_close_closes_every_provider():
     f = Fake("psutil", ["cpu.load"])
     Registry([f]).close()
     assert f.closed
+
+
+class TwoWayProvider(Provider):
+    """Sirve las mismas metricas que otro, con prioridad distinta."""
+
+    def __init__(self, pid, served, sample=None, fail=False):
+        self.id = pid
+        self._served = set(served)
+        self._sample = sample or {}
+        self.fail = fail
+
+    def probe(self):
+        return True
+
+    def metrics(self):
+        return set(self._served)
+
+    def read(self):
+        if self.fail:
+            raise RuntimeError(f"{self.id} caido")
+        return dict(self._sample)
+
+
+def test_a_failing_owner_falls_back_to_a_lower_priority_provider():
+    """cpu.clock y cpu.name los sirven pdh Y psutil. Cuando pdh fallaba, la
+    metrica se marcaba degradada y psutil quedaba salteado por
+    self._resolution.get(mid) != p.id: iba a "--" con un provider vivo al
+    lado que la servia igual."""
+    pdh = TwoWayProvider("pdh", {"cpu.clock"}, {"cpu.clock": 4080})
+    psu = TwoWayProvider("psutil", {"cpu.clock"}, {"cpu.clock": 3200})
+    r = Registry([pdh, psu])
+    assert r.read()["cpu.clock"] == 4080
+    assert r.resolution()["cpu.clock"] == "pdh"
+
+    pdh.fail = True
+    sample = r.read()
+    assert sample["cpu.clock"] == 3200, "no hizo failover a psutil"
+    assert r.resolution()["cpu.clock"] == "psutil"
+    assert "cpu.clock" not in r.unavailable()
+
+
+def test_the_owner_takes_the_metric_back_when_it_recovers():
+    pdh = TwoWayProvider("pdh", {"cpu.clock"}, {"cpu.clock": 4080}, fail=True)
+    psu = TwoWayProvider("psutil", {"cpu.clock"}, {"cpu.clock": 3200})
+    r = Registry([pdh, psu])
+    assert r.read()["cpu.clock"] == 3200
+
+    pdh.fail = False
+    assert r.read()["cpu.clock"] == 4080
+    assert r.resolution()["cpu.clock"] == "pdh"
+
+
+def test_a_metric_with_no_surviving_provider_is_unavailable_with_the_reason():
+    only = TwoWayProvider("pdh", {"cpu.clock"}, {"cpu.clock": 4080})
+    r = Registry([only])
+    assert r.read()["cpu.clock"] == 4080
+    only.fail = True
+    assert r.read()["cpu.clock"] is UNAVAILABLE
+    assert "pdh" in r.unavailable()["cpu.clock"]

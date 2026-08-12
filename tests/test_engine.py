@@ -226,12 +226,134 @@ def test_stop_ends_the_loop(tmp_path):
     assert eng.stats["frames"] == 2
 
 
-def test_jpeg_quality_and_rotation_come_from_the_profile(tmp_path):
+def _one_frame(tmp_path, **panel):
     eng, made, _ = engine(tmp_path, iterations=1,
-                          panel={"rotate": 90, "brightness": 100, "fps": 1,
-                                 "jpeg_quality": 40})
+                          panel={"brightness": 100, "fps": 1, **panel})
     eng.run()
+    return [w for w in made[0].writes if w[:3] == b"\xff\xd8\xff"][0]
+
+
+def test_jpeg_quality_comes_from_the_profile(tmp_path):
+    peor = _one_frame(tmp_path, rotate=0, jpeg_quality=40)
+    mejor = _one_frame(tmp_path, rotate=0, jpeg_quality=95)
+    assert len(peor) < len(mejor)
+
+
+def test_rotation_comes_from_the_profile(tmp_path):
+    """Esto se probaba con rotate 90, afirmando que el frame saliera
+    1480x320. Es justo el frame deformado que un panel 320x1480 no puede
+    mostrar y que la revision final marco como defecto: el engine ahora se
+    niega a mandarlo (ver test_a_rotation_that_does_not_fit_the_panel...).
+    La intencion original -- que el rotate salga del perfil y no de una
+    constante -- se prueba igual con 180, la rotacion real de este gabinete,
+    comparando CONTENIDO en vez de tamano: 0 y 180 dan los dos 320x1480, asi
+    que el tamano no distinguia nada de todos modos.
+    """
     import io
-    from PIL import Image
-    frame = [w for w in made[0].writes if w[:3] == b"\xff\xd8\xff"][0]
-    assert Image.open(io.BytesIO(frame)).size == (1480, 320)
+    from PIL import Image, ImageChops
+
+    def frame_at(rotate):
+        data = _one_frame(tmp_path, rotate=rotate, jpeg_quality=95)
+        return Image.open(io.BytesIO(data)).convert("RGB")
+
+    derecho, cabeza = frame_at(0), frame_at(180)
+    assert derecho.size == cabeza.size == (320, 1480)
+    assert ImageChops.difference(derecho, cabeza).getbbox() is not None
+
+    # Con tolerancia, no exacto: el JPEG es con perdida, asi que rotar
+    # despues de decodificar no reproduce byte a byte lo que salio de
+    # codificar la imagen ya rotada. Mismo criterio que el test del golden.
+    girado = cabeza.transpose(Image.Transpose.ROTATE_180)
+    diff = ImageChops.difference(derecho, girado)
+    peor = max(max(band.getextrema()) for band in diff.split())
+    assert peor <= 40, f"180 no es la misma imagen dada vuelta (delta {peor})"
+
+
+def test_an_invalid_profile_at_startup_is_picked_up_once_the_user_fixes_it(tmp_path):
+    """_connect() tira OSError cuando no hay layout, y reload_if_changed()
+    solo se llamaba desde _serve(), o sea despues de conectar: un engine
+    arrancado con un perfil roto giraba en el backoff para siempre y nunca
+    levantaba el archivo corregido. En fase 3 el servicio arranca antes de
+    que el perfil exista, asi que ese es el caso normal, no el raro.
+
+    El contador de sleeps acota la corrida: sin el arreglo esto es un loop
+    infinito con reloj virtual, y un test que cuelga no reporta nada.
+    """
+    path = tmp_path / "vitals.json"
+    path.write_text("{roto", encoding="utf-8")
+    store = loader.ProfileStore(path)
+    assert store.load_now()                      # arranca sin layout valido
+    assert store.current is None
+
+    made = []
+
+    def factory():
+        t = FakeTransport()
+        made.append(t)
+        return PanelLink(t)
+
+    clock = FakeClock()
+    eng = Engine(store, Registry([FakeCpu()]),
+                 EngineConfig(profile_path=path, max_iterations=1),
+                 link_factory=factory, clock=clock)
+
+    sleeps = []
+    real_sleep = clock.sleep
+
+    def sleep(s):
+        sleeps.append(s)
+        if len(sleeps) == 1:
+            # El usuario corrige el archivo mientras el engine espera.
+            path.write_text(json.dumps(MINIMAL), encoding="utf-8")
+        if len(sleeps) > 5:
+            eng.stop()                           # cortamos: no se recupero
+        real_sleep(s)
+
+    clock.sleep = sleep
+    eng.run()
+
+    assert eng.stats["frames"] == 1, f"nunca releyo el perfil ({len(sleeps)} esperas)"
+    assert store.current is not None
+    assert [w for w in made[0].writes if w[:3] == b"\xff\xd8\xff"]
+
+
+def test_a_rotation_that_does_not_fit_the_panel_is_refused_instead_of_sent(tmp_path):
+    """rotate 90 sobre un panel 320x1480 produce un frame 1480x320 que el
+    panel escribe sin chistar: basura en pantalla y cero errores en ningun
+    lado. El validador de layouts no puede atajarlo -- no conoce la
+    geometria del panel, y un layout disenado 1480x320 con rotate 90 SI es
+    valido para este panel -- asi que se chequea aca, donde se conocen las
+    dos cosas.
+    """
+    path = profile(tmp_path, panel={"rotate": 90, "brightness": 100, "fps": 1,
+                                    "jpeg_quality": 82})
+    store = loader.ProfileStore(path)
+    assert store.load_now() == []            # el layout es valido; la rotacion no encaja
+
+    made = []
+
+    def factory():
+        t = FakeTransport()
+        made.append(t)
+        return PanelLink(t)
+
+    clock = FakeClock()
+    eng = Engine(store, Registry([FakeCpu()]),
+                 EngineConfig(profile_path=path, max_iterations=1),
+                 link_factory=factory, clock=clock)
+
+    sleeps = []
+    real_sleep = clock.sleep
+
+    def sleep(s):
+        sleeps.append(s)
+        if len(sleeps) > 3:
+            eng.stop()
+        real_sleep(s)
+
+    clock.sleep = sleep
+    eng.run()
+
+    assert [w for w in made[0].writes if w[:3] == b"\xff\xd8\xff"] == []
+    assert eng.stats["frames"] == 0
+    assert "rotate" in (eng.state()["last_error"] or "")

@@ -4,6 +4,7 @@ Invariante: un layout invalido NUNCA reemplaza al que esta andando. El panel no
 se queda negro por un JSON mal escrito.
 """
 import decimal
+import hashlib
 import json
 import os
 from dataclasses import asdict
@@ -120,7 +121,7 @@ class ProfileStore:
         self.path = path
         self.current: Layout | None = None
         self.errors: list[str] = []
-        self._mtime = None
+        self._fp = None
 
     def load_now(self) -> list[str]:
         try:
@@ -128,20 +129,34 @@ class ProfileStore:
             self.errors = []
         except LayoutError as e:
             self.errors = e.errors
-        self._mtime = self._stat()
+        self._fp = self._fingerprint()
         return self.errors
 
-    def _stat(self):
+    def _fingerprint(self):
+        """Huella del contenido del archivo, no su mtime.
+
+        El criterio original era `st_mtime_ns`, y dos escrituras que caen en
+        el mismo tick del filesystem lo dejan igual: la segunda se perdia
+        entera. Con el editor de fase 3 guardando de a dos veces seguidas eso
+        deja al panel mostrando la version intermedia sin ninguna forma de
+        recuperarse hasta la edicion siguiente.
+
+        Cuesta una lectura del perfil por vuelta de polling en vez de un
+        stat. Son unos pocos KB a 1-10 fps; el stat tambien era I/O, y la
+        alternativa (mtime + tamano) sigue perdiendo el caso mas comun de
+        edicion a mano, que es cambiar un color por otro del mismo largo.
+        """
         try:
-            return os.stat(self.path).st_mtime_ns
+            with open(self.path, "rb") as f:
+                return hashlib.sha256(f.read()).digest()
         except OSError:
             return None
 
     def reload_if_changed(self) -> tuple[bool, list[str]]:
-        mtime = self._stat()
-        if mtime == self._mtime:
+        fp = self._fingerprint()
+        if fp == self._fp:
             return False, []
-        self._mtime = mtime
+        self._fp = fp
         try:
             new = load(self.path)
         except LayoutError as e:

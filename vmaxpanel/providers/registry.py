@@ -38,8 +38,14 @@ class Registry:
                 for mid in p.metrics():
                     self._reasons.setdefault(mid, reason)
 
+        # Por metrica, TODOS los providers disponibles que la sirven, en orden
+        # de prioridad. self._available ya viene ordenado, asi que cada lista
+        # sale ordenada. Es lo que permite el failover de read(): antes solo se
+        # guardaba el ganador y los suplentes quedaban invisibles.
+        self._servers: dict[str, list[str]] = {}
         for p in self._available:
             for mid in p.metrics():
+                self._servers.setdefault(mid, []).append(p.id)
                 self._resolution.setdefault(mid, p.id)
                 self._reasons.pop(mid, None)
 
@@ -62,20 +68,41 @@ class Registry:
         return {**self._reasons, **self._degraded}
 
     def read(self):
-        out = {}
+        """Una muestra por vuelta, resolviendo cada metrica al provider de
+        mayor prioridad que EFECTIVAMENTE respondio esta vez.
+
+        La version anterior fijaba el dueno al arrancar y, cuando fallaba, se
+        limitaba a marcar la metrica degradada: los suplentes quedaban
+        salteados por `self._resolution.get(mid) != p.id`. Con cpu.clock y
+        cpu.name servidas por pdh y por psutil, una caida de pdh mandaba las
+        dos a "--" con psutil vivo al lado sirviendolas igual.
+
+        La resolucion se recalcula en cada vuelta, asi que el failover y la
+        vuelta atras (cuando el dueno original revive) salen del mismo
+        camino, sin estado extra que sincronizar.
+        """
+        samples, errors = {}, {}
         for p in self._available:
             try:
-                sample = p.read()
+                samples[p.id] = p.read()
             except Exception as e:
-                for mid in p.metrics():
-                    if self._resolution.get(mid) == p.id:
-                        self._degraded[mid] = f"provider {p.id} fallo: {e}"
-                continue
-            for mid in p.metrics():
-                if self._resolution.get(mid) != p.id:
-                    continue
-                self._degraded.pop(mid, None)
-                out[mid] = sample.get(mid)
+                errors[p.id] = f"provider {p.id} fallo: {e}"
+
+        out, degraded = {}, {}
+        for mid, pids in self._servers.items():
+            for pid in pids:
+                if pid in samples:
+                    self._resolution[mid] = pid
+                    # .get(): el provider respondio pero puede no traer esta
+                    # metrica en esta muestra. None es "sin dato ahora", que
+                    # no es lo mismo que UNAVAILABLE.
+                    out[mid] = samples[pid].get(mid)
+                    break
+            else:
+                degraded[mid] = next((errors[pid] for pid in pids if pid in errors),
+                                     _NO_PROVIDER)
+        self._degraded = degraded
+
         for mid in self.unavailable():
             out.setdefault(mid, UNAVAILABLE)
         return out

@@ -17,6 +17,28 @@ STALE_AFTER = 8.0
 BACKOFF = [1.0, 2.0, 5.0, 10.0]
 
 
+KILL_TIMEOUT = 5.0
+
+
+def _kill(proc):
+    """terminate() + wait(): pide la baja y ademas la espera.
+
+    Cosechar el proceso es lo que libera el handle y el DLL que tenia
+    cargado. Un wait() que se pasa del timeout no puede tumbar al llamador
+    -- estamos justamente en el camino de apagado -- asi que se traga.
+    """
+    if proc is None:
+        return
+    try:
+        proc.terminate()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=KILL_TIMEOUT)
+    except Exception:
+        pass
+
+
 def _default_spawn(script):
     def spawn():
         return subprocess.Popen(
@@ -46,9 +68,19 @@ class SidecarClient:
     def _run(self):
         attempt = 0
         while not self._stop.is_set():
+            proc = None
             try:
-                self._proc = self._spawn()
-                for line in self._proc.stdout:
+                proc = self._spawn()
+                with self._lock:
+                    self._proc = proc
+                if self._stop.is_set():
+                    # close() puede haber corrido entre el chequeo del while y
+                    # este spawn: mato el proceso anterior (o ninguno, si era
+                    # el primero) y este recien nacido se queda sin dueno. Sin
+                    # esta guarda queda un powershell vivo con
+                    # LibreHardwareMonitorLib.dll tomado.
+                    return
+                for line in proc.stdout:
                     if self._stop.is_set():
                         break
                     line = line.strip()
@@ -65,6 +97,12 @@ class SidecarClient:
                     attempt = 0
             except Exception:
                 pass
+            finally:
+                # Cada vuelta cierra SU proceso. Sin esto, un respawn dejaba
+                # el anterior sin terminar ni cosechar -- zombie con su
+                # stdout abierto -- y el `return` de la guarda de arriba
+                # dejaba vivo justamente al que acababa de crear.
+                _kill(proc)
             if not self._restart or self._stop.is_set():
                 return
             time.sleep(BACKOFF[min(attempt, len(BACKOFF) - 1)])
@@ -86,9 +124,15 @@ class SidecarClient:
             return dict(self._data.get(name) or {})
 
     def close(self):
+        """Baja el sidecar y espera a que muera de verdad.
+
+        El wait() no es un lujo: terminate() solo pide la baja, y el caller
+        que a continuacion borra o mueve el directorio todavia puede pegar
+        contra el lock de LibreHardwareMonitorLib.dll -- la trampa que este
+        modulo dice evitar. El proceso se toma bajo el lock pero se mata
+        afuera, porque wait() bloquea y namespace()/caps() lo necesitan.
+        """
         self._stop.set()
-        if self._proc is not None:
-            try:
-                self._proc.terminate()
-            except Exception:
-                pass
+        with self._lock:
+            proc = self._proc
+        _kill(proc)

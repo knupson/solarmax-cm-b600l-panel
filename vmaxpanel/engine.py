@@ -128,7 +128,17 @@ class Engine:
         # el transporte.
         layout = self.store.current
         if layout is None:
-            raise OSError("no hay un layout valido cargado")
+            # Releer ACA y no solo en _serve(): _serve() corre despues de
+            # conectar, asi que un engine arrancado sin layout valido nunca
+            # llegaba a mirar el archivo de nuevo y giraba en el backoff para
+            # siempre, incluso despues de que el usuario corrigiera el JSON.
+            # En fase 3 el servicio arranca antes de que el perfil este
+            # garantizado, o sea que este es el camino normal.
+            self.store.reload_if_changed()
+            layout = self.store.current
+        if layout is None:
+            errs = "; ".join(self.store.errors) or "no hay un layout valido cargado"
+            raise OSError(errs)
         link = self._link_factory()
         try:
             link.open()
@@ -187,8 +197,36 @@ class Engine:
         self._refresh_sample()
         layout = self.store.current
         img = self._renderer.frame(self._sample, self._history.series())
-        self._link.send_frame(to_jpeg(img, layout.panel.rotate, layout.panel.jpeg_quality))
+        rotate = layout.panel.rotate
+        problem = self._rotation_problem(rotate)
+        if problem is not None:
+            # No se manda nada: el panel acepta un frame de la forma
+            # equivocada sin chistar y lo pinta como basura. Tampoco se
+            # levanta una excepcion -- reconectar no arregla un error de
+            # configuracion, y matar el loop impediria que el perfil
+            # corregido se recargue en caliente. Se registra y se sigue
+            # girando al fps del layout hasta que alguien arregle el rotate.
+            self._last_error = problem
+            return
+        self._link.send_frame(to_jpeg(img, rotate, layout.panel.jpeg_quality))
         self.stats["frames"] += 1
+
+    def _rotation_problem(self, rotate) -> str | None:
+        """Motivo por el que este `rotate` no encaja en este panel, o None.
+
+        El validador de layouts no puede decidir esto: no conoce la geometria
+        del panel, y un layout disenado 1480x320 con rotate 90 es
+        perfectamente valido para un panel 320x1480. Aca se conocen las dos
+        cosas -- el lienzo lo fija `panel_size=link.geometry` en _connect(),
+        asi que 90/270 solo entran si el panel es cuadrado.
+        """
+        if rotate not in (90, 270):
+            return None
+        g = self._link.geometry
+        if g.width == g.height:
+            return None
+        return (f"panel.rotate {rotate} gira el frame a {g.height}x{g.width}, "
+                f"pero el panel es {g.width}x{g.height}: usa 0 o 180")
 
     def _refresh_layout(self):
         changed, _errors = self.store.reload_if_changed()

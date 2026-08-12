@@ -1,5 +1,6 @@
 import io
 import json
+import time
 
 import pytest
 
@@ -23,9 +24,14 @@ class FakeProc:
     def __init__(self, lines):
         self.stdout = io.StringIO("".join(l + "\n" for l in lines))
         self.terminated = False
+        self.waited = False
 
     def terminate(self):
         self.terminated = True
+
+    def wait(self, timeout=None):
+        self.waited = True
+        return 0
 
     def poll(self):
         return None
@@ -157,3 +163,40 @@ def test_smbios_provider_is_unavailable_without_the_capability():
     p = SmbiosProvider(c)
     assert p.probe() is False
     assert p.unavailable_reason
+
+
+def test_close_waits_for_the_process_instead_of_only_signalling_it():
+    """terminate() sin wait() vuelve enseguida: el caller que borra o mueve
+    el directorio a continuacion todavia puede pegar contra el lock de
+    LibreHardwareMonitorLib.dll, que es justo la trampa que el docstring del
+    modulo dice que este close() evita."""
+    c, proc = client_for(SAMPLE)
+    c.close()
+    assert proc.terminated and proc.waited
+
+
+def test_close_during_a_respawn_does_not_leave_a_live_sidecar():
+    """Carrera real: si close() cae entre el chequeo de _stop y el _spawn(),
+    mata el proceso viejo, el thread levanta uno nuevo y sale por el return
+    sin matarlo. Queda un powershell con el DLL tomado y sin dueno."""
+    procs = []
+    holder = {}
+
+    def spawn():
+        p = FakeProc([json.dumps(SAMPLE)])
+        procs.append(p)
+        if len(procs) == 1:
+            holder["c"].close()          # close() justo mientras spawnea
+        return p
+
+    c = SidecarClient(script="ignored.ps1", spawn=spawn)
+    holder["c"] = c
+    c.start()
+
+    deadline = time.time() + 5.0
+    while time.time() < deadline and not all(p.terminated for p in procs):
+        time.sleep(0.05)
+
+    assert procs, "nunca spawneo"
+    assert all(p.terminated for p in procs), \
+        f"{sum(1 for p in procs if not p.terminated)} sidecar(s) vivos sin dueno"
