@@ -12,6 +12,7 @@ archivo ES el protocolo.
 import argparse
 import json
 import sys
+import traceback
 from pathlib import Path
 
 from PIL import Image
@@ -45,26 +46,46 @@ _TEMPLATES = {
 }
 
 
+# Valores de demostracion por metrica, para el preview del editor.
+#
+# A mano y no calculados: el 42% del rango declarado da cosas como "RAM usada
+# 107,5 G" (porque el spec admite hasta 256) o "5040 MT/s", que se ven como un
+# bug en vez de como un ejemplo. El punto del preview es juzgar el layout, y
+# para eso los numeros tienen que parecer reales -- incluido el largo, que es
+# lo que decide si un valor se pisa con el de al lado.
+_DEMO = {
+    "cpu.name": "INTEL CORE i5-12400F", "cpu.load": 55.5, "cpu.temp": 48.0,
+    "cpu.clock": 4080.0, "cpu.vcore": 1.05, "cpu.vrm_temp": 41.0,
+    "cpu.power": 65.0, "cpu.fan": 1250.0,
+    "gpu.name": "AMD RADEON RX 6800 XT", "gpu.load": 23.0, "gpu.temp": 51.0,
+    "gpu.hotspot": 68.0, "gpu.clock": 1850.0, "gpu.power": 84.0,
+    "gpu.vram": 37.0, "gpu.fan": 980.0,
+    "mem.load": 42.3, "mem.used": 13.5, "mem.total": 32.0, "mem.speed": 5600.0,
+    "net.down": 1258291.0, "net.up": 40960.0,
+    "clock.time": "14:32", "clock.date": "LUN 11 AGO",
+}
+
+
 def demo_sample() -> dict:
     """Una muestra plausible para TODAS las metricas conocidas.
 
     El preview no puede estar lleno de "--": las metricas que esta maquina no
     sirve (por falta de GSA1, de WinRing0, de lo que sea) igual tienen que
-    dibujarse con algo para poder juzgar el layout. Los numeros salen del
-    medio del rango declarado en el spec, asi que una barra se ve a media
-    asta en vez de vacia o saturada.
+    dibujarse con algo para poder juzgar el layout.
+
+    Lo que no este en _DEMO cae a la mitad del rango del spec, para que una
+    metrica nueva aparezca con algo razonable sin tener que tocar esta tabla.
     """
     out = {}
     for mid, spec in METRICS.items():
-        if spec.kind == "text":
-            out[mid] = {"cpu.name": "INTEL CORE i5-12400F",
-                        "gpu.name": "AMD RADEON RX 6800 XT",
-                        "clock.time": "14:32",
-                        "clock.date": "LUN 11 AGO"}.get(mid, mid.split(".")[-1].upper())
-            continue
-        lo = spec.min if spec.min is not None else 0.0
-        hi = spec.max if spec.max is not None else lo + 100.0
-        out[mid] = round(lo + (hi - lo) * 0.42, 2)
+        if mid in _DEMO:
+            out[mid] = _DEMO[mid]
+        elif spec.kind == "text":
+            out[mid] = mid.split(".")[-1].upper()
+        else:
+            lo = spec.min if spec.min is not None else 0.0
+            hi = spec.max if spec.max is not None else lo + 100.0
+            out[mid] = round(lo + (hi - lo) * 0.5, 2)
     # disk.temp.N no esta en METRICS (es un patron), pero el perfil los usa.
     for n in range(4):
         out[f"disk.temp.{n}"] = 34.0 + n
@@ -292,6 +313,7 @@ class EditorWindow:
         self.canvas = tk.Label(der, borderwidth=1, relief="solid")
         self.canvas.pack()
 
+        self.root.report_callback_exception = self._report_error
         self.root.bind("<Control-s>", lambda e: self._save())
         for tecla, (dx, dy) in (("<Left>", (-1, 0)), ("<Right>", (1, 0)),
                                 ("<Up>", (0, -1)), ("<Down>", (0, 1))):
@@ -302,6 +324,33 @@ class EditorWindow:
     def _selected(self):
         sel = self.lista.curselection()
         return self.lista.get(sel[0]) if sel else None
+
+    def _on_select(self):
+        """Cambio de seleccion en la lista.
+
+        Faltaba entero: el bind existia y este metodo no, asi que cada clic
+        levantaba una AttributeError que Tkinter imprime a stderr y se come.
+        Bajo pythonw -- que es como lo abre la bandeja -- eso no va a ninguna
+        parte: el panel de propiedades se quedaba mostrando el primer widget
+        para siempre, sin ningun error a la vista.
+        """
+        self._show_props()
+        self._show_errors()
+
+    def _report_error(self, exc_type, exc, tb):
+        """Excepcion de un callback de Tkinter, a la vista en vez de perdida.
+
+        El default imprime a stderr y sigue, que bajo pythonw es un fallo
+        invisible. Se muestra en la barra de estado y se re-emite al log.
+        """
+        texto = f"error interno: {exc_type.__name__}: {exc}"
+        try:
+            self.estado.config(text=texto, foreground="#B00000")
+        except Exception:
+            pass
+        print(texto, file=sys.stderr)
+        if tb is not None:
+            traceback.print_exception(exc_type, exc, tb, file=sys.stderr)
 
     def _refresh(self, select_first=False, keep=None):
         keep = keep or self._selected()
@@ -347,12 +396,14 @@ class EditorWindow:
             self.ttk.Label(self.props, text=clave).grid(row=fila, column=0,
                                                         sticky="w")
             var = self.tk.StringVar(value="" if valor is None else str(valor))
-            entrada = self.ttk.Entry(self.props, textvariable=var, width=28)
-            entrada.grid(row=fila, column=1, sticky="we", padx=4)
+            entrada = self.ttk.Entry(self.props, textvariable=var, width=32)
+            # sticky="w", sin weight en la columna: con la ventana maximizada,
+            # un campo que se expande deja una caja de 1500 px para escribir
+            # "18".
+            entrada.grid(row=fila, column=1, sticky="w", padx=4)
             entrada.bind("<FocusOut>", lambda e, k=clave: self._apply(k))
             entrada.bind("<Return>", lambda e, k=clave: self._apply(k))
             self._fields[clave] = var
-        self.props.columnconfigure(1, weight=1)
 
     # --- acciones ---
 
