@@ -1,0 +1,169 @@
+"""El motor manejado como una app de la sesion del usuario.
+
+Toda la logica que la bandeja necesita vive aca, sin una sola llamada a
+Win32: `tray.py` es solo el menu que invoca estos metodos. Asi el
+comportamiento -- arrancar, pausar, reanudar, salir, reportar estado -- se
+prueba entero sin ventanas y sin el panel enchufado.
+
+Un servicio de Windows habria sido el lugar "canonico" para esto, pero corre
+en la sesion 0: desde ahi no se puede mostrar un icono en la bandeja ni abrir
+un editor, que es justamente lo que el usuario queria. La tarea programada al
+logon hace de autostart y esta clase hace de servicio dentro de la sesion.
+"""
+import threading
+import time
+
+from .engine import Engine, EngineConfig
+from .layout import loader
+from .providers.setup import build_registry
+from .transport.panel_link import PanelLink
+
+
+class _InterruptibleClock:
+    """Reloj cuyo sleep se corta cuando alguien pide la baja.
+
+    El engine duerme hasta 10 s entre reintentos de conexion. Con
+    `time.sleep` eso significa que "Salir" en la bandeja tarda hasta 10 s en
+    hacer efecto, con el menu ya cerrado y el usuario pensando que se colgo.
+    """
+
+    def __init__(self):
+        self._wake = threading.Event()
+
+    def time(self):
+        return time.time()
+
+    def sleep(self, seconds):
+        if seconds > 0:
+            self._wake.wait(seconds)
+
+    def interrupt(self):
+        self._wake.set()
+
+    def reset(self):
+        self._wake.clear()
+
+
+class PanelApp:
+    """Un motor corriendo en su propio thread, con arranque/pausa/baja.
+
+    `pause()` no es "dejar de dibujar": baja el motor y suelta el puerto, que
+    es como el usuario le presta el panel a LCD Control sin cerrar esto.
+    `resume()` lo vuelve a levantar.
+    """
+
+    def __init__(self, profile_path, link_factory=None, registry_factory=None,
+                 port=None):
+        self.profile_path = profile_path
+        self._link_factory = link_factory or (lambda: PanelLink.autodetect(port))
+        self._registry_factory = registry_factory or build_registry
+        self._lock = threading.Lock()
+        self._thread = None
+        self._clock = _InterruptibleClock()
+        self._engine = None
+        self._registry = None
+        self._client = None
+        self._paused = False
+        self._last_state = {}
+
+    # --- ciclo de vida ---
+
+    @property
+    def paused(self) -> bool:
+        return self._paused
+
+    def running(self) -> bool:
+        t = self._thread
+        return t is not None and t.is_alive()
+
+    def start(self):
+        """Idempotente: llamarlo dos veces no levanta dos motores."""
+        with self._lock:
+            if self.running():
+                return
+            self._paused = False
+            self._clock.reset()
+            store = loader.ProfileStore(self.profile_path)
+            store.load_now()          # un perfil roto no impide arrancar: el
+                                      # engine reintenta y lo relee solo
+            self._registry, self._client = self._registry_factory()
+            self._engine = Engine(store, self._registry,
+                                  EngineConfig(profile_path=self.profile_path),
+                                  link_factory=self._link_factory,
+                                  clock=self._clock)
+            self._thread = threading.Thread(target=self._serve, daemon=True,
+                                            name="vmaxpanel-engine")
+            self._thread.start()
+
+    def _serve(self):
+        try:
+            self._engine.run()
+        finally:
+            # El estado se congela ANTES de soltar los recursos: despues de
+            # cerrar el registry, unavailable()/resolution() ya no describen
+            # la corrida que acabo de terminar, y la bandeja sigue queriendo
+            # mostrar por que quedo asi.
+            self._last_state = self._snapshot()
+            self._release()
+
+    def _release(self):
+        for closeable in (self._registry, self._client):
+            if closeable is None:
+                continue
+            try:
+                closeable.close()
+            except Exception:
+                pass
+        self._registry = self._client = None
+
+    def stop(self):
+        """Pide la baja y espera. El sleep del engine es interrumpible, asi
+        que esto vuelve enseguida incluso en medio del backoff."""
+        with self._lock:
+            eng, thread = self._engine, self._thread
+        if eng is not None:
+            eng.stop()
+        self._clock.interrupt()
+        if thread is not None:
+            thread.join(timeout=10.0)
+        with self._lock:
+            self._engine = None
+            self._thread = None
+
+    def pause(self):
+        if self._paused:
+            return
+        self.stop()
+        self._paused = True
+
+    def resume(self):
+        if not self._paused:
+            return
+        self._paused = False
+        self.start()
+
+    def toggle(self):
+        self.resume() if self._paused else self.pause()
+
+    # --- estado para la bandeja ---
+
+    def state(self) -> dict:
+        """Nunca levanta: la bandeja pinta esto en cada apertura del menu."""
+        if self.running():
+            return self._snapshot()
+        # Motor bajado: se devuelve la ultima foto viva, con running/paused
+        # actualizados. Reconstruirlo desde un engine ya cerrado daria
+        # "desconectado" y cero metricas, borrando el motivo por el que se
+        # cayo justo cuando el usuario lo va a leer.
+        return {**self._last_state, "running": False, "paused": self._paused}
+
+    def _snapshot(self) -> dict:
+        eng = self._engine
+        if eng is None:
+            return {"running": False, "paused": self._paused, "frames": 0,
+                    "profile": None, "panel": "desconectado", "warnings": [],
+                    "unavailable": {}, "resolution": {}, "last_error": None}
+        st = dict(eng.state())
+        st["running"] = self.running()
+        st["paused"] = self._paused
+        return st

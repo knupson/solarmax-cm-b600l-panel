@@ -77,6 +77,8 @@ Esos dos slots del layout se reetiquetaron a **VCORE** y **VRM** en `assets/back
 ## Estructura
 
 ```
+vmaxpanel/    motor data-driven: app.py (supervisor), tray.py (bandeja), editor.py,
+              engine.py, cli.py, layout/, render/, providers/, transport/, profiles/
 daemon/       panel.py, sensors.ps1, start.ps1, stop.ps1, assets/, DLLs, panel.log
 research/     herramientas de reversing y evidencia (sniffers frida, sondas, capturas, CSVs)
 docs/memory/  copia de las memorias del proyecto
@@ -96,15 +98,35 @@ python panel.py --save preview.png    # previsualizar sin tocar el panel
 `start.ps1` escribe `panel.pid`. `stop.ps1` no confía solo en el pidfile: también barre por
 línea de comandos, porque los sidecars huérfanos se quedan con el DLL de LHM tomado.
 
+### La app de bandeja
+
+```powershell
+python -m vmaxpanel.tray --log vmaxpanel.log   # ícono + menú, supervisa el motor
+python -m vmaxpanel.editor                     # editor de layout (lo abre la bandeja)
+```
+
+El menú de la bandeja tiene el estado (conexión, frames, último error, métricas sin datos),
+pausar/reanudar, reiniciar el motor, abrir el editor, abrir el JSON y ver el log. **Pausar
+suelta COM3**, así que es la forma de prestarle el panel a LCD Control sin cerrar nada.
+
+El editor guarda con escritura atómica y el motor levanta el cambio en caliente: no hay
+comunicación entre los dos procesos, **el archivo es el protocolo**. El editor nunca guarda un
+layout inválido, porque el motor lo rechazaría y el usuario habría "guardado" algo que el panel
+ignora.
+
+Detalle de diseño en `docs/superpowers/specs/2026-08-12-vmax-panel-fase3-design.md`, incluido
+**por qué no hay un servicio de Windows**: corre en la sesión 0 y desde ahí no se puede mostrar
+ni un ícono ni una ventana.
+
 ### Autostart
 
-**Registrado el 2026-08-11**: tarea `PanelVitals` al logon, **RunLevel Highest** (GSA1 y el
-SMART de los SSD piden elevación), corriendo el motor nuevo. La tarea vendor
+**Registrado el 2026-08-11**, apuntado a la bandeja el 2026-08-12: tarea `PanelVitals` al logon,
+**RunLevel Highest** (GSA1 y el SMART de los SSD piden elevación). La tarea vendor
 `LCD ControlPowerBoot` quedó deshabilitada.
 
 ```powershell
 $pyw = 'C:\Users\KnuPwns\AppData\Local\Programs\Python\Python313\pythonw.exe'
-$act = New-ScheduledTaskAction -Execute $pyw -Argument '-u -m vmaxpanel --log E:\Claude\Solarmax_Display\vmaxpanel.log' -WorkingDirectory 'E:\Claude\Solarmax_Display'
+$act = New-ScheduledTaskAction -Execute $pyw -Argument '-u -m vmaxpanel.tray --log E:\Claude\Solarmax_Display\vmaxpanel.log' -WorkingDirectory 'E:\Claude\Solarmax_Display'
 $trg = New-ScheduledTaskTrigger -AtLogOn -User 'KnuPwns'
 $prn = New-ScheduledTaskPrincipal -UserId 'KnuPwns' -LogonType Interactive -RunLevel Highest
 $set = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
@@ -115,7 +137,10 @@ Disable-ScheduledTask -TaskName 'LCD ControlPowerBoot'
 `pythonw.exe` no tiene consola, así que **`--log` no es opcional acá**: sin él, un motor que
 muere al logon deja la pantalla negra sin dejar rastro. El log va a `vmaxpanel.log` en la raíz
 del repo (gitignored) y se escribe con flush por línea, incluido el traceback de una excepción
-que se escape.
+que se escape. Se ganó el sueldo en la primera corrida de la bandeja: cazó un `OverflowError`
+dentro del callback de Win32 (`DefWindowProcW` sin `argtypes`, con un `LPARAM` de 64 bits) que
+Python se come como "Exception ignored" y que dejaba la ventana sin responder mensajes sin que
+nada fallara a la vista.
 
 Probar la tarea sin reiniciar: `Stop-ScheduledTask PanelVitals` + `Start-ScheduledTask
 PanelVitals`, y revisar el log. Ojo que dos instancias se pelean por COM3: matar la manual

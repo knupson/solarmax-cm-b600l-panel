@@ -24,10 +24,13 @@ mapa de sensores, la causa raíz documentada y la guía de edición.
 
 ## Operación
 
-Motor nuevo (fase 1), desde la raíz del repo:
+Desde la raíz del repo. **Lo normal es que ya esté corriendo por la tarea `PanelVitals`**, que
+levanta la bandeja al logon:
 
 ```powershell
 cd E:\Claude\Solarmax_Display
+python -m vmaxpanel.tray --log vmaxpanel.log   # bandeja: menú, pausa, editor, log
+python -m vmaxpanel.editor                     # editor de layout
 python -m vmaxpanel                       # maneja el panel con vmaxpanel/profiles/vitals.json
 python -m vmaxpanel --once                # un solo frame
 python -m vmaxpanel --save preview.png    # render a PNG, no toca el panel
@@ -122,12 +125,14 @@ diagnóstico ya hecho y verificado:
   argumento contra los valores escritos a mano en un perfil que se comparte: el número cambió
   solo y nadie se enteró.
 
-**Autostart hecho** (2026-08-11): tarea `PanelVitals` registrada corriendo `pythonw -m vmaxpanel
---log`, tarea vendor `LCD ControlPowerBoot` deshabilitada. Ver README, sección Autostart, para
-el comando exacto y cómo revertir. La fase 3 la reemplaza por un servicio de Windows.
+**Autostart hecho** (2026-08-11, apuntado a la bandeja el 2026-08-12): tarea `PanelVitals`
+corriendo `pythonw -m vmaxpanel.tray --log`, tarea vendor `LCD ControlPowerBoot` deshabilitada.
+Ver README, sección Autostart. **No la reemplaza un servicio de Windows: eso estaba mal en el
+diseño original** — un servicio corre en la sesión 0 y desde ahí no se puede mostrar ni un ícono
+de bandeja ni una ventana. Ver el spec de fase 3.
 
 **Con el autostart puesto, `stop.ps1` alcanza todavía menos:** además de no conocer al proceso
-`-m vmaxpanel`, la tarea lo levanta de nuevo al siguiente logon. Para bajarlo de verdad,
+de la bandeja, la tarea lo levanta de nuevo al siguiente logon. Para bajarlo de verdad,
 `Stop-ScheduledTask PanelVitals` y matar el `pythonw.exe`.
 
 ### Al escribir los planes de fase 2 y 3
