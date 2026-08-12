@@ -65,6 +65,9 @@ METRICS: dict[str, MetricSpec] = {m.id: m for m in [
     _n("mem.load", "RAM usada", "%", 0.0, 100.0),
     _n("mem.used", "RAM usada", "GiB", 0.0, 256.0),
     _n("mem.total", "RAM total", "GiB", 0.0, 256.0),
+    # MT/s (megatransfers), no MHz: es la unidad que reporta SMBIOS y la que
+    # usa el kit para venderse. DDR5-5600 son 5600 MT/s a 2800 MHz de reloj.
+    _n("mem.speed", "Velocidad de RAM", "MT/s", 0.0, 12000.0),
     _n("net.down", "Bajada", "B/s", 0.0, None),
     _n("net.up", "Subida", "B/s", 0.0, None),
     _t("clock.time", "Hora"),

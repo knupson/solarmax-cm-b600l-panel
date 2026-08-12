@@ -43,3 +43,11 @@ def test_is_metric_rejects_a_non_string_instead_of_raising():
     for bad in (123, None, True, ["cpu.load"], {"a": 1}):
         assert metrics.is_metric(bad) is False
         assert metrics.spec_for(bad) is None
+
+
+def test_mem_speed_is_a_known_metric():
+    """Estaba horneada como label "6000" en el perfil. Una actualizacion de
+    BIOS reseteo el XMP y el numero quedo mintiendo."""
+    assert is_metric("mem.speed")
+    spec = metrics.spec_for("mem.speed")
+    assert spec.kind == "number" and spec.unit == "MT/s"

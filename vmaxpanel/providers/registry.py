@@ -4,7 +4,7 @@ from .base import Provider
 
 # Mas especifico primero: si una placa Gigabyte sirve cpu.temp por GSA1, eso
 # le gana a la lectura generica de LibreHardwareMonitor.
-PROVIDER_PRIORITY = ["gsa1", "msr", "pdh", "lhm", "psutil"]
+PROVIDER_PRIORITY = ["gsa1", "msr", "pdh", "lhm", "smbios", "psutil"]
 
 _NO_PROVIDER = "ningun provider de esta maquina sirve esta metrica"
 

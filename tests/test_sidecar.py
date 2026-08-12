@@ -7,7 +7,8 @@ from vmaxpanel.metrics import UNAVAILABLE
 from vmaxpanel.providers.msr import MsrProvider
 from vmaxpanel.providers.registry import Registry
 from vmaxpanel.providers.sidecar import SidecarClient
-from vmaxpanel.providers.sidecar_providers import Gsa1Provider, LhmProvider, PdhProvider
+from vmaxpanel.providers.sidecar_providers import (Gsa1Provider, LhmProvider,
+                                                  PdhProvider, SmbiosProvider)
 
 SAMPLE = {
     "gsa1": {"cpu.temp": 42.0, "cpu.vrm_temp": 38.0, "cpu.vcore": 1.05},
@@ -139,3 +140,20 @@ def test_a_capability_lost_mid_run_stops_serving_and_recovers(monkeypatch):
     caps["gsa1"] = True
     assert r.read()["cpu.temp"] == 42.0
     assert "cpu.temp" not in r.unavailable()
+
+
+def test_smbios_provider_serves_the_memory_speed():
+    c, _ = client_for({**SAMPLE, "smbios": {"mem.speed": 5600},
+                       "caps": {"gsa1": True, "pdh": True, "lhm": True,
+                                "smbios": True}})
+    p = SmbiosProvider(c)
+    assert p.metrics() == {"mem.speed"}
+    assert p.probe() is True
+    assert p.read()["mem.speed"] == 5600
+
+
+def test_smbios_provider_is_unavailable_without_the_capability():
+    c, _ = client_for(SAMPLE)          # SAMPLE no trae caps.smbios
+    p = SmbiosProvider(c)
+    assert p.probe() is False
+    assert p.unavailable_reason

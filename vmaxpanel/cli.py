@@ -14,7 +14,8 @@ from .providers.msr import MsrProvider
 from .providers.psutil_provider import PsutilProvider
 from .providers.registry import Registry
 from .providers.sidecar import SidecarClient
-from .providers.sidecar_providers import Gsa1Provider, LhmProvider, PdhProvider
+from .providers.sidecar_providers import (Gsa1Provider, LhmProvider, PdhProvider,
+                                          SmbiosProvider)
 from .render.renderer import Renderer
 from .transport.panel_link import PanelLink
 
@@ -67,7 +68,8 @@ def build_registry(sidecar_script=SIDECAR, warmup=25.0):
         print("aviso: el sidecar no entrego datos; los sensores de hardware "
               "van a quedar no disponibles", file=sys.stderr)
     return Registry([PsutilProvider(), Gsa1Provider(client), PdhProvider(client),
-                     LhmProvider(client), MsrProvider()]), client
+                     LhmProvider(client), SmbiosProvider(client),
+                     MsrProvider()]), client
 
 
 def main(argv=None) -> int:

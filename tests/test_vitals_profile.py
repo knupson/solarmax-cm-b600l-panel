@@ -17,7 +17,7 @@ SAMPLE = {
     "cpu.power": UNAVAILABLE, "cpu.fan": UNAVAILABLE,
     "gpu.name": "AMD RADEON RX 6800 XT", "gpu.load": 23.0, "gpu.temp": 51.0,
     "gpu.hotspot": 68.0, "gpu.clock": 1850.0, "gpu.power": 84.0, "gpu.vram": 37.0,
-    "mem.load": 42.3, "mem.used": 13.5, "mem.total": 32.0,
+    "mem.load": 42.3, "mem.used": 13.5, "mem.total": 32.0, "mem.speed": 5600.0,
     "net.down": 1258291.0, "net.up": 40960.0,
     "disk.temp.0": 34.0, "disk.temp.1": 40.0, "disk.temp.2": 41.0,
 }
@@ -92,3 +92,16 @@ def test_every_section_header_has_a_rule_above_it():
         above = [r for r in rules if 0 < h.y - r.y <= 40]
         assert len(above) == 1, f"{h.text} no tiene una regla arriba"
         assert above[0].h == 1               # hairline, no una banda
+
+
+def test_the_profile_reads_the_memory_speed_instead_of_hardcoding_it():
+    """Era un label con el texto "6000". Una actualizacion de BIOS reseteo el
+    XMP, la maquina paso a 5600 y el panel siguio mostrando 6000. Un perfil
+    que se comparte con otros duenos del panel no puede traer el numero de
+    ESTA maquina escrito a mano."""
+    lay = loader.load(PROFILE)
+    speed = [w for w in lay.widgets if w.id == "mem-speed"][0]
+    assert speed.type == "text" and speed.metric == "mem.speed"
+    hardcoded = [w for w in lay.widgets
+                 if w.type == "label" and w.text.strip().isdigit()]
+    assert hardcoded == []

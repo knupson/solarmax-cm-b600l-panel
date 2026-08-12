@@ -99,8 +99,8 @@
       "font": "value", "color": "#86B6EF", "format": "{:.1f}G" },
     { "id": "mem-speed-tag", "type": "label", "text": "SPEED", "x": 158, "y": 1036,
       "font": "tag", "color": "#898781" },
-    { "id": "mem-speed", "type": "label", "text": "6000", "x": 158, "y": 1056,
-      "font": "value", "color": "#86B6EF" },
+    { "id": "mem-speed", "type": "text", "metric": "mem.speed", "x": 158, "y": 1056,
+      "font": "value", "color": "#86B6EF", "format": "{:.0f}" },
 
     { "id": "sys-rule", "type": "rect", "x": 24, "y": 1132, "w": 272, "h": 1,
       "fill": "#242834" },

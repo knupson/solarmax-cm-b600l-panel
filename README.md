@@ -55,7 +55,8 @@ de Windows). Sin MSR. Todo lo de acá abajo es **driverless y read-only**.
 | VCore | idem, `EZVGetVoltage(Id=5)` (mV) |
 | GPU: load, VRAM, temp, hot spot, power, clock, fan | LibreHardwareMonitor (ADL) |
 | Temp de los 3 SSD | LibreHardwareMonitor (NVMe SMART) |
-| RAM, red | psutil |
+| RAM (uso), red | psutil |
+| Velocidad de RAM | `Win32_PhysicalMemory.ConfiguredClockSpeed` (MT/s), con `Speed` de respaldo |
 
 **GSA1** = `root\WMI`, clase `GSA1_ACPIMethod`, instancia `ACPI\PNP0C14\GSADEV0_0`.
 Identifiqué los ids por correlación con carga: id2 subió +10 °C y id4 +9 °C bajo 100% de

@@ -61,6 +61,26 @@ class PdhProvider(_SidecarProvider):
     reason = "no se pudo leer el contador PDH % Processor Performance"
 
 
+class SmbiosProvider(_SidecarProvider):
+    """Velocidad real de la RAM, de Win32_PhysicalMemory.
+
+    Estaba horneada en el perfil como un label con el texto "6000" hasta que
+    una actualizacion de BIOS reseteo el XMP y la maquina paso a 5600: el
+    panel siguio mostrando 6000. Un dato de configuracion tambien puede
+    cambiar abajo tuyo, asi que se lee en vez de escribirse a mano.
+
+    El sidecar lo consulta una sola vez al arrancar -- SMBIOS no cambia
+    mientras Windows corre -- pero igual pasa por el mismo gate de frescura
+    que el resto: si el sidecar se muere, este valor deja de servirse como
+    cualquier otro, en vez de quedar congelado en pantalla.
+    """
+
+    id = "smbios"
+    namespace = "smbios"
+    served = {"mem.speed"}
+    reason = "no se pudo leer Win32_PhysicalMemory"
+
+
 class LhmProvider(_SidecarProvider):
     """GPU y temps de SSD. Los ids de disco se descubren de la muestra.
 

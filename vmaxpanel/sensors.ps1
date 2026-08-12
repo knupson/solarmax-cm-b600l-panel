@@ -2,9 +2,10 @@
 # Emite una linea JSON por segundo a stdout, con ids canonicos de metrica ya
 # namespaceados por provider, mas un bloque "caps" con lo que funciono aca.
 #
-#   gsa1  Gigabyte GSA1 ACPI-WMI (driverless): temp CPU (id2), temp VRM (id4), VCore (EZV id5)
-#   pdh   % Processor Performance x base clock -> clock real de CPU
-#   lhm   LibreHardwareMonitor: GPU y temps de SSD por SMART
+#   gsa1    Gigabyte GSA1 ACPI-WMI (driverless): temp CPU (id2), temp VRM (id4), VCore (EZV id5)
+#   pdh     % Processor Performance x base clock -> clock real de CPU
+#   lhm     LibreHardwareMonitor: GPU y temps de SSD por SMART
+#   smbios  Win32_PhysicalMemory: velocidad real de la RAM (estaba horneada en el perfil)
 #
 # SOLO lecturas. GSA1 tambien expone PIOWrite/MEMWrite/PCIWrite (escritura
 # arbitraria a puertos, memoria fisica y espacio PCI): no se invocan.
@@ -25,6 +26,14 @@ $gsa = Get-CimInstance -Namespace root\WMI -ClassName GSA1_ACPIMethod
 $baseMhz = (Get-CimInstance Win32_Processor | Select-Object -First 1).MaxClockSpeed
 if (-not $baseMhz -or $baseMhz -le 0) { $baseMhz = 0 }
 $cpuName = (Get-CimInstance Win32_Processor | Select-Object -First 1).Name
+
+# --- velocidad de la RAM: una sola vez, SMBIOS no cambia mientras Windows corre ---
+# ConfiguredClockSpeed es la velocidad a la que esta corriendo; Speed es la del
+# SPD. Se prefiere la configurada y se cae a la otra si la placa no la reporta.
+$mem = Get-CimInstance Win32_PhysicalMemory | Select-Object -First 1
+$memSpeed = $mem.ConfiguredClockSpeed
+if (-not $memSpeed -or $memSpeed -le 0) { $memSpeed = $mem.Speed }
+if (-not $memSpeed -or $memSpeed -le 0) { $memSpeed = 0 }
 
 # --- LHM: setup una sola vez ---
 $comp = $null
@@ -47,7 +56,17 @@ function Sensor($hw, $type, $name) {
 
 while ($true) {
     $out = [ordered]@{}
-    $caps = [ordered]@{ gsa1 = $false; pdh = $false; lhm = $false }
+    $caps = [ordered]@{ gsa1 = $false; pdh = $false; lhm = $false; smbios = $false }
+
+    # El unico cap que no se re-evalua contra una lectura nueva: SMBIOS se leyo
+    # arriba y no cambia hasta el proximo arranque. Se emite igual en cada
+    # vuelta para que el gate de frescura del lado Python lo cubra como al
+    # resto -- si el sidecar muere, el valor deja de servirse en vez de quedar
+    # congelado en pantalla.
+    if ($memSpeed -gt 0) {
+        $caps.smbios = $true
+        $out.smbios = [ordered]@{ 'mem.speed' = [int]$memSpeed }
+    }
 
     if ($gsa) {
         $g = [ordered]@{}
