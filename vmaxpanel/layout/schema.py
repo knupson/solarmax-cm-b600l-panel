@@ -278,8 +278,18 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
     if "metric" in REQUIRED[t] and "metric" in w and not is_metric(w["metric"]):
         errs.append(f"{where}: metrica desconocida {w['metric']!r}")
 
-    if "font" in REQUIRED[t] and isinstance(w.get("font"), str) and w["font"] not in fonts:
-        errs.append(f"{where}: alias de fuente desconocido {w['font']!r}")
+    if "font" in REQUIRED[t] and "font" in w:
+        # El isinstance() original salteaba el chequeo cuando el alias no era
+        # texto, asi que un {"font": 3} pasaba entero y recien reventaba en
+        # ctx.layout.fonts[w.font] dentro del render.
+        if not isinstance(w["font"], str):
+            errs.append(f"{where}: font debe ser el nombre de un alias de la "
+                        f"tabla fonts, es {w['font']!r}")
+        elif w["font"] not in fonts:
+            errs.append(f"{where}: alias de fuente desconocido {w['font']!r}")
+
+    if t == "label" and "text" in w and not isinstance(w["text"], str):
+        errs.append(f"{where}: text debe ser texto, es {w['text']!r}")
 
     for k in ("color", "fill", "track", "stroke"):
         if k in w:
@@ -324,6 +334,32 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
     for k in ("w", "h", "r", "thickness", "radius", "samples"):
         if k in w and not _is_int(w[k]):
             errs.append(f"{where}: {k} debe ser entero")
+
+    # Todo lo que sigue eran claves permitidas sin ningun chequeo de tipo: el
+    # layout validaba limpio y el TypeError aparecia adentro de
+    # Renderer.frame(), donde Engine.run() -- que captura solo (OSError,
+    # PanelNotFound) -- no lo ataja. Con hot-reload el layout malo ademas
+    # reemplaza al bueno, asi que no queda ninguno al que volver.
+    # min/max admiten null: su default en el modelo ya es None y significa
+    # "extremo abierto, completalo con el spec de la metrica". start_angle y
+    # sweep no: su default es un numero, asi que un null llega tal cual al
+    # render y revienta en w.start_angle + w.sweep.
+    for k in ("min", "max"):
+        if k in w and w[k] is not None and not _is_num(w[k]):
+            errs.append(f"{where}: {k} debe ser un numero, es {w[k]!r}")
+    for k in ("start_angle", "sweep"):
+        if k in w and not _is_num(w[k]):
+            errs.append(f"{where}: {k} debe ser un numero, es {w[k]!r}")
+
+    lo, hi = w.get("min"), w.get("max")
+    if _is_num(lo) and _is_num(hi) and hi <= lo:
+        errs.append(f"{where}: max ({hi}) tiene que ser mayor que min ({lo}); "
+                    f"si no, el widget queda vacio para cualquier valor")
+
+    if "samples" in w and _is_int(w["samples"]) and w["samples"] < 1:
+        # series[-0:] es series[0:]: un 0 grafica TODO el historial en vez de
+        # nada, y un negativo corta por el frente de la serie.
+        errs.append(f"{where}: samples debe ser >= 1, es {w['samples']}")
 
     if t == "image" and "src" in w and safe_asset_path(w["src"]) is None:
         errs.append(f"{where}: src invalido o fuera del directorio de assets: "

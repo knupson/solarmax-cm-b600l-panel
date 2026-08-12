@@ -290,3 +290,62 @@ def test_rect_rejects_a_stroke_width_below_one():
     dibujaria como 1 sin que nada avise de la diferencia."""
     errs = schema.validate(rect(stroke="#FFFFFF", stroke_width=0))
     assert any("stroke_width" in e for e in errs)
+
+
+# --- campos que el validador dejaba pasar sin chequear el tipo ---
+#
+# Todos estos daban validate() == [] y despues TypeError dentro de
+# Renderer.frame(). Engine.run() captura solo (OSError, PanelNotFound) --
+# a proposito, ver el comentario de engine.py -- asi que el error se
+# escapaba del loop y el daemon moria. Por hot-reload es peor: el layout
+# malo pasa la validacion y REEMPLAZA al bueno, asi que no queda a que
+# volver, en contra del invariante "un JSON roto no apaga el panel".
+
+def bar(**changes):
+    b = {"id": "b", "type": "bar", "metric": "cpu.load", "x": 24, "y": 316,
+         "w": 272, "h": 16, "fill": "#3987E5", "track": "#242834"}
+    b.update(changes)
+    return with_widget(b)
+
+
+def test_bar_rejects_a_non_numeric_min_or_max():
+    assert any("min" in e for e in schema.validate(bar(min="0")))
+    assert any("max" in e for e in schema.validate(bar(max=[100])))
+
+
+def test_bar_rejects_a_max_that_is_not_above_min():
+    """hi <= lo hace que _fraction() devuelva None y la barra quede vacia
+    para siempre, sin ningun aviso."""
+    assert any("max" in e for e in schema.validate(bar(min=80, max=20)))
+
+
+def test_arc_rejects_a_non_numeric_angle():
+    arc = {"id": "a", "type": "arc", "metric": "cpu.load", "x": 100, "y": 100,
+           "r": 40, "fill": "#3987E5", "track": "#242834"}
+    assert any("start_angle" in e for e in
+               schema.validate(with_widget({**arc, "start_angle": "x"})))
+    assert any("sweep" in e for e in
+               schema.validate(with_widget({**arc, "sweep": None})))
+
+
+def test_label_rejects_a_non_string_text():
+    lbl = {"id": "l", "type": "label", "text": 7, "x": 24, "y": 198,
+           "font": "mono-14", "color": "#FFFFFF"}
+    assert any("text" in e for e in schema.validate(with_widget(lbl)))
+
+
+def test_a_non_string_font_alias_is_rejected():
+    """El alias solo se buscaba en la tabla de fuentes cuando ya era str."""
+    lbl = {"id": "l", "type": "label", "text": "CPU", "x": 24, "y": 198,
+           "font": 3, "color": "#FFFFFF"}
+    assert any("font" in e for e in schema.validate(with_widget(lbl)))
+
+
+def test_graph_rejects_samples_below_one():
+    """series[-0:] es series[0:]: samples=0 grafica TODO el historial en vez
+    de nada, y un negativo corta por el frente."""
+    g = {"id": "g", "type": "graph", "metric": "cpu.load", "x": 10, "y": 10,
+         "w": 200, "h": 60, "color": "#3987E5"}
+    assert any("samples" in e for e in schema.validate(with_widget({**g, "samples": 0})))
+    assert any("samples" in e for e in schema.validate(with_widget({**g, "samples": -5})))
+    assert schema.validate(with_widget({**g, "samples": 120})) == []

@@ -104,3 +104,38 @@ def test_stale_client_reports_not_fresh(monkeypatch):
     assert c.fresh
     monkeypatch.setattr("vmaxpanel.providers.sidecar.time.time", lambda: 1e12)
     assert not c.fresh
+
+
+def test_a_stale_sidecar_stops_serving_instead_of_freezing_values(monkeypatch):
+    """SidecarClient.fresh y STALE_AFTER existian sin ningun consumidor en
+    el motor nuevo: el daemon viejo gateaba cada lectura contra eso
+    (daemon/panel.py). Sin el gate, un sensors.ps1 colgado deja el panel
+    pintando el ultimo cpu.temp para siempre y unavailable() no dice nada
+    -- la misma mentira de estado por la que existe este proyecto."""
+    c, _ = client_for(SAMPLE)
+    r = Registry([Gsa1Provider(c), PdhProvider(c), LhmProvider(c)])
+    assert r.read()["cpu.temp"] == 42.0
+
+    monkeypatch.setattr("vmaxpanel.providers.sidecar.time.time", lambda: 1e12)
+    sample = r.read()
+    assert sample["cpu.temp"] is UNAVAILABLE
+    assert sample["gpu.load"] is UNAVAILABLE
+    assert "sidecar" in r.unavailable()["cpu.temp"]
+
+
+def test_a_capability_lost_mid_run_stops_serving_and_recovers(monkeypatch):
+    """sensors.ps1 documenta que si una fuente se cae deja de reportar
+    caps=true y se recupera sola cuando vuelve. Del lado Python eso no tenia
+    efecto: probe() corre una sola vez, en Registry.__init__."""
+    c, _ = client_for(SAMPLE)
+    r = Registry([Gsa1Provider(c), PdhProvider(c), LhmProvider(c)])
+    assert r.read()["cpu.temp"] == 42.0
+
+    caps = {"gsa1": False, "pdh": True, "lhm": True}
+    monkeypatch.setattr(c, "caps", lambda: caps)
+    assert r.read()["cpu.temp"] is UNAVAILABLE
+    assert "Gigabyte" in r.unavailable()["cpu.temp"]
+
+    caps["gsa1"] = True
+    assert r.read()["cpu.temp"] == 42.0
+    assert "cpu.temp" not in r.unavailable()

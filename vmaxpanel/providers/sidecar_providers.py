@@ -1,5 +1,6 @@
 """Providers que leen del mismo SidecarClient, cada uno su namespace."""
 from .base import Provider
+from .sidecar import STALE_AFTER
 
 
 class _SidecarProvider(Provider):
@@ -21,6 +22,27 @@ class _SidecarProvider(Provider):
         return set(self.served)
 
     def read(self):
+        """Levanta en vez de devolver datos viejos.
+
+        Registry.read() convierte la excepcion en metrica degradada, con el
+        motivo visible en state()["unavailable"], y la vuelve a servir sola
+        cuando el read siguiente funciona. Devolver el ultimo namespace
+        recibido seria peor que no mostrar nada: un sensors.ps1 colgado --
+        bloqueado en un Get-Counter o en una llamada CIM -- deja el panel
+        pintando un cpu.temp de hace horas como si fuera de ahora, y nada en
+        el estado avisa que esta pasando.
+
+        Las dos condiciones se chequean en cada vuelta a proposito. probe()
+        corre una sola vez, en Registry.__init__, asi que era el unico lugar
+        que miraba caps: una fuente que se caia en la mitad de la corrida
+        seguia contando como disponible, en contra de lo que documenta
+        sensors.ps1.
+        """
+        if not self._c.fresh:
+            raise RuntimeError(f"el sidecar no entrega datos desde hace mas "
+                               f"de {STALE_AFTER:.0f} s")
+        if not self._c.caps().get(self.namespace, False):
+            raise RuntimeError(self.reason)
         return self._c.namespace(self.namespace)
 
 

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -111,3 +112,30 @@ def test_store_recovers_after_user_fixes_the_file(tmp_path):
     changed, errors = store.reload_if_changed()
     assert changed is True and errors == []
     assert store.current.name == "Test"
+
+
+def test_the_shipped_profile_survives_a_save_load_roundtrip(tmp_path):
+    """El editor de fase 3 guarda con loader.save, asi que un layout que
+    save() emite y load() rechaza es un archivo que el usuario no puede
+    volver a abrir. MINIMAL no cubre esto: no tiene los campos opcionales
+    que default a None."""
+    lay = loader.load(Path("vmaxpanel/profiles/vitals.json"))
+    path = tmp_path / "roundtrip.json"
+    loader.save(lay, path)
+    again = loader.load(path)
+    assert [w.id for w in again.widgets] == [w.id for w in lay.widgets]
+
+
+def test_optional_fields_that_default_to_none_are_not_emitted(tmp_path):
+    """Un rect con fill y sin stroke serializaba "stroke": null, y null no
+    es un color valido. Mismo problema con min/max de bar/arc/graph."""
+    raw = json.loads(json.dumps(MINIMAL))
+    raw["widgets"].append({"id": "sep", "type": "rect", "x": 24, "y": 164,
+                           "w": 272, "h": 1, "fill": "#242834"})
+    path = tmp_path / "rect.json"
+    loader.save(loader.loads(json.dumps(raw)), path)
+    written = json.loads(path.read_text(encoding="utf-8"))
+    sep = [w for w in written["widgets"] if w["id"] == "sep"][0]
+    assert "stroke" not in sep
+    assert [w for w in written["widgets"] if w["id"] == "bar"][0].get("min", "ausente") == "ausente"
+    assert loader.load(path).widgets[-1].fill == "#242834"

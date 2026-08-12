@@ -80,11 +80,26 @@ def disk_metric(n: int) -> str:
     return f"disk.temp.{n}"
 
 
-def is_metric(mid: str) -> bool:
+def is_metric(mid) -> bool:
+    """False para cualquier cosa que no sea un id conocido, incluido lo que
+    no es texto.
+
+    El argumento viene del JSON del usuario a traves de schema.validate(),
+    asi que puede ser un entero o una lista. Sin el chequeo de tipo,
+    _DISK_RE.match tiraba TypeError y hacia reventar al propio validador:
+    loads() solo convierte JSONDecodeError y LayoutError, y
+    ProfileStore/Engine capturan solo LayoutError, asi que el error se
+    escapaba hasta matar el arranque o el loop de render en vez de quedar
+    reportado como "metrica desconocida".
+    """
+    if not isinstance(mid, str):
+        return False
     return mid in METRICS or bool(_DISK_RE.match(mid))
 
 
-def spec_for(mid: str) -> MetricSpec | None:
+def spec_for(mid) -> MetricSpec | None:
+    if not isinstance(mid, str):
+        return None
     if mid in METRICS:
         return METRICS[mid]
     if _DISK_RE.match(mid):

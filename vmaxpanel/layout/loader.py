@@ -66,11 +66,25 @@ def _widget_dict(w) -> dict:
     # todos los campos de un dataclass de widget son claves permitidas por
     # schema.py (allowed_keys = cls.__dataclass_fields__), emitirlos todos
     # nunca puede disparar el error de "clave desconocida".
-    d = asdict(w)
+    #
+    # La unica excepcion son los campos que default a None, que es como el
+    # modelo dice "esto no esta puesto": un rect con fill y sin stroke
+    # emitia "stroke": null, y null no es un #RRGGBB, asi que save() escribia
+    # un archivo que load() rechazaba -- el editor de fase 3 guarda por aca.
+    # Se omiten en vez de aflojar la validacion: un null escrito a mano sigue
+    # siendo un error, porque en un campo con default no-None (bar.fill,
+    # text.color) significaria "no dibujes nada" sin decirlo.
+    d = {k: v for k, v in asdict(w).items()
+         if not (v is None and _defaults_to_none(type(w), k))}
     if "rules" in d:
         d["rules"] = [{"when": f"{r.op} {_format_rule_value(r.value)}", "color": r.color}
                       for r in w.rules]
     return d
+
+
+def _defaults_to_none(cls, field_name) -> bool:
+    f = cls.__dataclass_fields__.get(field_name)
+    return f is not None and f.default is None
 
 
 def _format_rule_value(value: float) -> str:
