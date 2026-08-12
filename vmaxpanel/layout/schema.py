@@ -18,6 +18,9 @@ from .model import (ArcWidget, Background, BarWidget, Font, GraphWidget,
 
 SUPPORTED_VERSION = 1
 
+# Refresco del panel. Ver el spike de fase 2.
+MAX_FPS = 60
+
 WIDGET_TYPES = {
     "text": TextWidget, "label": LabelWidget, "bar": BarWidget,
     "arc": ArcWidget, "graph": GraphWidget, "image": ImageWidget,
@@ -177,8 +180,14 @@ def validate(raw) -> list[str]:
         if not _is_int(b) or not 0 <= b <= 100:
             errs.append(f"panel.brightness: {b!r} fuera de 0..100")
         f = p.get("fps", 1.0)
-        if not _is_num(f) or not 0.1 <= f <= 30:
-            errs.append(f"panel.fps: {f!r} fuera de 0.1..30")
+        # 60 es el refresco del panel. Por encima, el panel descarta los
+        # frames -- no aplica contrapresion, acepta 227 fps de escritura
+        # sostenida sin frenar al host -- asi que serian frames renderizados,
+        # comprimidos y escritos para nada. Costo medido contra el panel real:
+        # 0,6% de un nucleo a 1 fps, 17% a 30, 37% a 60.
+        if not _is_num(f) or not 0.1 <= f <= MAX_FPS:
+            errs.append(f"panel.fps: {f!r} fuera de 0.1..{MAX_FPS} "
+                        f"(el panel refresca a {MAX_FPS} Hz)")
         q = p.get("jpeg_quality", 82)
         if not _is_int(q) or not 30 <= q <= 95:
             errs.append(f"panel.jpeg_quality: {q!r} fuera de 30..95")

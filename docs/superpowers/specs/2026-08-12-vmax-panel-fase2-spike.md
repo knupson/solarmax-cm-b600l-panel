@@ -37,7 +37,27 @@ Hoy el fondo se construye una vez y se cachea; animarlo es exactamente lo que fa
 A 10 fps, una secuencia de imágenes suma 2,8 ms sobre los 10 ms actuales: **13 ms, o 77 fps de
 techo.** Ni cerca de apretar.
 
-## El límite del panel quedó sin medir, y es a propósito
+## El refresco del panel: **60 Hz**
+
+Lo aportó el usuario el 2026-08-12, que es lo único que faltaba para cerrar el diseño. Con eso,
+el costo de sostener cada cadencia, medido contra el panel real (i5-12400F, 12 hilos):
+
+| fps | CPU del proceso en 5 s | de un núcleo | del total |
+|---:|---:|---:|---:|
+| 1 | 0,03 s | 0,6 % | 0,1 % |
+| 10 | 0,30 s | 5,9 % | 0,5 % |
+| 30 | 0,86 s | 17,2 % | 1,4 % |
+| 60 | 1,86 s | 37,2 % | 3,1 % |
+
+**60 fps es alcanzable** y cuesta poco más de un tercio de un núcleo. El validador pasó a topar
+`panel.fps` en 60 (antes 30, que era un número puesto sin conocer el refresco): por encima el
+panel descarta y serían frames renderizados, comprimidos y escritos para nada.
+
+Recomendación para los fondos animados: **30 fps por defecto**. La mitad del costo (17 % contra
+37 %) y el salto perceptual de 30 a 60 en un panel de 320x1480 al costado de un gabinete es
+mucho menor que el de 1 a 30. Que sea un parámetro del perfil, no una constante.
+
+## Cómo se comprobó que el panel no aplica contrapresión
 
 500 frames sostenidos (20 MB en 5 s) y el ritmo de escritura se mantuvo **plano en ~227 fps por
 quinto de la corrida**: 229 · 225 · 229 · 227 · 231. El panel **nunca frenó al host**.
@@ -46,17 +66,15 @@ Un LCD de este tipo no dibuja 227 fps. Que no haya contrapresión significa que 
 driver CDC) **acepta y descarta** lo que no alcanza a mostrar, en vez de bloquear la escritura.
 Conclusión honesta: desde el host no hay ninguna señal de la que deducir el refresco real.
 
-**Lo que falta para saberlo:** filmar el panel con un celular a 60 fps mostrando un contador que
-cambie cada frame, y contar cuántos valores distintos aparecen por segundo. Es la única medición
-que queda y necesita a alguien delante del gabinete.
+Por eso el refresco real no se podía deducir desde el host y lo tuvo que aportar el usuario:
+**60 Hz**.
 
 ## Implicancias para el diseño de fase 2
 
-1. **El fps es un parámetro del perfil, no una restricción técnica.** `panel.fps` ya existe y
-   valida hasta 30. Se puede subir sin tocar nada.
-2. **Descartar frames en el host no tiene sentido todavía.** Con 10 ms por frame y sin
-   contrapresión, no hay cola que administrar. Si la medición con cámara diera un refresco bajo
-   (p.ej. 15 fps), ahí sí conviene limitar en el perfil para no quemar CPU al vacío.
+1. **El fps es un parámetro del perfil, no una restricción técnica.** `panel.fps` valida hasta
+   60, el refresco del panel.
+2. **Descartar frames en el host no tiene sentido.** Con 10 ms por frame y sin contrapresión no
+   hay cola que administrar, y el tope de 60 en el validador ya evita quemar CPU al vacío.
 3. **Las secuencias de imágenes son la opción obvia para empezar:** más baratas que reconstruir
    un gradiente, sin dependencias nuevas, y el `background.type = "sequence"` ya está reservado
    en el validador.

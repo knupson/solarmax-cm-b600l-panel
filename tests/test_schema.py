@@ -349,3 +349,20 @@ def test_graph_rejects_samples_below_one():
     assert any("samples" in e for e in schema.validate(with_widget({**g, "samples": 0})))
     assert any("samples" in e for e in schema.validate(with_widget({**g, "samples": -5})))
     assert schema.validate(with_widget({**g, "samples": 120})) == []
+
+
+def test_fps_accepts_up_to_the_panel_refresh_rate():
+    """El panel refresca a 60 Hz (medido por el usuario). El tope de 30 era un
+    numero mio de cuando no se sabia el refresco real."""
+    def con_fps(v):
+        return broken(panel={"rotate": 180, "brightness": 100, "fps": v,
+                             "jpeg_quality": 82})
+
+    assert schema.validate(con_fps(60)) == []
+    assert schema.validate(con_fps(30)) == []
+    assert schema.validate(con_fps(0.5)) == []
+    # Por encima del refresco del panel los frames se descartan: es CPU
+    # quemada al vacio, asi que se rechaza en vez de dejarlo pasar.
+    assert any("fps" in e for e in schema.validate(con_fps(61)))
+    assert any("fps" in e for e in schema.validate(con_fps(120)))
+    assert any("fps" in e for e in schema.validate(con_fps(0)))

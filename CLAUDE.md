@@ -106,10 +106,12 @@ en el mensaje de esos dos commits, que es el lugar donde buscarlo si algo se rom
 - **Fase 2 (fondos animados) es lo único que queda sin plan.** El spike de throughput **ya está
   hecho** (`docs/superpowers/specs/2026-08-12-vmax-panel-fase2-spike.md`, herramienta en
   `research/spike_throughput.py`): nada del host es el cuello — 10 ms por frame extremo a
-  extremo, 100 fps de techo, y un fondo animado suma 0,5–7,7 ms según la estrategia. **Lo que
-  quedó sin medir es el refresco real del panel**, porque no aplica contrapresión: acepta 227 fps
-  de escritura sostenida y descarta lo que no dibuja. Para saberlo hay que filmar el panel con un
-  celular; es la única medición que falta y necesita a alguien delante del gabinete.
+  extremo, 100 fps de techo, y un fondo animado suma 0,5–7,7 ms según la estrategia. **El panel
+  refresca a 60 Hz** (dato del usuario; desde el host no se podía deducir porque no aplica
+  contrapresión: acepta 227 fps de escritura sostenida y descarta lo que no dibuja). Costo medido
+  de sostener cada cadencia: 0,6% de un núcleo a 1 fps, 5,9% a 10, 17% a 30, 37% a 60. El
+  validador topa `panel.fps` en 60. Para fondos animados conviene 30 por defecto: la mitad del
+  costo y el salto perceptual de 30 a 60 en este panel es chico.
 - **Verificación visual pendiente:** el ícono de la bandeja y la ventana del editor no se
   llegaron a mirar en pantalla — la máquina se bloqueó y en un escritorio bloqueado la captura
   sale negra y `FindWindow` no enumera las ventanas del escritorio del usuario. Lo funcional sí
