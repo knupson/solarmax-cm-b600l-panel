@@ -113,7 +113,10 @@ class EditorState:
         self.errors = schema.validate(self.raw)
         if self.errors:
             return list(self.errors)
-        loader.save(schema.build(self.raw), self.path)
+        # save_raw y no save(build(raw)): pasar por el modelo reescribe el
+        # archivo con el formato del serializador y el perfil se edita tambien
+        # a mano. Igual queda atomico.
+        loader.save_raw(self.raw, self.path)
         self.dirty = False
         return []
 

@@ -108,10 +108,61 @@ def _format_rule_value(value: float) -> str:
 
 
 def save(layout: Layout, path):
+    save_raw(to_dict(layout), path)
+
+
+def save_raw(raw: dict, path):
+    """Escribe un layout ya en forma de dict, sin pasar por el modelo.
+
+    Es lo que usa el editor: pasar por `to_dict(build(raw))` reescribe el
+    archivo con el orden y el formato del serializador, y el perfil se edita
+    tambien a mano -- el formato compacto de dos lineas por widget es parte
+    del valor. Guardar el crudo tampoco puede perder nada por el camino.
+
+    El caller es responsable de haber validado. Se escribe a un temporal y se
+    reemplaza: atomico, asi que el motor nunca lee un archivo a medio escribir.
+    """
     tmp = f"{path}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(to_dict(layout), f, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)               # atomico: nunca se lee un archivo a medias
+        f.write(dumps_layout(raw))
+    os.replace(tmp, path)
+
+
+def dumps_layout(raw) -> str:
+    """JSON con un widget por linea, como esta escrito el perfil a mano.
+
+    `json.dump(indent=2)` pone cada clave en su propia linea y convierte un
+    perfil de 120 lineas en uno de 535: el archivo se sigue editando a mano y
+    esa diferencia importa. Cada widget y cada alias de fuente se emiten
+    compactos en una linea; el resto va con sangria normal. Sigue siendo JSON
+    valido -- lo unico que cambia es donde caen los saltos de linea.
+    """
+    def compacto(obj):
+        return json.dumps(obj, ensure_ascii=False, separators=(", ", ": "))
+
+    lineas = ["{"]
+    items = list(raw.items())
+    for i, (clave, valor) in enumerate(items):
+        coma = "," if i < len(items) - 1 else ""
+        if clave == "widgets" and isinstance(valor, list):
+            lineas.append('  "widgets": [')
+            for j, w in enumerate(valor):
+                lineas.append(f"    {compacto(w)}"
+                              f"{',' if j < len(valor) - 1 else ''}")
+            lineas.append(f"  ]{coma}")
+        elif clave == "fonts" and isinstance(valor, dict):
+            lineas.append('  "fonts": {')
+            aliases = list(valor.items())
+            for j, (alias, spec) in enumerate(aliases):
+                lineas.append(f"    {json.dumps(alias, ensure_ascii=False)}: "
+                              f"{compacto(spec)}"
+                              f"{',' if j < len(aliases) - 1 else ''}")
+            lineas.append(f"  }}{coma}")
+        else:
+            lineas.append(f"  {json.dumps(clave, ensure_ascii=False)}: "
+                          f"{compacto(valor)}{coma}")
+    lineas.append("}")
+    return "\n".join(lineas) + "\n"
 
 
 class ProfileStore:

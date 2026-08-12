@@ -14,9 +14,10 @@ PROFILE = "vmaxpanel/profiles/vitals.json"
 
 
 def state_for(tmp_path):
-    raw = json.loads(open(PROFILE, encoding="utf-8").read())
+    # Se copia el archivo TAL CUAL, con su formato: los tests de guardado
+    # comparan contra el original y un re-dump como linea base los invalida.
     path = tmp_path / "editando.json"
-    path.write_text(json.dumps(raw), encoding="utf-8")
+    path.write_text(open(PROFILE, encoding="utf-8").read(), encoding="utf-8")
     return EditorState(path)
 
 
@@ -131,3 +132,31 @@ def test_duplicate_ids_are_rejected(tmp_path):
     errores = st.add_widget("rect", "cpu-load")
     assert errores
     assert st.widget("cpu-load")["type"] == "text"     # no lo piso
+
+
+def test_saving_preserves_the_raw_json_structure(tmp_path):
+    """Guardar reconstruyendo el modelo reescribe el archivo entero con el
+    orden y el formato del serializador, y el perfil se edita a mano: el
+    formato compacto de dos lineas por widget es parte del valor. Se guarda
+    el dict crudo, que ademas no puede perder nada por el camino."""
+    st = state_for(tmp_path)
+    antes = json.loads(st.path.read_text(encoding="utf-8"))
+    st.set_field("cpu-load", "color", "#00FF00")
+    assert st.save() == []
+    despues = json.loads(st.path.read_text(encoding="utf-8"))
+
+    assert list(despues) == list(antes)                       # mismo orden de claves
+    assert [w["id"] for w in despues["widgets"]] == [w["id"] for w in antes["widgets"]]
+    uno = [w for w in despues["widgets"] if w["id"] == "cpu-load"][0]
+    viejo = [w for w in antes["widgets"] if w["id"] == "cpu-load"][0]
+    assert list(uno) == list(viejo)                            # y de cada widget
+    assert uno["color"] == "#00FF00"
+
+
+def test_saving_does_not_bloat_the_file(tmp_path):
+    st = state_for(tmp_path)
+    antes = len(st.path.read_text(encoding="utf-8").splitlines())
+    st.set_field("cpu-load", "color", "#00FF00")
+    st.save()
+    despues = len(st.path.read_text(encoding="utf-8").splitlines())
+    assert despues <= antes * 1.2, f"{antes} -> {despues} lineas"
