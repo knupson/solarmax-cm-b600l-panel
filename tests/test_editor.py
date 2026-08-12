@@ -391,3 +391,53 @@ def test_dragging_clamps_to_the_canvas(tmp_path):
     ancho = st.raw["designed_for"]["width"]
     alto = st.raw["designed_for"]["height"]
     assert w["x"] < ancho and w["y"] < alto
+
+
+# --- fuentes ---
+
+def test_font_aliases_can_be_edited(tmp_path):
+    st = state_for(tmp_path)
+    assert st.set_font_field("hero", "size", "80") == []
+    assert st.raw["fonts"]["hero"]["size"] == 80
+    assert st.set_font_field("hero", "bold", "false") == []
+    assert st.raw["fonts"]["hero"]["bold"] is False
+
+
+def test_adding_a_font_alias_is_valid_out_of_the_box(tmp_path):
+    st = state_for(tmp_path)
+    assert st.add_font("titulo") == []
+    assert "titulo" in st.raw["fonts"]
+    assert st.save() == []
+
+
+def test_a_duplicate_font_alias_is_rejected(tmp_path):
+    st = state_for(tmp_path)
+    assert st.add_font("hero")
+
+
+def test_a_font_in_use_cannot_be_removed(tmp_path):
+    """Borrar un alias que algun widget usa deja el layout invalido: el
+    validador rechaza el perfil y el panel se queda con el anterior."""
+    st = state_for(tmp_path)
+    errores = st.remove_font("hero")
+    assert errores and any("hero" in e for e in errores)
+    assert "hero" in st.raw["fonts"]
+
+
+def test_an_unused_font_can_be_removed(tmp_path):
+    st = state_for(tmp_path)
+    st.add_font("sin-usar")
+    assert st.remove_font("sin-usar") == []
+    assert "sin-usar" not in st.raw["fonts"]
+
+
+def test_the_available_families_are_offered(tmp_path):
+    """El combo de familia se llena con las fuentes instaladas: tipear el
+    nombre a mano es como se escribe una familia que no existe y el widget
+    termina con la fuente por defecto sin avisar."""
+    st = state_for(tmp_path)
+    familias = st.font_families()
+    assert familias, "no encontro ninguna familia instalada"
+    assert any("consol" in f.lower() for f in familias)
+    for f in familias:
+        assert isinstance(f, str) and f

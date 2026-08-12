@@ -259,10 +259,10 @@ def test_a_group_header_is_not_selectable_as_a_metric(ventana):
 
 
 def test_the_window_has_tabs_for_widgets_background_and_panel(ventana):
-    """El fondo y el panel no son widgets: meterlos en la misma columna
-    obligaria a elegir entre ver la lista o ver el fondo."""
+    """El fondo, las fuentes y el panel no son widgets: meterlos en la misma
+    columna obligaria a elegir entre ver la lista o ver el fondo."""
     pestanas = [ventana.tabs.tab(i, "text") for i in range(len(ventana.tabs.tabs()))]
-    assert pestanas == ["Widgets", "Fondo", "Panel"]
+    assert pestanas == ["Widgets", "Fondo", "Fuentes", "Panel"]
 
 
 def test_the_background_tab_shows_the_fields_of_the_current_type(ventana):
@@ -366,3 +366,40 @@ def test_screen_and_panel_coordinates_round_trip(ventana):
         vuelta = ventana._a_panel(px, py)
         assert abs(vuelta[0] - punto[0]) <= 2, (punto, vuelta)
         assert abs(vuelta[1] - punto[1]) <= 2, (punto, vuelta)
+
+
+def test_there_is_a_fonts_tab(ventana):
+    pestanas = [ventana.tabs.tab(i, "text") for i in range(len(ventana.tabs.tabs()))]
+    assert pestanas == ["Widgets", "Fondo", "Fuentes", "Panel"]
+
+
+def test_the_fonts_tab_lists_one_row_per_alias(ventana):
+    ventana._show_fonts()
+    ventana.root.update()
+    assert set(ventana._font_rows) == set(ventana.state.fonts())
+
+
+def test_editing_a_font_size_from_the_ui_reaches_the_state(ventana):
+    ventana._show_fonts()
+    ventana.root.update()
+    ventana._font_rows["tag"]["size"].set("18")
+    ventana._apply_font("tag", "size")
+    assert ventana.state.raw["fonts"]["tag"]["size"] == 18
+    assert ventana.state.dirty is True
+
+
+def test_removing_a_font_in_use_reports_instead_of_breaking(ventana):
+    ventana._show_fonts()
+    ventana.root.update()
+    ventana._remove_font("hero")
+    assert "hero" in ventana.state.raw["fonts"]
+    assert "hero" in ventana.estado.cget("text")
+
+
+def test_the_family_picker_offers_installed_families(ventana):
+    ventana._show_fonts()
+    ventana.root.update()
+    combo = ventana._font_rows["hero"]["family_combo"]
+    valores = list(combo.cget("values"))
+    assert len(valores) > 5, "el combo de familias salio casi vacio"
+    assert any("consol" in v.lower() for v in valores)

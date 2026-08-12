@@ -249,6 +249,82 @@ class EditorState:
         self.errors = schema.validate(self.raw)
         return list(self.errors)
 
+    # --- fuentes ---
+
+    _FUENTE_DEFAULT = {"family": "Consolas", "size": 20, "bold": False}
+
+    def font_fields(self) -> list[str]:
+        return ["family", "size", "bold"]
+
+    def font_families(self) -> list[str]:
+        """Familias instaladas, para el combo.
+
+        Tipear la familia a mano es como se escribe una que no existe: el
+        renderer cae a la fuente por defecto y el widget se ve distinto sin que
+        nada avise. FontResolver ya tiene el indice del sistema.
+        """
+        from .render.fonts import FontResolver
+        if self._fuentes is None:
+            self._fuentes = FontResolver()
+        try:
+            return sorted(self._fuentes.index())
+        except Exception:
+            return [self._FUENTE_DEFAULT["family"]]
+
+    def set_font_field(self, alias, clave, valor) -> list[str]:
+        fuentes = self.raw.setdefault("fonts", {})
+        if alias not in fuentes:
+            return [f"no existe el alias de fuente {alias!r}"]
+        if clave == "size":
+            fuentes[alias][clave] = _coerce("size", valor)
+        elif clave == "bold":
+            # Desde un control de texto llega "true"/"false"; el validador
+            # exige un booleano de JSON, no la cadena.
+            fuentes[alias][clave] = str(valor).strip().lower() in ("1", "true",
+                                                                  "si", "sí", "yes")
+        else:
+            fuentes[alias][clave] = str(valor).strip()
+        self.dirty = True
+        self.errors = schema.validate(self.raw)
+        return list(self.errors)
+
+    def add_font(self, alias) -> list[str]:
+        alias = str(alias).strip()
+        if not alias:
+            return ["el alias no puede estar vacio"]
+        fuentes = self.raw.setdefault("fonts", {})
+        if alias in fuentes:
+            return [f"ya existe el alias {alias!r}"]
+        fuentes[alias] = dict(self._FUENTE_DEFAULT)
+        self.dirty = True
+        self.errors = schema.validate(self.raw)
+        return list(self.errors)
+
+    def font_users(self, alias) -> list[str]:
+        return [w.get("id") for w in self.raw.get("widgets") or []
+                if w.get("font") == alias]
+
+    def remove_font(self, alias) -> list[str]:
+        """Se niega si algun widget lo usa.
+
+        Borrarlo dejaria el layout invalido -- "alias de fuente desconocido" --
+        y el motor rechazaria el perfil entero, quedandose con el anterior. El
+        usuario habria borrado una fuente y el panel no cambiaria.
+        """
+        usuarios = self.font_users(alias)
+        if usuarios:
+            return [f"la fuente {alias!r} la usan {len(usuarios)} widgets "
+                    f"({', '.join(usuarios[:3])}{'...' if len(usuarios) > 3 else ''})"]
+        fuentes = self.raw.get("fonts") or {}
+        if alias not in fuentes:
+            return [f"no existe el alias {alias!r}"]
+        if len(fuentes) <= 1:
+            return ["el layout necesita al menos una fuente"]
+        del fuentes[alias]
+        self.dirty = True
+        self.errors = schema.validate(self.raw)
+        return list(self.errors)
+
     # --- cajas, hit test y arrastre ---
     #
     # Todo en coordenadas del PANEL (320x1480), no de la vista previa: la ventana
@@ -594,9 +670,11 @@ class EditorWindow:
         self.tabs.pack(side="left", fill="both", expand=True)
         tab_widgets = ttk.Frame(self.tabs, padding=6)
         self.tab_fondo = ttk.Frame(self.tabs, padding=6)
+        self.tab_fuentes = ttk.Frame(self.tabs, padding=6)
         self.tab_panel = ttk.Frame(self.tabs, padding=6)
         self.tabs.add(tab_widgets, text="Widgets")
         self.tabs.add(self.tab_fondo, text="Fondo")
+        self.tabs.add(self.tab_fuentes, text="Fuentes")
         self.tabs.add(self.tab_panel, text="Panel")
 
         izq = ttk.Frame(tab_widgets)
@@ -637,6 +715,7 @@ class EditorWindow:
         self.estado.pack(fill="x", pady=(6, 0))
 
         self._build_fondo()
+        self._build_fuentes()
         self._build_panel()
 
         self.der = ttk.Frame(raiz)
@@ -858,6 +937,97 @@ class EditorWindow:
         else:
             self._show_errors()
 
+    # --- pestana Fuentes ---
+
+    def _build_fuentes(self):
+        ttk = self.ttk
+        ttk.Label(self.tab_fuentes,
+                  text="Las fuentes se piden por FAMILIA, no por archivo: el "
+                       "perfil se comparte y Consolas no se redistribuye.\n"
+                       "Una familia que no esté instalada cae a la fuente por "
+                       "defecto sin avisar, de ahí que el combo\nofrezca solo "
+                       "las que hay en esta máquina.",
+                  justify="left", foreground="#606060").pack(anchor="w",
+                                                             pady=(0, 8))
+        self._font_grid = ttk.Frame(self.tab_fuentes)
+        self._font_grid.pack(fill="both", expand=True)
+        agregar = ttk.Frame(self.tab_fuentes)
+        agregar.pack(fill="x", pady=6)
+        self._font_nuevo = self.tk.StringVar()
+        ttk.Entry(agregar, textvariable=self._font_nuevo, width=16).pack(side="left")
+        ttk.Button(agregar, text="+ alias",
+                   command=self._add_font).pack(side="left", padx=4)
+        self._font_rows = {}
+        self._familias = None
+
+    def _show_fonts(self):
+        ttk = self.ttk
+        for hijo in self._font_grid.winfo_children():
+            hijo.destroy()
+        self._font_rows = {}
+        if self._familias is None:
+            # Una sola vez: indexar las fuentes del sistema recorre directorios.
+            self._familias = self.state.font_families()
+        for fila, alias in enumerate(self.state.fonts()):
+            spec = self.state.raw["fonts"][alias]
+            ttk.Label(self._font_grid, text=alias, width=12).grid(row=fila, column=0,
+                                                                 sticky="w")
+            familia = ttk.Combobox(self._font_grid, width=26, state="readonly",
+                                   values=self._familias)
+            familia.set(str(spec.get("family", "")))
+            familia.grid(row=fila, column=1, padx=2)
+            familia.bind("<<ComboboxSelected>>",
+                         lambda e, a=alias: self._apply_font(a, "family"))
+
+            size = self.tk.StringVar(value=str(spec.get("size", "")))
+            entrada = ttk.Entry(self._font_grid, textvariable=size, width=6)
+            entrada.grid(row=fila, column=2, padx=2)
+            for evento in ("<FocusOut>", "<Return>"):
+                entrada.bind(evento, lambda e, a=alias: self._apply_font(a, "size"))
+
+            bold = self.tk.BooleanVar(value=bool(spec.get("bold")))
+            ttk.Checkbutton(self._font_grid, text="negrita", variable=bold,
+                            command=lambda a=alias: self._apply_font(a, "bold")
+                            ).grid(row=fila, column=3, padx=4)
+
+            usuarios = len(self.state.font_users(alias))
+            ttk.Label(self._font_grid, text=f"{usuarios} widgets",
+                      foreground="#606060").grid(row=fila, column=4, padx=4)
+            ttk.Button(self._font_grid, text="−", width=3,
+                       command=lambda a=alias: self._remove_font(a)
+                       ).grid(row=fila, column=5)
+            self._font_rows[alias] = {"family_combo": familia, "family": familia,
+                                      "size": size, "bold": bold}
+
+    def _apply_font(self, alias, clave):
+        fila = self._font_rows.get(alias)
+        if fila is None:
+            return
+        control = fila[clave]
+        valor = control.get() if hasattr(control, "get") else control
+        self.state.set_font_field(alias, clave, valor)
+        self._draw_preview()
+        self._show_errors()
+
+    def _add_font(self):
+        errores = self.state.add_font(self._font_nuevo.get())
+        self._font_nuevo.set("")
+        self._show_fonts()
+        self._draw_preview()
+        if errores:
+            self.estado.config(text=" / ".join(errores), foreground="#B00000")
+        else:
+            self._show_errors()
+
+    def _remove_font(self, alias):
+        errores = self.state.remove_font(alias)
+        self._show_fonts()
+        self._draw_preview()
+        if errores:
+            self.estado.config(text=" / ".join(errores), foreground="#B00000")
+        else:
+            self._show_errors()
+
     # --- pestana Panel ---
 
     def _build_panel(self):
@@ -933,6 +1103,7 @@ class EditorWindow:
             self.lista.selection_set(ids.index(objetivo))
         self._show_props()
         self._show_background()
+        self._show_fonts()
         self._show_panel()
         self._draw_preview()
         self._show_errors()
