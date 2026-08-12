@@ -134,6 +134,21 @@ de bandeja ni una ventana. Ver el spec de fase 3.
 de la bandeja, la tarea lo levanta de nuevo al siguiente logon. Para bajarlo de verdad,
 `Stop-ScheduledTask PanelVitals` y matar el `pythonw.exe`.
 
+### Nunca dejar una corrida de tests en background sin confirmar que murió
+
+El 2026-08-12 un test del engine entró en un bucle infinito con reloj virtual —sin ningún
+`sleep`—, la corrida se fue a background y **el proceso quedó comiéndose un núcleo entero
+durante 7,28 horas**, hasta que el usuario avisó que la máquina no respondía. El `timeout` del
+comando que la lanzó mató al envoltorio, no al `python` hijo.
+
+`tests/conftest.py` ahora mata cualquier test que pase de 60 s (`VMAXPANEL_TEST_TIMEOUT` para
+cambiarlo) y escribe el stack de todos los hilos en `pytest-hang.txt`, que es lo que dice **qué**
+se colgó. Va a un archivo y no a stderr porque pytest captura stderr a nivel de descriptor y
+`os._exit()` se lleva ese buffer sin escribir nada.
+
+Igual, la regla de operación: si una corrida se va a background, **confirmar que terminó**. No
+alcanza con verla fallar y seguir.
+
 ### Al escribir los planes de fase 2 y 3
 
 Especificar **interfaces y tests, no la implementación**. En fase 1 puse el código completo en
