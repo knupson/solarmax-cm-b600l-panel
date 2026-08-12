@@ -410,7 +410,15 @@ def test_control_z_undoes_from_the_window(ventana):
     x0 = ventana.state.widget("cpu-load")["x"]
     ventana._move(20, 0)
     assert ventana.state.widget("cpu-load")["x"] == x0 + 20
-    ventana.root.event_generate("<Control-z>")
+    # focus_force antes del event_generate: una tecla va al widget con foco, y en
+    # una ventana sin foco Tk la descarta sin avisar. Sin esto el test pasaba o
+    # fallaba segun que tenia el foco la maquina en ese instante -- y cuando
+    # fallaba, el diff era "no deshizo", que apunta al codigo en vez de al test.
+    # Es el mismo agujero que ya me hizo concluir mal una vez, con
+    # <<ListboxSelect>> sobre una ventana no mapeada.
+    ventana.root.focus_force()
+    ventana.root.update()
+    ventana.root.event_generate("<Control-z>", when="now")
     ventana.root.update()
     assert ventana.state.widget("cpu-load")["x"] == x0
 
