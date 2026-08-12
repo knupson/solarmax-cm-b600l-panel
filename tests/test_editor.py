@@ -622,3 +622,4 @@ def test_a_static_background_has_no_hint():
     from vmaxpanel import editor
     assert editor.pista_fondo("solid") == ""
     assert editor.pista_fondo("gradient") == ""
+

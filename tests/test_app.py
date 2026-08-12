@@ -34,7 +34,9 @@ def profile(tmp_path):
     return path
 
 
-def app_for(tmp_path, link_factory=None):
+def app_for(tmp_path, link_factory=None, **kw):
+    """PanelApp con transporte y registry falsos. `kw` va derecho al constructor
+    (status_path, status_period, port)."""
     made = []
 
     def factory():
@@ -44,7 +46,8 @@ def app_for(tmp_path, link_factory=None):
 
     return PanelApp(profile(tmp_path),
                     link_factory=link_factory or factory,
-                    registry_factory=lambda: (Registry([FakeCpu()]), None)), made
+                    registry_factory=lambda: (Registry([FakeCpu()]), None),
+                    **kw), made
 
 
 def wait_until(pred, timeout=5.0):

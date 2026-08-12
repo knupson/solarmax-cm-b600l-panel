@@ -819,6 +819,9 @@ class EditorWindow:
         self._metric_por_etiqueta = {}
         self._rule_rows = []
         self._rules_frame = None
+        # (tipo, clave) de cada campo con algo tipeado y sin confirmar. Ver
+        # _aplicar_pendientes().
+        self._pendientes = set()
         self._build()
         self._refresh(select_first=True)
 
@@ -827,6 +830,12 @@ class EditorWindow:
     def _build(self):
         tk, ttk = self.tk, self.ttk
         raiz = ttk.Frame(self.root, padding=8)
+        # El pie se empaqueta ANTES que raiz aunque se llene despues: pack reparte
+        # el espacio en orden, y raiz va con expand=True. Al revés, raiz se queda con
+        # todo y el pie -- justo el que tiene Guardar -- puede quedar fuera de la
+        # ventana.
+        self._pie = ttk.Frame(self.root)
+        self._pie.pack(side="bottom", fill="x")
         raiz.pack(fill="both", expand=True)
 
         # Pestanas: el fondo y el panel no son widgets, y meterlos en la misma
@@ -871,17 +880,25 @@ class EditorWindow:
             ttk.Button(flechas, text=texto, width=4,
                        command=lambda a=dx, b=dy: self._move(a, b)).pack(side="left")
 
-        acciones = ttk.Frame(centro)
-        acciones.pack(fill="x")
-        ttk.Button(acciones, text="Guardar", command=self._save).pack(side="left")
-        ttk.Button(acciones, text="Descartar cambios",
+        # La barra de acciones y la barra de estado van en el PIE, fuera del
+        # Notebook. Estaban dentro de la pestana Widgets, y desde la pestana Fondo
+        # no habia entonces ni boton de guardar ni un solo mensaje: el usuario
+        # cambiaba el fondo, no encontraba donde aplicarlo, reiniciaba el motor --
+        # que relee el archivo, donde el cambio nunca llego -- y el cambio se
+        # perdia. Reportado tal cual: "no hay boton de aplicar ni guarda".
+        self._acciones = ttk.Frame(self._pie, padding=(8, 0, 8, 8))
+        self._acciones.pack(side="bottom", fill="x")
+        ttk.Button(self._acciones, text="Guardar",
+                   command=self._save).pack(side="left")
+        ttk.Button(self._acciones, text="Descartar cambios",
                    command=self._discard).pack(side="left", padx=4)
-        ttk.Button(acciones, text="Exportar…",
+        ttk.Button(self._acciones, text="Exportar…",
                    command=self._pedir_exportar).pack(side="left")
-        ttk.Button(acciones, text="Importar…",
+        ttk.Button(self._acciones, text="Importar…",
                    command=self._pedir_importar).pack(side="left", padx=4)
-        self.estado = ttk.Label(centro, text="", wraplength=380, justify="left")
-        self.estado.pack(fill="x", pady=(6, 0))
+        self.estado = ttk.Label(self._pie, text="", wraplength=900,
+                                justify="left", padding=(8, 0))
+        self.estado.pack(side="bottom", fill="x")
 
         self._build_fondo()
         self._build_fuentes()
@@ -1023,6 +1040,7 @@ class EditorWindow:
                 control = ttk.Entry(self._bg_campos, textvariable=var, width=24)
                 control.bind("<FocusOut>", lambda e, k=clave: self._apply_bg(k))
                 control.bind("<Return>", lambda e, k=clave: self._apply_bg(k))
+                self._pendiente_al_tipear(var, "bg", clave)
                 self._bg_fields[clave] = var
             control.grid(row=fila, column=1, sticky="w", padx=4)
 
@@ -1203,6 +1221,7 @@ class EditorWindow:
             entrada.grid(row=fila, column=1, sticky="w", padx=4)
             entrada.bind("<FocusOut>", lambda e, k=clave: self._apply_panel(k))
             entrada.bind("<Return>", lambda e, k=clave: self._apply_panel(k))
+            self._pendiente_al_tipear(var, "panel", clave)
             self._panel_fields[clave] = var
 
     def _show_panel(self):
@@ -1304,6 +1323,10 @@ class EditorWindow:
             self._draw_preview()
 
     def _draw_preview(self):
+        # El titulo se actualiza aca y no en cada mutacion: _draw_preview() es el
+        # camino comun de TODAS -- mover, editar un campo, cambiar el fondo, deshacer
+        # -- asi que es el unico lugar donde no hay que acordarse de agregarlo.
+        self._marcar_titulo()
         img = self.state.preview()
         self._escala = self._escala_disponible()
         dims = (max(1, int(img.width * self._escala)),
@@ -1342,6 +1365,7 @@ class EditorWindow:
             entrada.grid(row=fila, column=1, sticky="w", padx=4)
             entrada.bind("<FocusOut>", lambda e, k=clave: self._apply(k))
             entrada.bind("<Return>", lambda e, k=clave: self._apply(k))
+            self._pendiente_al_tipear(var, "widget", clave)
             self._fields[clave] = var
         self._show_rules(len(w) + 1)
 
@@ -1542,11 +1566,69 @@ class EditorWindow:
         self._refresh(select_first=True)
 
     def _save(self):
+        self._aplicar_pendientes()
         errores = self.state.save()
         self._show_errors()
+        self._marcar_titulo()
         if not errores:
             self.estado.config(text="guardado; el panel lo levanta solo",
                                foreground="#006000")
+
+    def _pendiente_al_tipear(self, var, tipo, clave):
+        """Marca (tipo, clave) como sin confirmar en cuanto cambia el texto.
+
+        Se sigue la VARIABLE y no el teclado: un trace de escritura cubre tipear,
+        pegar con el mouse, arrastrar texto y el autocompletado; `<KeyRelease>` solo
+        cubre teclas -- y encima no se puede simular sin keysym, asi que tampoco se
+        podia probar.
+
+        El trace se agrega DESPUES de crear la variable con su valor inicial, asi
+        que reconstruir un panel no marca nada: solo lo marca un cambio posterior,
+        que es siempre del usuario.
+
+        Es lo que permite confirmar al guardar SOLO lo que el usuario toco. Las dos
+        alternativas son peores: releer todos los controles resucita valores viejos
+        de las pestanas que no estan a la vista -- deshacer un cambio de fondo y
+        guardar lo volveria a aplicar --, y depender del foco del sistema falla justo
+        cuando la ventana no tiene el foco.
+        """
+        var.trace_add("write",
+                      lambda *_, t=tipo, k=clave: self._pendientes.add((t, k)))
+
+    def _aplicar_pendientes(self):
+        """Confirma lo tipeado y no aplicado, antes de guardar.
+
+        Los Entry aplican con <Return> o <FocusOut>. Un clic directo en Guardar no
+        siempre dispara ninguno de los dos -- depende de si el boton toma el foco --
+        y entonces se guardaba el valor VIEJO del campo recien escrito.
+        Silenciosamente, que es lo peor: el archivo queda valido, el panel lo
+        recarga y no cambia nada. Es el bug que reporto el usuario: cambiar el fondo,
+        no encontrar donde aplicarlo, y que reiniciar el motor "ignore" el cambio.
+        """
+        handlers = {"widget": self._apply, "bg": self._apply_bg,
+                    "panel": self._apply_panel}
+        for tipo, clave in sorted(self._pendientes):
+            handler = handlers.get(tipo)
+            if handler is None:
+                continue
+            try:
+                handler(clave)
+            except Exception:
+                # Un control que ya no existe (cambio la seleccion, se rearmo la
+                # pestana) no puede impedir guardar el resto.
+                pass
+        self._pendientes.clear()
+
+    def _marcar_titulo(self):
+        """El titulo dice si hay cambios sin guardar.
+
+        Sin esa senal, reiniciar el motor desde la bandeja parece ignorar la edicion
+        -- y lo que pasa es que la edicion nunca llego al disco, porque el motor
+        relee el archivo. Es exactamente el sintoma que reporto el usuario.
+        """
+        base = f"Editor de layout — {self.state.path.name}"
+        self.root.title(base + (" • cambios sin guardar" if self.state.dirty
+                                else ""))
 
     def _undo(self):
         """Ctrl+Z. Repinta TODO: deshacer puede haber cambiado el fondo, las
@@ -1559,6 +1641,9 @@ class EditorWindow:
         self._refresh()
 
     def _discard(self):
+        # Lo tipeado y no confirmado tambien se descarta: es justo lo que el boton
+        # promete, y dejarlo pendiente lo haria reaparecer en el proximo guardado.
+        self._pendientes.clear()
         self.state.reload()
         self._refresh(select_first=True)
 

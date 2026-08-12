@@ -209,6 +209,32 @@ Dos cosas que no se adivinan:
   `fill` puesto después de un texto lo tapa. Los separadores del perfil van antes del header
   de su sección.
 
+### Saber si está andando
+
+```powershell
+python -m vmaxpanel --estado
+```
+
+```
+dibujando — perfil Apex, panel ok, 12043 frames, 30 fps
+publicado hace 2 s (pid 23060)
+```
+
+Código de salida **0** si está dibujando y **1** si no — no 2, porque "no está corriendo" es una
+respuesta, no un error de uso, y un script tiene que poder distinguirlas.
+
+El proceso que maneja el panel publica su estado a `vmaxpanel-estado.json` cada 5 s, con
+reemplazo atómico. Un archivo y no un socket: el lector no necesita hablar con el proceso, sólo
+saber qué ve, y así no hay puerto que abrir ni lector colgado que afecte al motor. **La
+antigüedad se reporta siempre** porque un proceso puede estar vivo y no publicar — un motor
+trabado en una escritura al puerto sigue existiendo —, y con más de 30 s de atraso lo dice.
+También distingue *pausado* de *detenido*: pausar suelta COM3 a pedido del usuario, y confundirlo
+manda a reiniciar algo que no hace falta.
+
+Existe porque no había forma: la bandeja tiene el estado en su menú, pero desde una consola lo
+único observable era el log y el CPU del proceso. Verificar que el panel andaba midiendo el CPU
+de un `pythonw` es adivinar, y pasó tres veces en un día.
+
 ### Compartir y respaldar un perfil
 
 ```powershell

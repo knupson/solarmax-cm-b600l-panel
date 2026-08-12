@@ -24,6 +24,10 @@ mapa de sensores, la causa raíz documentada y la guía de edición.
 
 ## Operación
 
+**Para saber si está andando, `python -m vmaxpanel --estado`** (código 0 si dibuja, 1 si no).
+Lo publica el propio proceso a `vmaxpanel-estado.json` cada 5 s. No inferirlo del CPU de
+`pythonw` ni del log: eso es adivinar, y ya me costó tres verificaciones dudosas.
+
 Desde la raíz del repo. **Lo normal es que ya esté corriendo por la tarea `PanelVitals`**, que
 levanta la bandeja al logon:
 

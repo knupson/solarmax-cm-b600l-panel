@@ -45,9 +45,19 @@ def _ventana(tmp_path_factory):
 
 @pytest.fixture
 def ventana(_ventana):
-    """Devuelve la ventana con el perfil como recien abierto."""
+    """Devuelve la ventana con el perfil como recien abierto.
+
+    Ademas del perfil se resetean las dos cosas de la VENTANA que un test puede
+    dejar cambiadas y otro leer: el tamano y donde esta el foco. Compartir una sola
+    raiz de Tk es necesario (ver _ventana) pero convierte cualquier estado global en
+    una dependencia de orden -- con pytest-randomly, en fallas que aparecen y
+    desaparecen segun la semilla. Resetear aca es mas barato que perseguirlas de a
+    una.
+    """
     _ventana.state.path.write_text(ORIGINAL, encoding="utf-8")
     _ventana._discard()
+    _ventana.root.geometry("1200x900")
+    _ventana.lista.focus_set()
     _ventana.root.update()
     return _ventana
 
@@ -528,3 +538,76 @@ def test_a_bad_bundle_reports_in_the_status_bar_and_keeps_editing(ventana, tmp_p
     ventana._importar_de(falso, profiles_dir=tmp_path / "p", assets_dir=tmp_path / "a")
     assert ventana.state.path == antes
     assert "no es un bundle" in ventana.estado.cget("text")
+
+
+# --- la barra de acciones tiene que estar en todas las pestañas ---
+
+
+def test_the_save_button_is_not_trapped_inside_the_widgets_tab(ventana):
+    """Estaba dentro de la pestaña Widgets, así que editando el fondo no había
+    ningún botón de guardar ni barra de estado: el usuario cambiaba el fondo, no
+    encontraba dónde aplicarlo, reiniciaba el motor y el cambio se perdía. Reportado
+    tal cual: "no hay boton de aplicar ni guarda"."""
+    assert not str(ventana._acciones).startswith(str(ventana.tabs) + ".")
+    assert not str(ventana.estado).startswith(str(ventana.tabs) + ".")
+
+
+def tipear(ventana, padre, var, valor):
+    """Simula escribir en un campo: el texto queda en el control y NO se aplica --
+    ese es el punto, aplicar es lo que el usuario nunca hizo. El editor lo detecta
+    con un trace sobre la variable, asi que cambiarla es exactamente lo que pasa al
+    teclear."""
+    entradas = [c for c in padre.winfo_children()
+                if c.winfo_class() in ("TEntry", "Entry")]
+    assert entradas, "ese panel no tiene campos de texto"
+    var.set(valor)
+    ventana.root.update()
+
+
+def test_changing_the_background_and_saving_persists_it(ventana):
+    """El camino que falló: escribir en un campo del fondo y darle a Guardar, SIN
+    pasar por Enter. Los Entry sólo aplican con <Return> o <FocusOut>, así que el
+    valor recién tipeado no llegaba al estado y se guardaba el viejo."""
+    ventana.tabs.select(1)                       # pestaña Fondo
+    ventana._bg_type.set("solid")
+    ventana._on_pick_bg_type()                   # el camino del combo, con su poda
+    ventana.root.update()
+
+    tipear(ventana, ventana._bg_campos, ventana._bg_fields["color"], "#123456")
+    ventana._save()
+
+    en_disco = json.loads(ventana.state.path.read_text(encoding="utf-8"))
+    assert en_disco["background"]["color"] == "#123456"
+
+
+def test_a_pending_widget_field_is_committed_on_save(ventana):
+    seleccionar(ventana, "cpu-load")
+    tipear(ventana, ventana.props, ventana._fields["x"], "77")
+    ventana._save()
+    en_disco = json.loads(ventana.state.path.read_text(encoding="utf-8"))
+    assert [w for w in en_disco["widgets"]
+            if w["id"] == "cpu-load"][0]["x"] == 77
+
+
+def test_discarding_also_drops_what_was_typed_but_not_applied(ventana):
+    """Si lo tipeado quedara pendiente, reaparecería en el próximo guardado — o sea
+    que "Descartar cambios" no descartaría nada."""
+    seleccionar(ventana, "cpu-load")
+    x0 = ventana.state.widget("cpu-load")["x"]
+    tipear(ventana, ventana.props, ventana._fields["x"], "999")
+    ventana._discard()
+    ventana._save()
+    en_disco = json.loads(ventana.state.path.read_text(encoding="utf-8"))
+    assert [w for w in en_disco["widgets"]
+            if w["id"] == "cpu-load"][0]["x"] == x0
+
+
+def test_unsaved_changes_are_visible_in_the_title(ventana):
+    """Sin señal de "hay cambios sin guardar", reiniciar el motor desde la bandeja
+    parece ignorar la edición -- y en realidad la edición nunca llegó al disco."""
+    assert "sin guardar" not in ventana.root.title()
+    seleccionar(ventana, "cpu-load")
+    ventana._move(3, 0)
+    assert "sin guardar" in ventana.root.title()
+    ventana._save()
+    assert "sin guardar" not in ventana.root.title()

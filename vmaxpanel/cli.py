@@ -7,7 +7,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import bundle, install
+from . import bundle, install, status
 from .engine import Engine, EngineConfig
 from .layout import loader
 from .logsetup import run_with_log
@@ -31,6 +31,16 @@ def assets_dir() -> Path:
     return HERE / "assets"
 
 
+def status_path() -> Path:
+    """Donde el proceso que maneja el panel publica su estado.
+
+    Al lado del log y por el mismo motivo: es donde el usuario ya va a buscar
+    cuando algo no anda, y tiene que ser el mismo lugar para el que escribe y el
+    que lee sin que nadie configure nada.
+    """
+    return HERE.parent / "vmaxpanel-estado.json"
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="vmaxpanel")
     ap.add_argument("--profile", type=Path, default=default_profile_path())
@@ -51,6 +61,9 @@ def main(argv=None) -> int:
                          "al iniciar sesion")
     ap.add_argument("--desinstalar", action="store_true",
                     help="borra esa tarea; el panel deja de arrancar solo")
+    ap.add_argument("--estado", action="store_true",
+                    help="dice si el panel esta andando ahora, leyendo lo que "
+                         "publica el proceso que lo maneja")
     ap.add_argument("--exportar", type=Path, metavar="ARCHIVO",
                     help="guarda el perfil y sus assets en un solo archivo "
                          f"({bundle.EXT}) para compartirlo o respaldarlo")
@@ -71,6 +84,12 @@ def main(argv=None) -> int:
         print(f"Instalando VMax Panel con el perfil {a.profile}")
         return _reportar(install.instalar(a.profile, log=a.log or _log_por_defecto(),
                                           port=a.port))
+    if a.estado:
+        leido = status.StatusFile(status_path()).read()
+        print(status.describe(leido))
+        # 1 y no 2: no es un error de uso ni una falla del comando, es la respuesta
+        # "no esta corriendo" -- que un script pueda distinguir con el codigo.
+        return 0 if leido and leido.get("running") else 1
     if a.exportar:
         return _exportar(a.profile, a.exportar)
     if a.importar:

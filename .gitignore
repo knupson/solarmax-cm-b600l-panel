@@ -5,6 +5,7 @@ pytest-hang.txt
 .superpowers/
 
 vmaxpanel.log
+vmaxpanel-estado.json
 tray.log
 daemon/panel.log
 daemon/panel.err
@@ -25,5 +26,11 @@ daemon/assets/back.png
 # evidencia de reversing y transcript de la sesion: no son codigo
 research/
 transcript/
+# ...pero los generadores SI: hacen assets y perfiles que estan versionados
+# (embers.mp4, embers.json, apex.json), asi que sin ellos esos archivos no se
+# pueden reproducir ni corregir. Un asset committeado cuyo generador no esta en el
+# repo es un binario huerfano.
+!research/make_*.py
+!research/spike_*.py
 
 preview*.png

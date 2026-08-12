@@ -233,6 +233,10 @@ def validate(raw) -> list[str]:
         # sostenida sin frenar al host -- asi que serian frames renderizados,
         # comprimidos y escritos para nada. Costo medido contra el panel real:
         # 0,6% de un nucleo a 1 fps, 17% a 30, 37% a 60.
+        # Fraccionario a proposito: 0.5 es un cuadro cada dos segundos, que en un
+        # panel de datos es una cadencia legitima y la mas barata de todas. La
+        # bandeja solo ofrece 1/10/30/60, pero el perfil no tiene por que limitarse
+        # al menu.
         if not _is_num(f) or not 0.1 <= f <= MAX_FPS:
             errs.append(f"panel.fps: {f!r} fuera de 0.1..{MAX_FPS} "
                         f"(el panel refresca a {MAX_FPS} Hz)")

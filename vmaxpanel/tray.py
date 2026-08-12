@@ -19,6 +19,7 @@ from ctypes import wintypes
 from pathlib import Path
 
 from .app import PanelApp
+from .cli import status_path
 from .logsetup import run_with_log
 
 user32 = ctypes.windll.user32
@@ -476,7 +477,9 @@ def main(argv=None) -> int:
     ap.add_argument("--log", type=Path)
     a = ap.parse_args(argv)
 
-    app = PanelApp(a.profile, port=a.port)
+    # La bandeja publica su estado a un archivo: es el proceso que de verdad maneja
+    # el panel, asi que es el unico que puede contestarle a `--estado`.
+    app = PanelApp(a.profile, port=a.port, status_path=status_path())
     tray = Tray(app, log_path=a.log)
     # run_with_log tambien y no solo el log_path del menu: la bandeja corre
     # bajo pythonw.exe, sin consola, asi que sin esto un error al arrancar --

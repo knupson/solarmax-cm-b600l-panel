@@ -470,3 +470,4 @@ def test_a_missing_required_field_is_named_precisely():
     errs = schema.validate(with_widget(b))
     assert any("falta el campo obligatorio 'w'" in e for e in errs)
     assert not any("falta el campo obligatorio 'h'" in e for e in errs)
+

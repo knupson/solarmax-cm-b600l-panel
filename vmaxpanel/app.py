@@ -18,6 +18,8 @@ from pathlib import Path
 from .engine import Engine, EngineConfig
 from .layout import loader, schema
 from .providers.setup import build_registry
+from .status import PERIODO as status_PERIODO
+from .status import StatusFile
 from .transport.panel_link import PanelLink
 
 
@@ -55,7 +57,7 @@ class PanelApp:
     """
 
     def __init__(self, profile_path, link_factory=None, registry_factory=None,
-                 port=None):
+                 port=None, status_path=None, status_period=None):
         self.profile_path = profile_path
         self._link_factory = link_factory or (lambda: PanelLink.autodetect(port))
         self._registry_factory = registry_factory or build_registry
@@ -67,6 +69,12 @@ class PanelApp:
         self._client = None
         self._paused = False
         self._last_state = {}
+        # El archivo de estado es opt-in: los tests del motor y un --once de una
+        # sola pasada no tienen por que ensuciar el directorio.
+        self._status = StatusFile(status_path) if status_path else None
+        self._status_period = status_period or status_PERIODO
+        self._status_stop = threading.Event()
+        self._status_thread = None
 
     # --- ciclo de vida ---
 
@@ -96,6 +104,7 @@ class PanelApp:
             self._thread = threading.Thread(target=self._serve, daemon=True,
                                             name="vmaxpanel-engine")
             self._thread.start()
+            self._arrancar_latido()
 
     def _serve(self):
         try:
@@ -128,15 +137,24 @@ class PanelApp:
         self._clock.interrupt()
         if thread is not None:
             thread.join(timeout=10.0)
+        self._parar_latido()
         with self._lock:
             self._engine = None
             self._thread = None
+        # Se publica DESPUES de bajar: si el archivo quedara con running=True,
+        # `--estado` mentiria justo en el caso que mas importa -- el panel que se
+        # apago solo y hay que averiguar por que.
+        self.publicar_estado()
 
     def pause(self):
         if self._paused:
             return
         self.stop()
         self._paused = True
+        # Otra vez despues, y no dentro de stop(): stop() publica con paused todavia
+        # en False, y "detenido" manda a reiniciar algo que en realidad esta en
+        # pausa a pedido del usuario.
+        self.publicar_estado()
 
     def resume(self):
         if not self._paused:
@@ -184,6 +202,48 @@ class PanelApp:
         if corria:
             self.start()
         return []
+
+    # --- estado publicado a un archivo ---
+    #
+    # Ver status.py para el por que. En una frase: la bandeja muestra el estado en
+    # su menu, pero desde una consola no habia nada, y verificar que el panel andaba
+    # midiendo el CPU de un pythonw es adivinar.
+
+    def publicar_estado(self) -> bool:
+        """Escribe el estado actual al archivo, si hay uno configurado."""
+        if self._status is None:
+            return False
+        st = dict(self.state())
+        # problems() ya junta last_error + warnings + metricas sin datos y
+        # deduplica: el lector no tiene que saber que estaban en tres campos.
+        st["problems"] = self.problems()
+        return self._status.write(st)
+
+    def _arrancar_latido(self):
+        if self._status is None or (self._status_thread and
+                                   self._status_thread.is_alive()):
+            return
+        self._status_stop.clear()
+        self._status_thread = threading.Thread(target=self._latido, daemon=True,
+                                               name="vmaxpanel-estado")
+        self._status_thread.start()
+
+    def _latido(self):
+        """Publica cada `status_period` hasta que le pidan parar.
+
+        Event.wait y no sleep: bajar el motor no puede esperar hasta un periodo
+        entero para que este hilo se entere.
+        """
+        self.publicar_estado()
+        while not self._status_stop.wait(self._status_period):
+            self.publicar_estado()
+
+    def _parar_latido(self):
+        self._status_stop.set()
+        t = self._status_thread
+        if t is not None and t is not threading.current_thread():
+            t.join(timeout=2.0)
+        self._status_thread = None
 
     # --- exportar ---
 
