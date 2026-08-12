@@ -302,6 +302,118 @@ def instalar(profile_path, runner=None, log=None, port=None) -> tuple:
     return code, lineas
 
 
+# Como se reconoce un proceso del panel por su linea de comandos. Por linea y no por
+# nombre de imagen: son todos python.exe/pythonw.exe/powershell.exe, y matar por
+# nombre se lleva puesto cualquier script del usuario. Ya hubo un susto con eso.
+_MIOS = ("vmaxpanel.tray", "-m vmaxpanel", "vmaxpanel\\sensors.ps1",
+         "vmaxpanel/sensors.ps1", "sensors.ps1")
+
+
+def _procesos_windows():
+    """[(pid, linea de comandos)] de los candidatos. Solo interpretes y PowerShell."""
+    try:
+        import psutil
+    except ImportError:
+        return []
+    fuera = []
+    for p in psutil.process_iter(["pid", "name", "cmdline"]):
+        nombre = (p.info.get("name") or "").lower()
+        if not nombre.startswith(("python", "pythonw", "powershell", "pwsh")):
+            continue
+        # None y no "" cuando no se pudo leer: quien llama tiene que poder
+        # distinguir "no es del panel" de "no pude ver que es".
+        cmd = p.info.get("cmdline")
+        fuera.append((p.info["pid"], " ".join(cmd) if cmd else None))
+    return fuera
+
+
+def _matar(pid) -> bool:
+    try:
+        import psutil
+        proc = psutil.Process(int(pid))
+        proc.terminate()
+        try:
+            proc.wait(timeout=3)
+        except Exception:
+            proc.kill()
+        return True
+    except Exception:
+        return False
+
+
+def es_mio(linea, yo=None) -> bool:
+    """True si esa linea de comandos es un proceso del panel.
+
+    Excluye el proceso que hace la pregunta: `python -m vmaxpanel --parar` matchea
+    "-m vmaxpanel" y se suicidaria antes de terminar de bajar el resto.
+    """
+    baja = linea.lower()
+    if "--parar" in baja:
+        return False
+    return any(m.lower() in baja for m in _MIOS)
+
+
+def parar(runner=None, matar=None, listar=None) -> tuple:
+    """Baja el panel de verdad: para la tarea y mata los procesos. -> (codigo, lineas).
+
+    Existe porque `daemon/stop.ps1` **no conoce al motor nuevo** -- barre por linea de
+    comandos contra `panel\\.py|sensors\\.ps1` -- y no se puede tocar: `daemon/` es la
+    vuelta atras byte-identica de toda la fase. Ademas la tarea programada vuelve a
+    levantar la bandeja en el siguiente logon, asi que matar el proceso solo no alcanza.
+
+    El sidecar se mata aparte y a proposito: un `powershell.exe` corriendo sensors.ps1
+    que sobrevive se queda con LibreHardwareMonitorLib.dll tomado y bloquea mover o
+    borrar el directorio. Es la trampa recurrente de este proyecto.
+    """
+    runner = runner or _correr
+    matar = matar or _matar
+    listar = listar or _procesos_windows
+    lineas = []
+
+    code, salida = runner([_schtasks(), "/End", "/TN", TAREA])
+    if code == 0:
+        lineas.append(f"tarea {TAREA} detenida")
+    elif "cannot find" in salida.lower() or "no existe" in salida.lower():
+        lineas.append(f"la tarea {TAREA} no estaba registrada")
+    else:
+        # /End con la tarea registrada pero no corriendo tambien devuelve != 0. No es
+        # una falla: el estado final es el que se pidio.
+        lineas.append(f"la tarea {TAREA} no estaba corriendo")
+
+    muertos, opacos, tercos = [], [], []
+    for pid, linea in listar():
+        if linea is None:
+            # Sin linea de comandos: psutil no la pudo leer. Pasa con un proceso de
+            # mayor integridad -- la bandeja corre elevada -- y saltearlo en silencio
+            # es lo que hacia decir "no habia procesos" con el panel andando.
+            opacos.append(pid)
+            continue
+        if not es_mio(linea):
+            continue
+        if matar(pid):
+            muertos.append(pid)
+            lineas.append(f"  matado {pid}: {linea[:70]}")
+        else:
+            tercos.append(pid)
+    if muertos:
+        lineas.append(f"{len(muertos)} proceso(s) del panel bajados")
+    else:
+        # "no quedaron" y no "no habia": /End ya se lleva el arbol de la tarea, asi
+        # que para cuando se enumera puede no quedar nada. Decir "no habia" suena a
+        # que nunca estuvo.
+        lineas.append("no quedaron procesos del panel corriendo "
+                      "(la tarea se lleva los suyos al detenerse)")
+    if tercos:
+        lineas.append(f"no pude matar {', '.join(map(str, tercos))}: corrlo desde una "
+                      f"consola de administrador (la bandeja corre elevada)")
+    if opacos:
+        lineas.append(f"hay {len(opacos)} proceso(s) que no puedo inspeccionar "
+                      f"({', '.join(map(str, opacos))}): corrlo desde una consola de "
+                      f"administrador para ver si son del panel")
+    lineas.append(f"para volver a levantarlo: schtasks /Run /TN {TAREA}")
+    return 0, lineas
+
+
 def desinstalar(runner=None) -> tuple:
     """Borra la tarea. Idempotente: que no exista no es una falla."""
     runner = runner or _correr

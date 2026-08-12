@@ -273,3 +273,77 @@ def test_a_denied_registration_says_it_needs_admin(perfil):
     code, lineas = install.instalar(perfil, runner=r)
     assert code == 1
     assert any("administrador" in l.lower() for l in lineas)
+
+
+# --- bajar el panel ---
+
+
+def test_stopping_stops_the_task_and_kills_the_processes():
+    """`daemon/stop.ps1` no conoce al motor nuevo y no se puede tocar (es la vuelta
+    atras byte-identica de toda la fase), y ademas la tarea vuelve a levantar la
+    bandeja en el siguiente logon. Bajar el panel de verdad son tres cosas: parar la
+    tarea, matar el proceso y matar el sidecar que se queda con el DLL tomado."""
+    r = FakeRunner()
+    matados = []
+    code, lineas = install.parar(runner=r, matar=lambda p: matados.append(p) or True,
+                                 listar=lambda: [(111, "pythonw.exe -m vmaxpanel.tray"),
+                                                 (222, "powershell.exe -File sensors.ps1"),
+                                                 (333, "notepad.exe")])
+    assert code == 0
+    argv = r.calls[0]
+    assert "/End" in argv and install.TAREA in argv
+    assert matados == [111, 222], "mato lo que no era, o dejo el sidecar vivo"
+    assert any("111" in l for l in lineas)
+
+
+def test_stopping_when_nothing_is_running_is_not_an_error():
+    """Bajar algo que ya esta bajado no es una falla: el estado final es el pedido."""
+    r = FakeRunner(code=1, salida="ERROR: The system cannot find the task specified.")
+    code, lineas = install.parar(runner=r, matar=lambda p: True, listar=lambda: [])
+    assert code == 0
+    assert any("no quedaron" in l.lower() for l in lineas)
+    assert any("no estaba registrada" in l for l in lineas)
+
+
+def test_stopping_does_not_touch_an_unrelated_python():
+    """Un `python.exe` que no es el panel -- un script del usuario, un pytest -- no se
+    puede matar por venir en la misma lista. Ya hubo un susto con eso: 14 GB de RAM de
+    un proceso que era del usuario, no mio."""
+    r = FakeRunner()
+    matados = []
+    install.parar(runner=r, matar=lambda p: matados.append(p) or True,
+                  listar=lambda: [(1, "python.exe otra_cosa.py"),
+                                  (2, "python.exe -m pytest"),
+                                  (3, "pythonw.exe -m vmaxpanel --profile x.json")])
+    assert matados == [3]
+
+
+def test_the_cli_has_a_stop_flag(monkeypatch, capsys):
+    from vmaxpanel import cli
+    monkeypatch.setattr(install, "parar", lambda **kw: (0, ["listo"]))
+    assert cli.main(["--parar"]) == 0
+    assert "listo" in capsys.readouterr().out
+
+
+def test_a_process_it_cannot_inspect_is_reported_not_ignored():
+    """La bandeja corre ELEVADA (RunLevel HighestAvailable). Desde una consola sin
+    elevar, psutil no puede leer su linea de comandos ni matarla -- y saltearla en
+    silencio hacia que --parar dijera "no habia procesos" con el panel andando. Es la
+    misma mentira de status que este proyecto persigue: mejor decir "hay algo que no
+    puedo ver, corrleo como administrador"."""
+    r = FakeRunner()
+    code, lineas = install.parar(runner=r, matar=lambda p: True,
+                                 listar=lambda: [(999, None)])
+    assert code == 0
+    texto = " ".join(lineas).lower()
+    assert "administrador" in texto
+    assert "999" in texto
+
+
+def test_a_process_it_cannot_kill_is_reported(monkeypatch):
+    r = FakeRunner()
+    code, lineas = install.parar(runner=r, matar=lambda p: False,
+                                 listar=lambda: [(7, "pythonw.exe -m vmaxpanel.tray")])
+    texto = " ".join(lineas).lower()
+    assert "no pude" in texto or "no se pudo" in texto
+    assert "administrador" in texto

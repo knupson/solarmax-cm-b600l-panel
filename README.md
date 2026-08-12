@@ -209,6 +209,25 @@ Dos cosas que no se adivinan:
   `fill` puesto después de un texto lo tapa. Los separadores del perfil van antes del header
   de su sección.
 
+### Bajarlo de verdad
+
+```powershell
+python -m vmaxpanel --parar
+```
+
+Tres cosas, porque hacen falta las tres: detiene la tarea (si no, vuelve al siguiente
+logon), mata la bandeja y el motor, y mata el **sidecar de sensores** — un `powershell.exe`
+corriendo `sensors.ps1` que sobrevive se queda con `LibreHardwareMonitorLib.dll` tomado y
+bloquea mover o borrar el directorio. Es la trampa recurrente de este proyecto.
+
+Reconoce sus procesos **por línea de comandos, no por nombre de imagen**: son todos
+`python.exe`/`pythonw.exe`/`powershell.exe` y matar por nombre se lleva puesto cualquier
+script del usuario. Si un proceso no se puede inspeccionar o matar — la bandeja corre elevada
+— lo dice y pide una consola de administrador, en vez de informar "no había nada".
+
+`daemon/stop.ps1` sigue sin conocer al motor nuevo **y no se puede tocar**: `daemon/` es la
+vuelta atrás byte-idéntica de toda la fase (`git diff 50e146e -- daemon/` tiene que dar vacío).
+
 ### Saber si está andando
 
 ```powershell

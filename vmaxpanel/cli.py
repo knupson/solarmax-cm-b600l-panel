@@ -61,6 +61,9 @@ def main(argv=None) -> int:
                          "al iniciar sesion")
     ap.add_argument("--desinstalar", action="store_true",
                     help="borra esa tarea; el panel deja de arrancar solo")
+    ap.add_argument("--parar", action="store_true",
+                    help="baja el panel ahora: detiene la tarea y mata la bandeja, "
+                         "el motor y el sidecar de sensores")
     ap.add_argument("--estado", action="store_true",
                     help="dice si el panel esta andando ahora, leyendo lo que "
                          "publica el proceso que lo maneja")
@@ -78,6 +81,8 @@ def main(argv=None) -> int:
     # Antes del run_with_log: estos tres salen por consola y terminan. Escribir
     # el diagnostico a un log en vez de a la pantalla seria justo lo contrario de
     # lo que se le pide a alguien que dice "no anda".
+    if a.parar:
+        return _reportar(install.parar())
     if a.desinstalar:
         return _reportar(install.desinstalar())
     if a.instalar:
