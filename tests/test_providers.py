@@ -68,3 +68,14 @@ def test_psutil_serves_network_rates_per_adapter():
         f"etiquetas: {[cat[m].label for m in porads]}"
     grupos = p.groups()
     assert all(grupos[mid].startswith("Red") for mid in porads)
+
+
+def test_psutil_serves_the_clock_with_seconds():
+    """clock.time es HH:MM. A 30 fps el segundero se mueve, asi que vale
+    tenerlo: es la senal mas barata de que el panel esta vivo."""
+    p = PsutilProvider()
+    assert "clock.time_hms" in p.metrics()
+    valor = p.read()["clock.time_hms"]
+    assert len(valor) == 8 and valor.count(":") == 2
+    hh, mm, ss = valor.split(":")
+    assert all(x.isdigit() and len(x) == 2 for x in (hh, mm, ss))

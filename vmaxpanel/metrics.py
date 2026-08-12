@@ -73,6 +73,7 @@ METRICS: dict[str, MetricSpec] = {m.id: m for m in [
     _n("net.down", "Bajada", "B/s", 0.0, None),
     _n("net.up", "Subida", "B/s", 0.0, None),
     _t("clock.time", "Hora"),
+    _t("clock.time_hms", "Hora con segundos"),
     _t("clock.date", "Fecha"),
     _n("sys.uptime", "Encendida hace", "s", 0.0, None),
     _n("sys.procs", "Procesos", "", 0.0, None),

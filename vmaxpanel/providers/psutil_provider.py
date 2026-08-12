@@ -20,7 +20,7 @@ _SERVED = {
     "cpu.name", "cpu.name_short", "cpu.load", "cpu.clock",
     "mem.load", "mem.used", "mem.total",
     "net.down", "net.up",
-    "clock.time", "clock.date",
+    "clock.time", "clock.time_hms", "clock.date",
 }
 
 
@@ -67,6 +67,9 @@ class PsutilProvider(Provider):
             "net.down": down,
             "net.up": up,
             "clock.time": time.strftime("%H:%M", t),
+            # Con segundos, para un panel a 30 fps: el segundero moviendose es la
+            # senal mas barata de que lo que se ve esta vivo y no congelado.
+            "clock.time_hms": time.strftime("%H:%M:%S", t),
             "clock.date": self._date(t),
             **self._net_rate_por_adaptador(),
         }
