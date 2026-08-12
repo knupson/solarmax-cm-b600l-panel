@@ -18,6 +18,7 @@ perfil ANTES de escribir nada, se rechaza cualquier ruta que se escape del desti
 y se corta por tamano declarado para no descomprimir una bomba.
 """
 import json
+import os
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -165,6 +166,27 @@ def _destino_seguro(nombre, raiz) -> Path:
     return final
 
 
+def _escribir_atomico(destino, datos):
+    """Escribe en un temporal al lado y reemplaza.
+
+    Lo que se pisa puede estar EN USO: el perfil lo relee el motor en caliente (por
+    hash del contenido, asi que un archivo a medio escribir se puede leer truncado) y
+    el asset lo puede estar leyendo un ffmpeg. `loader.save_raw` ya escribia asi por
+    esta misma razon; importar tenia que hacer lo mismo. El temporal lleva el pid
+    para que dos importaciones a la vez no se pisen el temporal entre ellas.
+    """
+    tmp = destino.with_name(f"{destino.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_bytes(datos)
+        os.replace(tmp, destino)
+    except OSError as e:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise BundleError(f"no se pudo escribir {destino.name}: {e}") from e
+
+
 def _revisar_tamanos(z):
     total = 0
     for info in z.infolist():
@@ -264,11 +286,11 @@ def import_bundle(origen, profiles_dir, assets_dir, si_existe="fallar") -> dict:
         assets_dir.mkdir(parents=True, exist_ok=True)
         # Byte a byte y no json.dump: exportar e importar no puede reformatear el
         # perfil, o el usuario no puede comparar el suyo con el que le vuelve.
-        destino_perfil.write_bytes(crudo)
+        _escribir_atomico(destino_perfil, crudo)
         instalados = []
         for nombre, destino in planificados:
             destino.parent.mkdir(parents=True, exist_ok=True)
-            destino.write_bytes(z.read(nombre))
+            _escribir_atomico(destino, z.read(nombre))
             instalados.append(str(destino.relative_to(assets_dir)).replace("\\", "/"))
 
     return {"profile": destino_perfil, "assets": instalados,

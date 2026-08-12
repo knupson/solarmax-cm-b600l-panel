@@ -318,3 +318,58 @@ def test_a_profile_with_crlf_survives_the_roundtrip(entorno, tmp_path):
     info = bundle.import_bundle(zip_, tmp_path / "p2", tmp_path / "a2")
     assert info["profile"].read_bytes() == perfil.read_bytes()
     assert b"\r\n" in info["profile"].read_bytes()
+
+
+def test_importing_over_a_live_profile_is_atomic(entorno, tmp_path, monkeypatch):
+    """El perfil que se pisa puede ser el que el motor esta leyendo AHORA: el
+    hot-reload lo relee por hash del contenido, asi que un write_bytes a medias se
+    puede leer truncado. `loader.save_raw` usa temporal + reemplazo por esta misma
+    razon; importar tenia que hacer lo mismo.
+
+    Se prueba haciendo fallar el reemplazo: si el contenido nuevo se escribiera
+    directo sobre el destino, el perfil viejo ya estaria destruido cuando el fallo
+    ocurre.
+    """
+    perfil, perfiles, assets = entorno
+    zip_ = tmp_path / "b.vmaxpanel"
+    bundle.export_profile(perfil, zip_, assets_dir=assets)
+    viejo = b'{"soy": "el que estaba andando"}'
+    perfil.write_bytes(viejo)
+
+    import os
+    real = os.replace
+
+    def replace_que_falla(a, b, *args, **kw):
+        if str(b).endswith("mio.json"):
+            raise OSError("disco lleno justo ahora")
+        return real(a, b, *args, **kw)
+
+    monkeypatch.setattr(os, "replace", replace_que_falla)
+    with pytest.raises(bundle.BundleError):
+        bundle.import_bundle(zip_, perfiles, assets, si_existe="pisar")
+
+    assert perfil.read_bytes() == viejo, "destruyo el perfil que estaba andando"
+    assert not list(perfiles.glob("*.tmp")), "dejo el temporal tirado"
+
+
+def test_an_asset_is_also_written_atomically(entorno, tmp_path, monkeypatch):
+    """Mismo motivo del otro lado: ffmpeg puede estar leyendo el video que se pisa, y
+    un archivo a medio escribir es un fondo roto en vez de uno nuevo."""
+    perfil, perfiles, assets = entorno
+    zip_ = tmp_path / "b.vmaxpanel"
+    bundle.export_profile(perfil, zip_, assets_dir=assets)
+    (assets / "fondo.mp4").write_bytes(b"el video que se esta reproduciendo")
+
+    import os
+    real = os.replace
+
+    def replace_que_falla(a, b, *args, **kw):
+        if str(b).endswith("fondo.mp4"):
+            raise OSError("disco lleno justo ahora")
+        return real(a, b, *args, **kw)
+
+    monkeypatch.setattr(os, "replace", replace_que_falla)
+    with pytest.raises(bundle.BundleError):
+        bundle.import_bundle(zip_, perfiles, assets, si_existe="pisar")
+    assert (assets / "fondo.mp4").read_bytes() == b"el video que se esta reproduciendo"
+    assert not list(assets.glob("*.tmp"))
