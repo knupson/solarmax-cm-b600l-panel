@@ -39,6 +39,24 @@ class FakeProc:
         return None
 
 
+# Los clientes creados por client_for() se cierran al terminar cada test.
+# Antes 8 de 9 tests no llamaban a close(), asi que cada uno dejaba su hilo
+# lector girando en el backoff durante el resto de la corrida de pytest: hilos
+# acumulados, procesos falsos respawneados y ruido en cualquier medicion de
+# concurrencia. Ahora que close() hace join, cerrarlos es barato y deterministico.
+_ABIERTOS = []
+
+
+@pytest.fixture(autouse=True)
+def _cerrar_clientes():
+    yield
+    while _ABIERTOS:
+        try:
+            _ABIERTOS.pop().close()
+        except Exception:
+            pass
+
+
 def client_for(sample, caps_override=None):
     payload = dict(sample)
     if caps_override is not None:
@@ -47,6 +65,7 @@ def client_for(sample, caps_override=None):
     c = SidecarClient(script="ignored.ps1", spawn=lambda: proc)
     c.start()
     assert c.wait_ready(timeout=2.0)
+    _ABIERTOS.append(c)
     return c, proc
 
 

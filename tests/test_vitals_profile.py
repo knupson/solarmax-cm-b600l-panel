@@ -105,3 +105,14 @@ def test_the_profile_reads_the_memory_speed_instead_of_hardcoding_it():
     hardcoded = [w for w in lay.widgets
                  if w.type == "label" and w.text.strip().isdigit()]
     assert hardcoded == []
+
+
+def test_the_shipped_profile_is_not_modified_by_the_test_suite():
+    """Guarda contra un accidente que ya paso: un script de verificacion
+    escribio sobre el perfil VIVO en vez de sobre una copia, y lo dejo en
+    'procedural' con 30 fps. Los tests trabajan sobre copias en tmp_path; si
+    este falla, algo esta escribiendo donde no debe."""
+    raw = __import__("json").loads(PROFILE.read_text(encoding="utf-8"))
+    assert raw["panel"]["fps"] == 1
+    assert raw["background"]["type"] == "gradient"
+    assert len(raw["background"]["stops"]) == 3

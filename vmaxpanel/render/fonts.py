@@ -4,8 +4,13 @@ No empaquetamos TTFs: consola.ttf/consolab.ttf son Consolas, de Microsoft, y no
 son redistribuibles. Se busca por familia en assets/fonts/ (donde la fase 3
 pondra una mono libre) y despues entre las fuentes del sistema.
 
-Una familia ausente cae al fallback y se anota en missing(), para que el editor
-lo pueda avisar. Nunca lanza: un layout ajeno no puede tumbar el render.
+Una familia ausente cae al fallback. **Para avisarlo se usa `is_available()`, no
+`missing()`**: missing() solo anota lo que un resolve() efectivamente vio faltar,
+y resolve() devuelve desde la cache en un hit sin volver a pasar por ahi, asi que
+un resolver de larga vida puede quedarse mudo sobre una familia que sigue
+faltando. is_available() es una consulta contra el indice, no un historial de
+llamadas, y da la misma respuesta la primera vez y la enesima. Nunca lanza: un
+layout ajeno no puede tumbar el render.
 
 Limitacion conocida: un .ttc puede empaquetar varias caras (ej. regular +
 bold) en un solo archivo, pero solo leemos la cara 0 para nombrar el archivo.
@@ -142,6 +147,13 @@ class FontResolver:
         return any(h in stem.lower() for h in _BOLD_HINTS)
 
     def missing(self) -> set[str]:
+        """Familias que ALGUN resolve() vio faltar. Historial, no estado.
+
+        No es el canal para avisar al usuario -- para eso esta is_available().
+        resolve() devuelve desde la cache en un hit sin volver a anotar, asi que
+        una familia que sigue faltando puede no aparecer aca. Se conserva porque
+        sirve para diagnosticar que pidio el layout, no que hay en el sistema.
+        """
         return set(self._missing)
 
     def resolve(self, font, scale: float = 1.0) -> ImageFont.FreeTypeFont:

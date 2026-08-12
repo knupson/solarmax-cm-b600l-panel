@@ -119,6 +119,9 @@ def _format_rule_value(value: float) -> str:
     return s
 
 
+_serie_tmp = 0
+
+
 def save(layout: Layout, path):
     save_raw(to_dict(layout), path)
 
@@ -133,11 +136,27 @@ def save_raw(raw: dict, path):
 
     El caller es responsable de haber validado. Se escribe a un temporal y se
     reemplaza: atomico, asi que el motor nunca lee un archivo a medio escribir.
+
+    El temporal lleva el pid y un contador, no un nombre fijo: hay mas de un
+    escritor posible -- la bandeja cambiando el fps y el editor guardando -- y
+    con `<perfil>.tmp` compartido dos escrituras simultaneas se pisan el
+    temporal y una de las dos puede terminar escribiendo un archivo mezclado.
+    Si el reemplazo falla, el temporal se borra en vez de quedar tirado al lado
+    del perfil.
     """
-    tmp = f"{path}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(dumps_layout(raw))
-    os.replace(tmp, path)
+    global _serie_tmp
+    _serie_tmp += 1
+    tmp = f"{path}.{os.getpid()}.{_serie_tmp}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(dumps_layout(raw))
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def dumps_layout(raw) -> str:

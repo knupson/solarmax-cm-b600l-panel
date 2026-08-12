@@ -168,10 +168,17 @@ class Renderer:
         distintas, la fuente de un warning que sobrevivia de mas y de uno
         que desaparecia de menos.
         """
-        missing = {f.family for f in self.layout.fonts.values()
-                   if not self._fonts.is_available(f.family)}
+        # Deduplicado por casing: dos alias que piden la misma familia escrita
+        # distinto ("Arial" y "ARIAL") daban dos lineas identicas para el
+        # usuario. Se conserva la primera forma vista, que es la que el layout
+        # escribio, para que el aviso coincida con lo que el usuario tipeo.
+        missing = {}
+        for f in self.layout.fonts.values():
+            if not self._fonts.is_available(f.family):
+                missing.setdefault(f.family.lower(), f.family)
         return (list(self._bg.warnings)
-                + [f"fuente no encontrada: {f}" for f in sorted(missing)]
+                + [f"fuente no encontrada: {f}"
+                   for f in sorted(missing.values(), key=str.lower)]
                 + [f"directorio de fuentes ilegible: {d}"
                    for d in sorted(self._fonts.unreadable_dirs())])
 

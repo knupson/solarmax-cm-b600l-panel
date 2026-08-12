@@ -201,3 +201,25 @@ def test_the_catalog_falls_back_to_the_generic_label():
     r = Registry([TwoWayProvider("pdh", {"cpu.clock"}, {"cpu.clock": 4080})])
     assert r.catalog()["cpu.clock"].label == "Clock de CPU"
     assert r.groups().get("cpu.clock") == "CPU"
+
+
+def test_the_unavailable_reason_is_the_providers_own_words():
+    """El test original se llamaba "..._with_reason" y solo miraba que la
+    metrica fuera UNAVAILABLE, sin chequear el motivo que promete el nombre."""
+
+    class Caido(Provider):
+        id = "gsa1"
+
+        def probe(self):
+            self.unavailable_reason = "requiere placa Gigabyte con GSA1"
+            return False
+
+        def metrics(self):
+            return {"cpu.temp"}
+
+        def read(self):
+            return {}
+
+    r = Registry([Caido()])
+    assert r.read()["cpu.temp"] is UNAVAILABLE
+    assert r.unavailable()["cpu.temp"] == "requiere placa Gigabyte con GSA1"

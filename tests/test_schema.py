@@ -421,3 +421,52 @@ def test_sequence_rejects_an_fps_the_panel_cannot_show():
 def test_sequence_rejects_a_path_outside_the_assets_dir():
     errs = schema.validate(con_fondo({"type": "sequence", "src": "../../etc"}))
     assert any("src" in e for e in errs)
+
+
+# --- nombres de dispositivo reservados de Windows ---
+
+def test_reserved_device_names_are_refused_as_asset_paths():
+    """CON, NUL, COM1..COM9, LPT1.. y PRN son dispositivos, no archivos: en
+    Windows `open("CON")` abre la consola y una lectura puede quedarse
+    esperando para siempre. No es un escape del directorio, pero cuelga el
+    hilo de render, y con las secuencias de fondo esa ruta se abre de verdad.
+    """
+    for nombre in ("CON", "con", "NUL", "PRN", "AUX", "COM1", "com9", "LPT1",
+                   "CON.png", "fondos/NUL", "NUL.jpg", "COM1.txt"):
+        assert schema.safe_asset_path(nombre) is None, nombre
+
+
+def test_normal_names_that_only_start_like_a_device_are_allowed():
+    """CONSOLA no es CON: un prefijo no puede descartar un nombre legitimo."""
+    for nombre in ("consola.ttf", "CONSOLAS.png", "nulo.png", "com.png",
+                   "auxiliar/fondo.png", "printer.png", "lpt.png"):
+        assert schema.safe_asset_path(nombre) is not None, nombre
+
+
+def test_panel_and_font_keys_come_from_the_model():
+    """Estaban escritos a mano: agregarle un campo a PanelCfg o a Font hacia
+    que el validador empezara a rechazar layouts validos hasta que alguien se
+    acordara de actualizar el set. El chequeo de widgets ya se derivaba de
+    __dataclass_fields__; esto lo iguala."""
+    from vmaxpanel.layout.model import Font, PanelCfg
+    assert schema.PANEL_KEYS == set(PanelCfg.__dataclass_fields__)
+    assert schema.FONT_KEYS == set(Font.__dataclass_fields__)
+
+
+def test_an_unknown_widget_type_still_reports_its_bad_coordinates():
+    """El early return por tipo desconocido se saltaba el chequeo de x/y, asi
+    que un widget con las dos cosas mal solo reportaba una."""
+    errs = schema.validate(with_widget({"id": "raro", "type": "inventado",
+                                        "x": "aca", "y": None}))
+    assert any("tipo desconocido" in e for e in errs)
+    assert any("x debe ser entero" in e for e in errs)
+    assert any("y debe ser entero" in e for e in errs)
+
+
+def test_a_missing_required_field_is_named_precisely():
+    """El test original preguntaba si la letra "w" aparecia en el mensaje, que
+    matchea cualquier palabra que la contenga."""
+    b = {"id": "b", "type": "bar", "metric": "cpu.load", "x": 1, "y": 1, "h": 4}
+    errs = schema.validate(with_widget(b))
+    assert any("falta el campo obligatorio 'w'" in e for e in errs)
+    assert not any("falta el campo obligatorio 'h'" in e for e in errs)

@@ -153,3 +153,33 @@ def test_filename_bold_hint_does_not_override_explicit_regular_style():
     assert FontResolver._is_bold("Bold", "consolab") is True
     # sin estilo explicito, el nombre de archivo sigue siendo la unica pista
     assert FontResolver._is_bold("", "somethingbold") is True
+
+
+def test_missing_is_documented_as_the_wrong_channel():
+    """El docstring del modulo decia que una familia ausente "se anota en
+    missing(), para que el editor lo pueda avisar". Dejo de ser verdad cuando
+    Renderer.warnings() paso a usar is_available(): missing() sigue existiendo y
+    sigue teniendo el defecto del cortocircuito de cache -- resolve() devuelve
+    de la cache en un hit sin volver a anotar --, asi que el docstring dirigia
+    a un lector futuro justo al canal con el bug."""
+    import vmaxpanel.render.fonts as mod
+    assert "is_available" in (mod.__doc__ or ""), \
+        "el docstring no menciona el canal correcto"
+    assert "is_available" in (mod.FontResolver.missing.__doc__ or ""), \
+        "missing() no advierte que no es el canal para avisos"
+
+
+def test_warnings_do_not_duplicate_a_family_by_casing():
+    """Dos alias con la misma familia en distinto casing daban dos lineas de
+    aviso identicas para el usuario."""
+    from vmaxpanel.layout import model
+    from vmaxpanel.render.renderer import Renderer
+
+    lay = model.Layout(
+        1, "t", model.Size(64, 64), model.PanelCfg(),
+        {"a": model.Font("NoExisteEstaFamilia", 12),
+         "b": model.Font("noexisteestafamilia", 14),
+         "c": model.Font("NOEXISTEESTAFAMILIA", 16)},
+        model.Background(type="solid", color="#000000"), [])
+    avisos = [w for w in Renderer(lay).warnings() if "fuente no encontrada" in w]
+    assert len(avisos) == 1, avisos

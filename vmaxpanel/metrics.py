@@ -171,6 +171,15 @@ def _familia(mid: str):
 
 
 def disk_metric(n: int) -> str:
+    """Id de la temperatura del disco n.
+
+    Levanta con un indice negativo en vez de devolver "disk.temp.-1", que
+    is_metric() rechaza: un generador que produce ids que el validador no
+    acepta es una trampa para el que lo use.
+    """
+    n = int(n)
+    if n < 0:
+        raise ValueError(f"indice de disco invalido: {n}")
     return f"disk.temp.{n}"
 
 

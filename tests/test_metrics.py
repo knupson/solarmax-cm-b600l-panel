@@ -1,3 +1,5 @@
+import pytest
+
 from vmaxpanel import metrics
 from vmaxpanel.metrics import METRICS, UNAVAILABLE, MetricSpec, disk_metric, is_metric
 
@@ -165,3 +167,27 @@ def test_group_names_are_friendly_not_id_prefixes():
     assert metrics.group_for("gpu.load") == "GPU"
     # un prefijo desconocido no puede quedar sin grupo
     assert metrics.group_for("inventado.algo") == "INVENTADO"
+
+
+def test_every_registered_metric_is_covered_by_this_file():
+    """El test original cubria 7 de 23 ids a mano, asi que renombrar una
+    metrica no rompia ningun test y el perfil se enteraba en produccion.
+    Ahora la cobertura es del registro entero."""
+    for mid, spec in METRICS.items():
+        assert is_metric(mid), mid
+        assert metrics.spec_for(mid) is spec or metrics.spec_for(mid) == spec
+        assert spec.label and spec.kind in ("number", "text")
+        if spec.kind == "number":
+            assert spec.min is None or isinstance(spec.min, float)
+            assert spec.max is None or isinstance(spec.max, float)
+        assert metrics.group_for(mid) != "OTRAS"
+
+
+def test_disk_metric_and_is_metric_agree():
+    """disk_metric(-1) generaba "disk.temp.-1", que is_metric rechaza: el
+    generador y el validador no coincidian."""
+    for n in (0, 1, 7, 99):
+        assert is_metric(disk_metric(n)), n
+    for malo in (-1, -5):
+        with pytest.raises(ValueError):
+            disk_metric(malo)

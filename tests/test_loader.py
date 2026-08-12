@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -184,3 +185,69 @@ def test_an_animated_background_survives_the_roundtrip(tmp_path):
     assert otro.background.type == "procedural"
     assert otro.background.name == "pulse"
     assert otro.background.period == 8.0
+
+
+def test_two_writers_do_not_share_the_temp_file(tmp_path, monkeypatch):
+    """El temporal tenia nombre fijo (`<perfil>.tmp`), asi que dos escritores
+    en paralelo -- la bandeja cambiando el fps y el editor guardando -- se
+    pisaban el temporal y uno de los dos podia escribir un archivo mezclado.
+    Ahora cada escritura usa su propio temporal."""
+    path = tmp_path / "p.json"
+    path.write_text(json.dumps(MINIMAL), encoding="utf-8")
+    vistos = []
+    real = os.replace
+
+    def espiar(src, dst):
+        vistos.append(str(src))
+        return real(src, dst)
+
+    monkeypatch.setattr(loader.os, "replace", espiar)
+    loader.save_raw(json.loads(json.dumps(MINIMAL)), path)
+    loader.save_raw(json.loads(json.dumps(MINIMAL)), path)
+    assert len(set(vistos)) == 2, f"reuso el mismo temporal: {vistos}"
+    assert not list(tmp_path.glob("*.tmp*")), "quedo un temporal sin borrar"
+
+
+def test_every_widget_type_survives_a_roundtrip(tmp_path):
+    """arc, graph e image no los round-trippeaba ningun test: el reviewer los
+    verifico a mano. Un tipo que save() escribe y load() rechaza es trabajo
+    perdido, y ya paso dos veces (rect con stroke null, y el fondo procedural)."""
+    raw = json.loads(json.dumps(MINIMAL))
+    raw["widgets"] += [
+        {"id": "a", "type": "arc", "metric": "cpu.load", "x": 100, "y": 100,
+         "r": 40, "thickness": 6, "start_angle": 135, "sweep": 270,
+         "fill": "#3987E5", "track": "#242834"},
+        {"id": "g", "type": "graph", "metric": "cpu.load", "x": 10, "y": 10,
+         "w": 200, "h": 60, "color": "#3987E5", "samples": 90, "min": 0, "max": 100},
+        {"id": "r", "type": "rect", "x": 5, "y": 5, "w": 100, "h": 1,
+         "fill": "#242834"},
+        {"id": "r2", "type": "rect", "x": 5, "y": 9, "w": 100, "h": 40,
+         "radius": 6, "stroke": "#FFFFFF", "stroke_width": 2},
+    ]
+    path = tmp_path / "todos.json"
+    loader.save(loader.loads(json.dumps(raw)), path)
+    otro = loader.load(path)
+    por_id = {w.id: w for w in otro.widgets}
+    assert por_id["a"].sweep == 270.0 and por_id["a"].r == 40
+    assert por_id["g"].samples == 90 and por_id["g"].max == 100.0
+    assert por_id["r"].h == 1 and por_id["r"].stroke is None
+    assert por_id["r2"].stroke == "#FFFFFF" and por_id["r2"].stroke_width == 2
+
+
+def test_every_background_type_survives_a_roundtrip(tmp_path):
+    fondos = [
+        {"type": "solid", "color": "#101010"},
+        {"type": "gradient", "angle": 45,
+         "stops": [{"at": 0.0, "color": "#101725"}, {"at": 1.0, "color": "#141A26"}]},
+        {"type": "image", "src": "fondo.png", "fit": "contain", "color": "#000000"},
+        {"type": "sequence", "src": "cuadros", "fps": 12, "fit": "cover"},
+        {"type": "procedural", "name": "scroll", "speed": 30, "angle": 90,
+         "stops": [{"at": 0.0, "color": "#101725"}, {"at": 1.0, "color": "#141A26"}]},
+    ]
+    for i, fondo in enumerate(fondos):
+        raw = json.loads(json.dumps(MINIMAL))
+        raw["background"] = fondo
+        path = tmp_path / f"bg{i}.json"
+        loader.save(loader.loads(json.dumps(raw)), path)
+        otro = loader.load(path)
+        assert otro.background.type == fondo["type"], fondo["type"]

@@ -33,8 +33,12 @@ FITS = {"cover", "contain", "stretch"}
 ROTATIONS = {0, 90, 180, 270}
 HUMANIZE_MODES = {"none", "rate", "bytes"}
 
-PANEL_KEYS = {"rotate", "brightness", "fps", "jpeg_quality"}
-FONT_KEYS = {"family", "size", "bold"}
+# Derivados del modelo, no escritos a mano: agregarle un campo a PanelCfg o a
+# Font hacia que el validador empezara a rechazar layouts validos hasta que
+# alguien se acordara de actualizar el set. El chequeo de claves de widget ya se
+# derivaba de __dataclass_fields__; esto lo iguala.
+PANEL_KEYS = set(PanelCfg.__dataclass_fields__)
+FONT_KEYS = set(Font.__dataclass_fields__)
 
 # claves permitidas por tipo de background. "color" se admite en solid (relleno)
 # y en image/sequence/video (relleno de letterbox); en gradient no la lee el
@@ -94,10 +98,35 @@ def safe_asset_path(src) -> str | None:
     return norm
 
 
+# Dispositivos de Windows: `open("CON")` abre la consola y `open("COM1")` el
+# puerto serie. No es un escape del directorio de assets -- por eso no lo
+# atrapaban los chequeos de ruta -- pero una lectura puede quedarse esperando
+# para siempre y colgar el hilo de render. Con las secuencias de fondo esa ruta
+# se abre de verdad, asi que dejo de ser un problema teorico.
+_DISPOSITIVOS = {"con", "prn", "aux", "nul", "conin$", "conout$"}
+_DISPOSITIVOS |= {f"com{i}" for i in range(1, 10)}
+_DISPOSITIVOS |= {f"lpt{i}" for i in range(1, 10)}
+
+
+def _es_dispositivo(segmento: str) -> bool:
+    """True si el segmento nombra un dispositivo reservado.
+
+    Se compara el nombre SIN extension: "NUL.jpg" tambien es el dispositivo nulo
+    para el subsistema de archivos de Windows. Un prefijo no alcanza --
+    "CONSOLAS.png" es un archivo legitimo -- asi que la comparacion es exacta
+    sobre el nombre base.
+    """
+    base = segmento.split(".", 1)[0].strip().lower()
+    return base in _DISPOSITIVOS
+
+
 def _is_unsafe_normalized_path(s: str) -> bool:
-    """True si `s` es absoluta, UNC, o de unidad de Windows (incluye 'C:foo')."""
-    return (s.startswith("/") or s.startswith("//")
-            or re.match(r"^[A-Za-z]:", s) is not None or ":" in s)
+    """True si `s` es absoluta, UNC, de unidad de Windows ('C:foo'), o si algun
+    segmento nombra un dispositivo reservado."""
+    if (s.startswith("/") or s.startswith("//")
+            or re.match(r"^[A-Za-z]:", s) is not None or ":" in s):
+        return True
+    return any(_es_dispositivo(seg) for seg in s.split("/") if seg)
 
 
 def _is_int(v):
@@ -312,6 +341,13 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
     else:
         seen.add(wid)
 
+    # x/y se chequean ANTES del early return por tipo desconocido: si no, un
+    # widget con el tipo mal Y las coordenadas mal solo reportaba una de las dos
+    # cosas, y el editor muestra todos los errores juntos.
+    for k in ("x", "y"):
+        if not _is_int(w.get(k)):
+            errs.append(f"{where}: {k} debe ser entero")
+
     t = w.get("type")
     if t not in WIDGET_TYPES:
         return errs + [f"{where}: tipo desconocido {t!r}, se espera uno de "
@@ -322,10 +358,6 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
     for k in w:
         if k not in allowed_keys:
             errs.append(f"{where}: clave desconocida {k!r}")
-
-    for k in ("x", "y"):
-        if not _is_int(w.get(k)):
-            errs.append(f"{where}: {k} debe ser entero")
 
     for k in REQUIRED[t]:
         if k not in w:
