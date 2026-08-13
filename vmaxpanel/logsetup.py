@@ -1,22 +1,22 @@
-"""Redireccion de salida a un archivo de log.
+"""Redirecting output to a log file.
 
-La comparten las dos entradas graficas del proyecto (`cli` y `tray`) porque
-las dos pueden correr bajo `pythonw.exe`, que no tiene consola: sin esto, un
-proceso que muere al logon deja el panel negro y ningun rastro de por que.
+Shared by the project's two entry points (`cli` and `tray`) because both can run
+under `pythonw.exe`, which has no console: without this, a process that dies at
+logon leaves the panel black and no trace of why.
 """
 import sys
 import traceback
 
 
 class Tee:
-    """Escribe en el archivo de log y, si hay consola, tambien en ella.
+    """Writes to the log file and, if there is a console, to that as well.
 
-    Con pythonw, sys.stdout/sys.stderr pueden ser None -- de ahi el chequeo de
-    `stream` antes de escribir.
+    Under pythonw, sys.stdout/sys.stderr can be None -- hence the `stream` check
+    before writing.
 
-    flush en cada linea a proposito: lo que se quiere leer es justamente lo
-    ultimo que se escribio antes de morir, y un buffer sin vaciar se lo lleva
-    puesto.
+    Flushing on every line on purpose: what you want to read is precisely the last
+    thing written before dying, and an unflushed buffer takes exactly that with
+    it.
     """
 
     def __init__(self, fh, stream):
@@ -42,10 +42,10 @@ class Tee:
 
 
 def run_with_log(log_path, fn):
-    """Corre `fn()` con stdout/stderr duplicados a `log_path`.
+    """Runs `fn()` with stdout/stderr duplicated into `log_path`.
 
-    Con `log_path=None` no toca nada y llama a `fn()` directo, para que la
-    ruta de linea de comandos siga imprimiendo en la terminal como siempre.
+    With `log_path=None` it touches nothing and calls `fn()` directly, so the
+    command-line path keeps printing to the terminal as usual.
     """
     if log_path is None:
         return fn()
@@ -57,10 +57,10 @@ def run_with_log(log_path, fn):
         try:
             return fn()
         except BaseException:
-            # El traceback lo imprime el interprete DESPUES de que la funcion
-            # termina, o sea despues de que el finally restaure stderr y cierre
-            # el archivo: para entonces ya no hay donde escribirlo. Se emite
-            # aca, mientras stderr todavia es el Tee.
+            # The interpreter prints the traceback AFTER the function returns,
+            # which is to say after the finally restores stderr and closes the
+            # file: by then there is nowhere left to write it. It is emitted here,
+            # while stderr is still the Tee.
             traceback.print_exc(file=sys.stderr)
             raise
         finally:

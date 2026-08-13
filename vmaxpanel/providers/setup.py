@@ -1,8 +1,8 @@
-"""Armado del registry real de esta maquina.
+"""Building the real registry for this machine.
 
-Vive aparte del CLI porque lo necesitan tres entradas distintas -- el CLI, la
-app de bandeja y el preview del editor -- y ninguna tiene por que importar a
-las otras.
+It lives apart from the CLI because three separate entry points need it -- the
+CLI, the tray app and the editor's preview -- and none of them has any reason to
+import the others.
 """
 import sys
 from pathlib import Path
@@ -19,7 +19,7 @@ SIDECAR = Path(__file__).resolve().parent.parent / "sensors.ps1"
 
 
 def build_registry(sidecar_script=SIDECAR, warmup=25.0):
-    """(registry, client). El client puede ser None: el caller cierra los dos."""
+    """(registry, client). The client can be None: the caller closes both."""
     client = SidecarClient(sidecar_script).start()
     if not client.wait_ready(warmup):
         print("warning: the sidecar delivered no data; hardware sensors will "
@@ -31,10 +31,10 @@ def build_registry(sidecar_script=SIDECAR, warmup=25.0):
 
 
 def build_registry_without_sensors():
-    """Sin sidecar: psutil y WMI, que no necesitan DLLs ni elevacion.
+    """No sidecar: psutil and WMI, which need neither DLLs nor elevation.
 
-    Se usa para previsualizar layouts. WMI entra porque el espacio en disco es
-    justamente uno de los datos que se quiere ver al disenar, y su consulta no
-    depende de LibreHardwareMonitor.
+    Used for previewing layouts. WMI is included because disk space is precisely
+    one of the readings you want to see while designing, and querying it does not
+    depend on LibreHardwareMonitor.
     """
     return Registry([PsutilProvider(), WmiProvider()]), None

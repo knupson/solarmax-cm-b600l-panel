@@ -1,7 +1,7 @@
 """Contrato de un provider de sensores.
 
-Un provider declara que ids canonicos sirve y si existe en esta maquina.
-SOLO lecturas: ningun provider invoca metodos de escritura de hardware.
+A provider declares which canonical ids it serves and whether it exists on this
+machine. READS ONLY: no provider invokes a hardware write method.
 """
 from abc import ABC, abstractmethod
 
@@ -12,34 +12,34 @@ class Provider(ABC):
 
     @abstractmethod
     def probe(self) -> bool:
-        """True si este provider funciona en esta maquina.
+        """True if this provider works on this machine.
 
-        Si devuelve False debe dejar `unavailable_reason` con el motivo en
-        lenguaje llano: es lo que el editor le muestra al usuario.
+        When it returns False it must leave `unavailable_reason` set to the reason
+        in plain language: that is what the editor shows the user.
         """
 
     @abstractmethod
     def metrics(self) -> set[str]:
-        """Ids canonicos que este provider sirve."""
+        """The canonical ids this provider serves."""
 
     @abstractmethod
     def read(self) -> dict[str, float | str | None]:
-        """Ultima muestra. Las claves deben ser subconjunto de metrics()."""
+        """The latest sample. Its keys must be a subset of metrics()."""
 
     def catalog(self) -> dict:
-        """id -> MetricSpec con la etiqueta que ve el usuario.
+        """id -> MetricSpec carrying the label the user sees.
 
-        Opcional. Sirve para las metricas cuyo nombre lindo no se puede deducir
-        del id porque depende del hardware: `vol.D.free` no sabe que la D se
-        llama "JUEGOS", ni `fan.1.rpm` a que conector corresponde. El editor
-        prefiere esta etiqueta sobre la generica de metrics.spec_for().
+        Optional. It exists for metrics whose friendly name cannot be derived from
+        the id because it depends on the hardware: `vol.D.free` does not know that
+        D is called "GAMES", nor `fan.1.rpm` which header it belongs to. The editor
+        prefers this label over the generic one from metrics.spec_for().
         """
         return {}
 
     def groups(self) -> dict:
-        """id -> nombre del dispositivo al que pertenece.
+        """id -> the name of the device it belongs to.
 
-        Opcional, para que el editor agrupe la lista de metricas por
+        Optional, so the editor can group the metric list by
         dispositivo en vez de mostrar cien ids sueltos.
         """
         return {}

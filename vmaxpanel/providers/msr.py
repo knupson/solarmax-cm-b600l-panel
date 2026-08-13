@@ -1,12 +1,16 @@
-"""Package power y fan RPM de CPU: necesitan MSR via driver ring0.
+"""Readings that need MSR access through a ring0 driver.
 
-En esta maquina WinRing0 esta bloqueado: StartService devuelve 0xE1
-(ERROR_VIRUS_INFECTED) porque el driver esta en la blocklist de drivers
-vulnerables de Windows. No se intenta cargarlo.
+WinRing0 is blocked on Windows: StartService returns 0xE1
+(ERROR_VIRUS_INFECTED) because the driver is on the vulnerable-driver
+blocklist. No attempt is made to load it.
 
-El provider existe igual para que el editor pueda explicar POR QUE la metrica
-no esta, en vez de mostrar "--" sin motivo. En una maquina donde el driver
-cargue, aca es donde se implementa la lectura.
+The provider exists anyway so the editor can explain WHY a metric is absent,
+instead of showing "--" for no stated reason. On a machine where such a driver
+did load, this is where the reading would be implemented.
+
+Note that CPU package power and fan RPM, which this module was originally
+written for, are now served without any ring0 driver at all: LibreHardwareMonitor
+reads RAPL directly and the fans come off the board SuperIO.
 """
 from .base import Provider
 

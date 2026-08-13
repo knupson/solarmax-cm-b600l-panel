@@ -1,4 +1,4 @@
-"""Modelo tipado de un layout. Puramente declarativo: nada aca se ejecuta."""
+"""The typed model of a layout. Purely declarative: nothing here executes."""
 from dataclasses import dataclass, field
 
 
@@ -21,11 +21,12 @@ class Font:
     family: str
     size: int
     bold: bool = False
-    # Familias a probar si `family` no esta instalada, en orden. Existe porque un
-    # perfil compartido nombra fuentes que la otra maquina puede no tener: Apex pide
-    # Franklin Gothic Medium Cond, que viene con OFFICE y no con Windows. Sin la
-    # cadena, alla se ve otra tipografia y lo unico que la app podia hacer era
-    # avisar; con la cadena el perfil declara con que reemplazarla.
+    # Families to try when `family` is not installed, in order. It exists because a
+    # shared profile names fonts the other machine may not have: Apex asks for
+    # Franklin Gothic Medium Cond, which ships with OFFICE and not with Windows.
+    # Without the chain, over there a different typeface appears and all the app
+    # could do was warn; with the chain the profile declares what to replace it
+    # with.
     fallbacks: tuple = ()
 
 
@@ -56,13 +57,13 @@ class Background:
     src: str | None = None
     fit: str = "cover"
     # --- animados (fase 2) ---
-    # `name` elige el generador de 'procedural'. Los dos reusan `stops`, asi que
-    # un fondo animado se configura con el mismo vocabulario que el gradiente
-    # que el usuario ya conoce.
+    # `name` picks the 'procedural' generator. Both reuse `stops`, so an animated
+    # background is configured with the same vocabulary as the gradient the user
+    # already knows.
     name: str = "scroll"
-    speed: float = 20.0        # px/s, para scroll
-    period: float = 6.0        # s de un ciclo completo, para pulse
-    fps: float = 10.0          # cuadros por segundo de una 'sequence'
+    speed: float = 20.0        # px/s, for scroll
+    period: float = 6.0        # seconds of a full cycle, for pulse
+    fps: float = 10.0          # frames per second of a 'sequence'
 
 
 @dataclass
@@ -140,13 +141,13 @@ class ImageWidget(Widget):
 class RectWidget(Widget):
     """Rectangulo estatico: divisores, marcos y bloques de color.
 
-    No tiene `metric` ni `rules` a proposito -- es decoracion, no una
-    lectura. `w`/`h` son el tamano real en pixeles (h=1 es una linea de
-    1 px), a diferencia de bar/graph, que usan la caja inclusive de Pillow.
+    It deliberately has no `metric` and no `rules` -- it is decoration, not a
+    reading. `w`/`h` are the real size in pixels (h=1 is a 1 px line), unlike
+    bar/graph, which use Pillow's inclusive box.
 
-    `fill` y `stroke` son opcionales por separado, pero al menos uno tiene
-    que estar: el validador rechaza un rect sin ninguno de los dos porque
-    no dibujaria nada y no habria forma de notarlo mirando el panel.
+    `fill` and `stroke` are independently optional, but at least one has to be
+    present: the validator rejects a rect with neither because it would draw
+    nothing and there would be no way to notice by looking at the panel.
     """
     w: int = 0
     h: int = 0
