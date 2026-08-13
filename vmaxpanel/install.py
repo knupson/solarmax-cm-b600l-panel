@@ -2,23 +2,22 @@
 
 Dos cosas, y ninguna necesita administrador:
 
-1. **Diagnostico.** Dice si estan las dependencias, la DLL de sensores, el
-   perfil y el panel, y separa lo que impide funcionar de lo que solo limita
-   (ffmpeg falta -> no hay fondos de video; el panel desenchufado -> el motor
-   reintenta solo). Es la respuesta a "lo instale y no anda", contestada antes
-   de que la pregunta exista.
-2. **Autostart.** Registra la tarea programada que levanta la bandeja al
+1. **Diagnostics.** It says whether the dependencies, the sensor DLL, the profile
+   and the panel are there, and separates what prevents operation from what merely
+   limits it (no ffmpeg -> no video backgrounds; the panel unplugged -> the engine
+   retries on its own). It is the answer to "I installed it and it does not work",
+   answered before the question exists.
+2. **Autostart.** It registers the scheduled task that starts the tray at
    iniciar sesion.
 
-**Por que una tarea programada y no un servicio.** Un servicio corre en la
-sesion 0: desde ahi no se puede mostrar un icono en la bandeja ni abrir el
-editor. **Por que XML y no `schtasks /Create /SC ONLOGON`.** Los defaults de
-schtasks no arrancan la tarea con la maquina a bateria, la matan si se
-desenchufa, y la cortan a las 72 horas. En una notebook eso es el panel
-apagandose solo; el XML es la unica forma de desactivar esas tres cosas.
+**Why a scheduled task and not a service.** A service runs in session 0: from
+there it cannot show a tray icon or open the editor. **Why XML and not `schtasks
+/Create /SC ONLOGON`.** The schtasks defaults refuse to start the task on battery,
+kill it when the machine is unplugged, and stop it after 72 hours. On a laptop
+that is the panel switching itself off; XML is the only way to disable all three.
 
-Todo lo que toca el sistema pasa por `runner`, que se inyecta: asi el instalador
-entero se prueba sin registrar nada.
+Everything touching the system goes through `runner`, which is injected: that way
+the whole installer is tested without registering anything.
 """
 import os
 import subprocess
@@ -40,12 +39,12 @@ SIN_VENTANA = 0x08000000
 
 @dataclass
 class Chequeo:
-    """Un item del diagnostico.
+    """One diagnostic item.
 
-    `ok` tiene tres estados a proposito: True anda, False impide funcionar y
-    None es opcional -- falta algo que limita pero no rompe. Un booleano
-    obligaria a elegir entre bloquear la instalacion por ffmpeg o no mencionarlo,
-    y las dos opciones son peores.
+    `ok` has three states on purpose: True works, False prevents operation and None
+    is optional -- something is missing that limits but does not break. A boolean
+    would force a choice between blocking the install over ffmpeg and not
+    mentioning it at all, and both options are worse.
     """
     nombre: str
     ok: bool | None
@@ -57,16 +56,17 @@ class Chequeo:
 
 
 def bloquea(checks) -> bool:
-    """Hay algo que impide funcionar. Los opcionales (ok None) no cuentan."""
+    """Something prevents operation. The optional ones (ok None) do not count."""
     return any(c.ok is False for c in checks)
 
 
 def _modulo(paquete, importable, para) -> Chequeo:
-    """El nombre que se muestra es el de pip, no el de import.
+    """The name shown is the pip one, not the import one.
 
-    Son distintos justo en los dos que mas confunden: `pip install Pillow` da
-    `import PIL`, y `pip install pyserial` da `import serial`. Un diagnostico que
-    dijera "falta PIL" manda al usuario a buscar un paquete que no existe.
+    They differ in exactly the two most confusing cases: `pip install Pillow` gives
+    `import PIL`, and `pip install pyserial` gives `import serial`. A diagnostic
+    saying "PIL is missing" sends the user looking for a package that does not
+    exist.
     """
     try:
         mod = __import__(importable)
@@ -76,9 +76,10 @@ def _modulo(paquete, importable, para) -> Chequeo:
     return Chequeo(paquete, True, f"{v} - {para}")
 
 
-# El unico paso de la instalacion que no se puede automatizar: son DLL de terceros
-# (MPL-2.0 y MIT) que este repo no redistribuye. Decir "falta X" sin decir de donde se
-# saca deja al que recibe el repo en el mismo lugar que estaba.
+# The one installation step that cannot be automated: they are third-party DLLs
+# (MPL-2.0 and MIT) that this repo does not redistribute. Saying "X is missing"
+# without saying where to get it leaves whoever received the repo exactly where
+# they were.
 COMO_SENSORES = (
     "optional. Without it the panel still works (clock, CPU load, temperature and "
     "VCORE via GSA1, RAM, disks, processes) but there is NO GPU, no per-core "
@@ -91,18 +92,18 @@ EN_USO = ("the port is in use: another process already has it (the tray running,
           "or LCD Control). Close whichever is spare; only one at a time can "
           "drive the panel.")
 
-# Por texto y no por tipo: pyserial envuelve el error en SerialException -- que es
-# un OSError cualquiera -- y mete el PermissionError original adentro del mensaje.
-# Asi que el errno no llega y el tipo no distingue nada.
+# By text and not by type: pyserial wraps the error in a SerialException -- which
+# is just an OSError -- and puts the original PermissionError inside the message.
+# So the errno never arrives and the type distinguishes nothing.
 _TOMADO = ("permissionerror", "acceso denegado", "access is denied", "errno 13")
 
 
 def _puerto_tomado(e) -> bool:
-    """El puerto existe pero lo tiene otro proceso.
+    """The port exists but another process has it.
 
-    Vale la pena distinguirlo: "Acceso denegado" se lee como un problema de
-    permisos y manda al usuario a pelear con el UAC, cuando el caso real -- todas
-    las veces -- es que la bandeja ya esta corriendo o quedo abierto LCD Control.
+    Worth distinguishing: "Access denied" reads as a permissions problem and sends
+    the user off to fight UAC, when the real case -- every single time -- is that
+    the tray is already running or LCD Control was left open.
     """
     if isinstance(e, PermissionError):
         return True
@@ -111,8 +112,8 @@ def _puerto_tomado(e) -> bool:
 
 
 def _detectar_panel(port=None):
-    """Abre y cierra el panel. Separado para poder sustituirlo en los tests:
-    la maquina que corre la suite no tiene el panel enchufado."""
+    """Opens and closes the panel. Separate so it can be substituted in the tests:
+    the machine running the suite has no panel plugged in."""
     link = PanelLink.autodetect(port)
     try:
         link.open()
@@ -122,7 +123,7 @@ def _detectar_panel(port=None):
 
 
 def diagnosticar(profile_path, port=None) -> list:
-    """Todo lo que hace falta para que el panel funcione, en una lista."""
+    """Everything the panel needs in order to work, as a list."""
     checks = [
         Chequeo("python", sys.version_info >= (3, 11),
                 f"{sys.version.split()[0]} at {sys.executable}"),
@@ -131,11 +132,13 @@ def diagnosticar(profile_path, port=None) -> list:
         _modulo("psutil", "psutil", "CPU, RAM, network and disks"),
     ]
     checks.append(
-        # ok None y no False: verificado en un clon limpio del repo -- los DLL estan
-        # gitignoreados, asi que es lo que recibe otro dueno del panel -- SIN el DLL el
+        # ok None and not False: verified on a clean clone of the repo -- the DLLs are
+        # gitignored, so that is what another owner of the panel receives -- WITHOUT
+        # the DLL the
         # panel dibuja igual: reloj, carga de CPU, temp y VCORE (esos salen de GSA1, no
-        # del DLL), RAM, discos con tamanos reales, procesos. Marcarlo FALTA hacia que
-        # --instalar se negara a instalar, o sea que el que recibia el repo no podia
+        # from the DLL), RAM, disks with real sizes, processes. Marking it MISSING
+        # made --install refuse to install, which meant whoever received the repo
+        # could not
         # arrancar NADA por unos sensores opcionales.
         Chequeo("sensors", True if DLL_SENSORES.exists() else None,
                 f"{DLL_SENSORES}" if DLL_SENSORES.exists() else COMO_SENSORES))
@@ -158,8 +161,9 @@ def diagnosticar(profile_path, port=None) -> list:
     try:
         checks.append(Chequeo("panel", True, _detectar_panel(port)))
     except (PanelNotFound, OSError) as e:
-        # ok None y no False: la tarea corre al logon y el motor reintenta la
-        # conexion solo, asi que instalar con el panel desenchufado es legitimo.
+        # ok None and not False: the task runs at logon and the engine retries the
+        # connection on its own, so installing with the panel unplugged is
+        # legitimate.
         detalle = (EN_USO if _puerto_tomado(e) else
                    f"{e}. The tray keeps retrying until it shows up.")
         checks.append(Chequeo("panel", None, detalle))
@@ -170,8 +174,9 @@ def diagnosticar(profile_path, port=None) -> list:
 
 
 def _pythonw() -> Path:
-    """El interprete sin consola. Con python.exe la tarea abriria una ventana
-    negra en cada logon; si no esta, se usa el actual y se ve la ventana."""
+    """The console-less interpreter. With python.exe the task would open a black
+    window at every logon; if it is absent, the current one is used and the window
+    shows."""
     candidato = Path(sys.executable).with_name("pythonw.exe")
     return candidato if candidato.exists() else Path(sys.executable)
 
@@ -183,29 +188,29 @@ def _usuario() -> str:
 
 def xml_tarea(profile_path, log=None, python=None, usuario=None,
               working_dir=None) -> str:
-    """El XML de la tarea, listo para `schtasks /Create /XML`.
+    """The task XML, ready for `schtasks /Create /XML`.
 
-    Funcion pura: no lee el entorno si le pasan los valores, asi que el XML se
-    verifica entero sin depender de la maquina donde corran los tests.
+    A pure function: it does not read the environment when given the values, so the
+    XML can be verified in full without depending on the machine the tests run on.
     """
     python = Path(python) if python else _pythonw()
     usuario = usuario if usuario is not None else _usuario()
     cwd = Path(working_dir) if working_dir else HERE.parent
-    # resolve(): la ruta va ABSOLUTA al XML. Guardarla como la escribio el usuario
-    # (`--profile vmaxpanel\profilespex.json`) la deja relativa, y Windows la resuelve
-    # al logon contra el WorkingDirectory de la tarea: funciona de casualidad cuando
-    # coinciden, y apunta a otro lado si se instalo desde otra carpeta o si el repo se
-    # movio. Un recien llegado cae en eso sin hacer nada raro.
+    # resolve(): the path goes into the XML ABSOLUTE. Storing it as the user typed it
+    # (`--profile vmaxpanel\profiles\apex.json`) leaves it relative, and Windows
+    # resolves it at logon against the task's WorkingDirectory: it works by accident
+    # when they coincide, and points somewhere else if it was installed from another
+    # folder or if the repo moved. A newcomer hits that without doing anything odd.
     args = ["-u", "-m", "vmaxpanel.tray", "--profile",
             str(Path(profile_path).resolve())]
     if log:
         args += ["--log", str(Path(log))]
-    # escape() y no format() a mano: una ruta con & o < rompe el XML, y
-    # "C:\Juegos & Cosas" es una ruta perfectamente legal.
+    # escape() and not hand-rolled format(): a path with & or < breaks the XML, and
+    # "C:\Games & Things" is a perfectly legal path.
     return f"""<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="{NS}">
   <RegistrationInfo>
-    <Description>VMax Panel: maneja el panel del gabinete Solarmax CM-B600L.</Description>
+    <Description>VMax Panel: drives the Solarmax CM-B600L case LCD panel.</Description>
     <URI>\\{TAREA}</URI>
   </RegistrationInfo>
   <Triggers>
@@ -218,10 +223,11 @@ def xml_tarea(profile_path, log=None, python=None, usuario=None,
     <Principal id="Author">
       <UserId>{escape(usuario)}</UserId>
       <LogonType>InteractiveToken</LogonType>
-      <!-- Elevada, y no por comodidad: GSA1 (temperaturas, voltajes, RPM) y el
-           SMART de los SSD no se leen sin elevacion. Sin esto el panel arranca
-           igual pero le faltan justo los sensores que no salen de ningun otro
-           lado. Es tambien lo que necesita el registro: una consola elevada. -->
+      <!-- Elevated, and not for convenience: GSA1 (temperatures, voltages, RPM)
+           and the SSDs' SMART data cannot be read without elevation. Without this
+           the panel still starts but is missing exactly the sensors that come from
+           nowhere else. It is also what registering it requires: an elevated
+           console. -->
       <RunLevel>HighestAvailable</RunLevel>
     </Principal>
   </Principals>
@@ -262,8 +268,8 @@ def xml_tarea(profile_path, log=None, python=None, usuario=None,
 def _schtasks() -> str:
     """Ruta absoluta a schtasks.exe.
 
-    Absoluta y no el nombre suelto: el PATH puede tener otro schtasks adelante,
-    y esto registra algo que va a correr en cada logon.
+    Absolute and not the bare name: PATH may have another schtasks ahead of it, and
+    this registers something that will run at every logon.
     """
     raiz = os.environ.get("SystemRoot", r"C:\Windows")
     return str(Path(raiz) / "System32" / "schtasks.exe")
@@ -276,7 +282,7 @@ def _correr(argv):
 
 
 def instalar(profile_path, runner=None, log=None, port=None) -> tuple:
-    """Diagnostica y, si nada bloquea, registra la tarea. -> (codigo, lineas)."""
+    """Diagnoses and, if nothing blocks, registers the task. -> (code, lines)."""
     runner = runner or _correr
     lineas = []
     checks = diagnosticar(profile_path, port)
@@ -289,14 +295,14 @@ def instalar(profile_path, runner=None, log=None, port=None) -> tuple:
         return 2, lineas
 
     xml = xml_tarea(profile_path, log=log)
-    # UTF-16: schtasks /XML rechaza un archivo UTF-8 con "The task XML is
-    # malformed" -- sin decir que el problema es la codificacion.
+    # UTF-16: schtasks /XML rejects a UTF-8 file with "The task XML is malformed"
+    # -- without ever saying that the encoding is the problem.
     fd, tmp = tempfile.mkstemp(suffix=".xml", prefix="vmaxpanel-tarea-")
     os.close(fd)
     try:
         Path(tmp).write_text(xml, encoding="utf-16")
-        # /F: reinstalar reemplaza la tarea en vez de fallar con "already
-        # exists", asi que correr --instalar dos veces deja una sola tarea.
+        # /F: reinstalling replaces the task instead of failing with "already
+        # exists", so running --install twice leaves a single task.
         code, salida = runner([_schtasks(), "/Create", "/TN", TAREA,
                                "/XML", tmp, "/F"])
     finally:
@@ -313,24 +319,24 @@ def instalar(profile_path, runner=None, log=None, port=None) -> tuple:
     else:
         lineas.append(f"schtasks failed (code {code}): {salida.strip()}")
         if "denied" in salida.lower() or "denegado" in salida.lower():
-            # schtasks dice "Access is denied" y nada mas. La causa es siempre la
-            # misma: la tarea corre elevada (ver RunLevel en el XML) y registrar
-            # eso pide una consola elevada.
+            # schtasks says "Access is denied" and nothing else. The cause is always
+            # the same: the task runs elevated (see RunLevel in the XML) and
+            # registering that requires an elevated console.
             lineas.append("The task runs elevated, so registering it needs an "
                           "administrator console: open PowerShell as "
                           "administrator and run the same thing again.")
     return code, lineas
 
 
-# Como se reconoce un proceso del panel por su linea de comandos. Por linea y no por
+# How a panel process is recognised by its command line. By command line and not by
 # nombre de imagen: son todos python.exe/pythonw.exe/powershell.exe, y matar por
-# nombre se lleva puesto cualquier script del usuario. Ya hubo un susto con eso.
+# name would take out any of the user's own scripts. There was already a scare.
 _MIOS = ("vmaxpanel.tray", "-m vmaxpanel", "vmaxpanel\\sensors.ps1",
          "vmaxpanel/sensors.ps1", "sensors.ps1")
 
 
 def _procesos_windows():
-    """[(pid, linea de comandos)] de los candidatos. Solo interpretes y PowerShell."""
+    """[(pid, command line)] of the candidates. Interpreters and PowerShell only."""
     try:
         import psutil
     except ImportError:
@@ -340,8 +346,8 @@ def _procesos_windows():
         nombre = (p.info.get("name") or "").lower()
         if not nombre.startswith(("python", "pythonw", "powershell", "pwsh")):
             continue
-        # None y no "" cuando no se pudo leer: quien llama tiene que poder
-        # distinguir "no es del panel" de "no pude ver que es".
+        # None and not "" when it could not be read: the caller has to be able to
+        # tell "not the panel's" from "I could not see what it is".
         cmd = p.info.get("cmdline")
         fuera.append((p.info["pid"], " ".join(cmd) if cmd else None))
     return fuera
@@ -362,10 +368,10 @@ def _matar(pid) -> bool:
 
 
 def es_mio(linea, yo=None) -> bool:
-    """True si esa linea de comandos es un proceso del panel.
+    """True if that command line is one of the panel's processes.
 
-    Excluye el proceso que hace la pregunta: `python -m vmaxpanel --parar` matchea
-    "-m vmaxpanel" y se suicidaria antes de terminar de bajar el resto.
+    It excludes the process doing the asking: `python -m vmaxpanel --stop` matches
+    "-m vmaxpanel" and would kill itself before finishing off the rest.
     """
     baja = linea.lower()
     if "--parar" in baja:
@@ -374,16 +380,18 @@ def es_mio(linea, yo=None) -> bool:
 
 
 def parar(runner=None, matar=None, listar=None) -> tuple:
-    """Baja el panel de verdad: para la tarea y mata los procesos. -> (codigo, lineas).
+    """Really brings the panel down: stops the task and kills the processes.
+    -> (code, lines).
 
-    Existe porque `daemon/stop.ps1` **no conoce al motor nuevo** -- barre por linea de
-    comandos contra `panel\\.py|sensors\\.ps1` -- y no se puede tocar: `daemon/` es la
-    vuelta atras byte-identica de toda la fase. Ademas la tarea programada vuelve a
-    levantar la bandeja en el siguiente logon, asi que matar el proceso solo no alcanza.
+    It exists because `daemon/stop.ps1` **does not know the new engine** -- it
+    sweeps by command line against `panel\\.py|sensors\\.ps1` -- and cannot be
+    touched: `daemon/` is the byte-identical rollback path. On top of that the
+    scheduled task starts the tray again at the next logon, so killing the process
+    alone is not enough.
 
     El sidecar se mata aparte y a proposito: un `powershell.exe` corriendo sensors.ps1
-    que sobrevive se queda con LibreHardwareMonitorLib.dll tomado y bloquea mover o
-    borrar el directorio. Es la trampa recurrente de este proyecto.
+    that outlives everything keeps LibreHardwareMonitorLib.dll locked and blocks
+    moving or deleting the directory. It is this project's recurring trap.
     """
     runner = runner or _correr
     matar = matar or _matar
@@ -396,16 +404,17 @@ def parar(runner=None, matar=None, listar=None) -> tuple:
     elif "cannot find" in salida.lower() or "no existe" in salida.lower():
         lineas.append(f"task {TAREA} was not registered")
     else:
-        # /End con la tarea registrada pero no corriendo tambien devuelve != 0. No es
-        # una falla: el estado final es el que se pidio.
+        # /End on a task that is registered but not running also returns != 0. That
+        # is not a failure: the final state is the one that was asked for.
         lineas.append(f"task {TAREA} was not running")
 
     muertos, opacos, tercos = [], [], []
     for pid, linea in listar():
         if linea is None:
-            # Sin linea de comandos: psutil no la pudo leer. Pasa con un proceso de
-            # mayor integridad -- la bandeja corre elevada -- y saltearlo en silencio
-            # es lo que hacia decir "no habia procesos" con el panel andando.
+            # No command line: psutil could not read it. That happens with a
+            # higher-integrity process -- the tray runs elevated -- and skipping it
+            # silently is what made it say "there were no processes" with the panel
+            # running.
             opacos.append(pid)
             continue
         if not es_mio(linea):
@@ -418,9 +427,9 @@ def parar(runner=None, matar=None, listar=None) -> tuple:
     if muertos:
         lineas.append(f"{len(muertos)} panel process(es) brought down")
     else:
-        # "no quedaron" y no "no habia": /End ya se lleva el arbol de la tarea, asi
-        # que para cuando se enumera puede no quedar nada. Decir "no habia" suena a
-        # que nunca estuvo.
+        # "none were left" and not "there were none": /End already takes the task's
+        # process tree, so by the time we enumerate there may be nothing left.
+        # Saying "there were none" sounds like it was never there.
         lineas.append("no panel processes were left running "
                       "(stopping the task takes its own with it)")
     if tercos:
@@ -435,13 +444,13 @@ def parar(runner=None, matar=None, listar=None) -> tuple:
 
 
 def desinstalar(runner=None) -> tuple:
-    """Borra la tarea. Idempotente: que no exista no es una falla."""
+    """Deletes the task. Idempotent: its not existing is not a failure."""
     runner = runner or _correr
     code, salida = runner([_schtasks(), "/Delete", "/TN", TAREA, "/F"])
     if code == 0:
         return 0, [f"Task {TAREA} deleted. The panel no longer starts on its own."]
     if "cannot find" in salida.lower() or "no existe" in salida.lower():
-        # El estado final es el que el usuario pidio, asi que no es un error:
-        # desinstalar dos veces tiene que salir 0 las dos.
+        # The final state is the one the user asked for, so it is not an error:
+        # uninstalling twice has to exit 0 both times.
         return 0, [f"Task {TAREA} was not registered; there was nothing to delete."]
     return code, [f"schtasks failed (code {code}): {salida.strip()}"]
