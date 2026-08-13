@@ -75,6 +75,15 @@ class PanelNotFound(Exception):
     pass
 
 
+def _sn_plausible(sn) -> bool:
+    """El SN tiene que ser texto imprimible. No se exige el prefijo "VMAX" ni el
+    formato de la geometria: de eso se ocupa parse_geometry(), que ya avisa y cae al
+    default. Aca solo se descarta lo que no puede ser un numero de serie de ninguna
+    marca -- bytes de control, basura binaria -- que es la forma que tiene una lectura
+    sucia del puerto."""
+    return bool(sn) and all(32 <= ord(c) < 127 for c in sn)
+
+
 def find_panel_ports() -> list[str]:
     from serial.tools import list_ports
     return [p.device for p in list_ports.comports()
@@ -106,11 +115,24 @@ def brightness_cmd(v: int) -> bytes:
 class SerialTransport:
     """pyserial detras de la interfaz minima que PanelLink necesita."""
 
-    def __init__(self, port, timeout=1.5, write_timeout=8):
-        import serial
-        self._ser = serial.Serial(port, 9600, timeout=timeout,
-                                  write_timeout=write_timeout)
+    def __init__(self, port, timeout=1.5, write_timeout=8, abrir=None):
+        if abrir is None:
+            import serial
+            abrir = serial.Serial
+        self._ser = abrir(port, 9600, timeout=timeout,
+                          write_timeout=write_timeout)
         self.port = port
+        # Se descarta lo que haya quedado en los buffers del puerto. Abrir un COM NO
+        # los limpia: si el proceso anterior murio con un handshake a medias -- un
+        # cuelgue, un --parar en el momento justo -- la cola de esa sesion sigue ahi, y
+        # el read(26) de open() la devuelve con el largo justo, asi que pasa como
+        # numero de serie. Silencioso: SN basura en el estado y la geometria cayendo al
+        # default por casualidad.
+        for limpiar in ("reset_input_buffer", "reset_output_buffer"):
+            try:
+                getattr(self._ser, limpiar)()
+            except Exception:
+                pass                # un transporte que no los tenga no es un problema
 
     def write(self, data):
         self._ser.write(data)
@@ -142,7 +164,9 @@ class FakeTransport:
     def __init__(self, sn="VMAXA170320*1480S261001155", fail_on_write=None):
         self.writes = []
         self.closed = False
-        self._sn = sn.encode("ascii", "replace")
+        # bytes o str: los tests necesitan poder inyectar una respuesta que NO sea
+        # texto valido, que es justo la forma de una lectura sucia del puerto.
+        self._sn = sn if isinstance(sn, (bytes, bytearray)) else sn.encode("ascii", "replace")
         self._fail = fail_on_write
 
     def write(self, data):
@@ -189,7 +213,17 @@ class PanelLink:
             raise OSError(f"el panel devolvio un SN de tamano inesperado "
                           f"({len(raw)} de {SN_LEN} bytes); puede estar "
                           f"tomado por otro proceso")
-        self.serial_number = raw.decode("ascii", "replace")
+        sn = raw.decode("ascii", "replace")
+        if not _sn_plausible(sn):
+            # Lectura sucia (ver el reset de buffers en SerialTransport) o un
+            # dispositivo que no es el panel. Levantar es lo correcto: el engine
+            # reconecta, y con los buffers limpios la proxima lectura es la buena.
+            # Aceptarlo dejaria un SN basura en el estado y una geometria elegida al
+            # azar, que es peor que un reintento.
+            raise OSError(f"el panel devolvio un SN que no parece un numero de serie "
+                          f"({sn!r}): puede ser una lectura sucia del puerto o otro "
+                          f"dispositivo")
+        self.serial_number = sn
         self.geometry = parse_geometry(self.serial_number)
         return self.serial_number
 

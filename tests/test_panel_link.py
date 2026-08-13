@@ -1,8 +1,10 @@
 import pytest
 
+from vmaxpanel.layout import model
 from vmaxpanel.layout.model import Size
 from vmaxpanel.transport.panel_link import (HANDSHAKE, FakeTransport, PanelLink,
-                                            brightness_cmd, parse_geometry)
+                                            SerialTransport, brightness_cmd,
+                                            parse_geometry)
 
 
 def test_parse_geometry_from_the_real_serial_number():
@@ -107,3 +109,59 @@ def test_write_failure_propagates_as_oserror():
     t = FakeTransport(fail_on_write=OSError("puerto tomado"))
     with pytest.raises(OSError):
         PanelLink(t).open()
+
+
+# --- lecturas sucias al reconectar ---
+
+
+def test_a_serial_number_that_is_not_printable_is_rejected():
+    """Si el proceso murio con un handshake a medias, en el buffer del puerto quedan
+    bytes viejos: al reconectar, read(26) los devuelve y tenian el largo justo, asi que
+    pasaban como SN. Resultado: numero de serie basura en el estado y la geometria
+    cayendo al default por casualidad. Un SN que no es ASCII imprimible es una lectura
+    sucia, y levantar es lo correcto: el engine reconecta y la proxima vez el buffer ya
+    esta limpio."""
+    basura = PanelLink(FakeTransport(sn=bytes(range(1, 27))))
+    with pytest.raises(OSError) as e:
+        basura.open()
+    assert "sn" in str(e.value).lower() or "serie" in str(e.value).lower()
+
+
+def test_a_real_serial_number_still_opens():
+    link = PanelLink(FakeTransport())
+    sn = link.open()
+    assert sn.startswith("VMAX")
+    assert link.geometry == Size(320, 1480)
+
+
+def test_the_port_buffers_are_cleared_before_the_handshake():
+    """El arreglo de fondo: al abrir el puerto se descarta lo que haya quedado. Sin
+    esto la primera lectura despues de un reinicio sucio puede traer la cola de la
+    sesion anterior."""
+    hechos = []
+
+    class SerialFalso:
+        def __init__(self, *a, **kw):
+            self.is_open = True
+
+        def reset_input_buffer(self):
+            hechos.append("in")
+
+        def reset_output_buffer(self):
+            hechos.append("out")
+
+        def write(self, d):
+            pass
+
+        def flush(self):
+            pass
+
+        def read(self, n):
+            return b""
+
+        def close(self):
+            pass
+
+    t = SerialTransport("COM9", abrir=lambda *a, **kw: SerialFalso())
+    assert hechos == ["in", "out"], hechos
+    t.close()
