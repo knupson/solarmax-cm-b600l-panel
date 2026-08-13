@@ -1,4 +1,4 @@
-"""Providers que leen del mismo SidecarClient, cada uno su namespace."""
+"""Providers reading from the same SidecarClient, each its own namespace."""
 from ..metrics import MetricSpec, group_for, short_cpu_name, spec_for
 from .base import Provider
 from .sidecar import STALE_AFTER
@@ -25,18 +25,17 @@ class _SidecarProvider(Provider):
     def read(self):
         """Levanta en vez de devolver datos viejos.
 
-        Registry.read() convierte la excepcion en metrica degradada, con el
-        motivo visible en state()["unavailable"], y la vuelve a servir sola
-        cuando el read siguiente funciona. Devolver el ultimo namespace
-        recibido seria peor que no mostrar nada: un sensors.ps1 colgado --
-        bloqueado en un Get-Counter o en una llamada CIM -- deja el panel
-        pintando un cpu.temp de hace horas como si fuera de ahora, y nada en
-        el estado avisa que esta pasando.
+        Registry.read() turns the exception into a degraded metric, with the reason
+        visible in state()["unavailable"], and serves it again on its own when the
+        next read works. Returning the last namespace received would be worse than
+        showing nothing: a wedged sensors.ps1 -- blocked in a Get-Counter or a CIM
+        call -- leaves the panel painting a cpu.temp from hours ago as if it were
+        current, with nothing in the status saying so.
 
-        Las dos condiciones se chequean en cada vuelta a proposito. probe()
-        corre una sola vez, en Registry.__init__, asi que era el unico lugar
-        que miraba caps: una fuente que se caia en la mitad de la corrida
-        seguia contando como disponible, en contra de lo que documenta
+        Both conditions are checked on every pass on purpose. probe() runs once, in
+        Registry.__init__, so it used to be the only place that looked at caps: a
+        source failing halfway through a run still counted as available, contrary to
+        what is documented in
         sensors.ps1.
         """
         if not self._c.fresh:
@@ -56,12 +55,12 @@ class Gsa1Provider(_SidecarProvider):
 
 
 class PdhProvider(_SidecarProvider):
-    """Clock real de CPU y modelo, con el nombre corto derivado aca.
+    """The real CPU clock and model, with the short name derived here.
 
-    `cpu.name_short` se calcula en Python y no en sensors.ps1 a proposito: la
-    regla de que sacar de "12th Gen Intel(R) Core(TM) i5-12400F" tiene tests
-    (ver metrics.short_cpu_name) y no hay por que duplicarla en PowerShell,
-    donde ademas quedaria sin cobertura.
+    `cpu.name_short` is computed in Python and not in sensors.ps1 on purpose: the
+    rule for what to strip out of "12th Gen Intel(R) Core(TM) i5-12400F" has tests
+    (see metrics.short_cpu_name) and there is no reason to duplicate it in
+    PowerShell, where it would also go uncovered.
     """
 
     id = "pdh"
@@ -78,17 +77,17 @@ class PdhProvider(_SidecarProvider):
 
 
 class SmbiosProvider(_SidecarProvider):
-    """Velocidad real de la RAM, de Win32_PhysicalMemory.
+    """The real RAM speed, from Win32_PhysicalMemory.
 
-    Estaba horneada en el perfil como un label con el texto "6000" hasta que
-    una actualizacion de BIOS reseteo el XMP y la maquina paso a 5600: el
-    panel siguio mostrando 6000. Un dato de configuracion tambien puede
-    cambiar abajo tuyo, asi que se lee en vez de escribirse a mano.
+    It used to be baked into the profile as a label reading "6000" until a BIOS
+    update reset the XMP profile and the machine dropped to 5600: the panel went on
+    showing 6000. A configuration value can change underneath you too, so it is
+    read rather than written by hand.
 
-    El sidecar lo consulta una sola vez al arrancar -- SMBIOS no cambia
-    mientras Windows corre -- pero igual pasa por el mismo gate de frescura
-    que el resto: si el sidecar se muere, este valor deja de servirse como
-    cualquier otro, en vez de quedar congelado en pantalla.
+    The sidecar queries it once at start-up -- SMBIOS does not change while Windows
+    runs -- but it still goes through the same freshness gate as everything else:
+    if the sidecar dies, this value stops being served like any other, instead of
+    staying frozen on screen.
     """
 
     id = "smbios"
@@ -98,14 +97,13 @@ class SmbiosProvider(_SidecarProvider):
 
 
 class _DinamicoPorInstancia(_SidecarProvider):
-    """Base de los providers cuyo conjunto de metricas se descubre solo.
+    """Base for providers whose metric set discovers itself.
 
-    Cuantos nucleos, cuantos fans y cuantas temperaturas de placa hay no se
-    sabe hasta ver la primera muestra, asi que `served` se lee del namespace en
-    vez de estar escrito a mano. Mismo patron que LhmProvider con los discos, y
-    con la misma trampa: `Registry` llama a `metrics()` una sola vez, en su
-    constructor, asi que lo que no este en esa primera muestra no aparece en
-    toda la corrida.
+    How many cores, how many fans and how many board temperatures there are is not
+    known until the first sample arrives, so `served` is read from the namespace
+    rather than written by hand. Same pattern as LhmProvider with the disks, and
+    with the same trap: `Registry` calls `metrics()` once, in its constructor, so
+    anything absent from that first sample does not appear for the whole run.
     """
 
     @property
@@ -116,7 +114,7 @@ class _DinamicoPorInstancia(_SidecarProvider):
         return set(self.served)
 
     def catalog(self) -> dict:
-        """Etiqueta amigable por metrica, tomada de la familia de metrics.py."""
+        """A friendly label per metric, taken from the family in metrics.py."""
         cat = {}
         for mid in self.served:
             base = spec_for(mid)
@@ -131,11 +129,11 @@ class _DinamicoPorInstancia(_SidecarProvider):
 class CpuLhmProvider(_DinamicoPorInstancia):
     """CPU por LibreHardwareMonitor: package power y por nucleo.
 
-    `cpu.power` estaba documentado en este proyecto como imposible de leer,
-    porque WinRing0 esta en la blocklist de drivers de Windows y sin MSR no hay
-    RAPL. La conclusion era erronea para el DLL que traemos: LHM 0.9.3.0 lo lee
-    sin cargar ningun driver -- verificado listando los servicios con el objeto
-    abierto -- y el sidecar simplemente nunca habia prendido `IsCpuEnabled`.
+    `cpu.power` was documented in this project as impossible to read, because
+    WinRing0 is on the Windows driver blocklist and without MSR there is no RAPL.
+    That conclusion was wrong for this DLL: LHM 0.9.3.0 reads it without loading
+    any driver -- verified by listing the services with the object open -- and the
+    sidecar had simply never turned `IsCpuEnabled` on.
     Comprobado ademas contra carga real: 11 W en reposo, 46 W al 43%.
     """
 
@@ -145,11 +143,12 @@ class CpuLhmProvider(_DinamicoPorInstancia):
 
 
 class MoboProvider(_DinamicoPorInstancia):
-    """Placa: fans y temperaturas del SuperIO (aca, un ITE IT8689E).
+    """The board: fans and temperatures from the SuperIO (an ITE IT8689E here).
 
-    Los `fan.N.rpm` se exponen todos porque el mapeo conector -> ventilador
-    depende de la placa. `cpu.fan` lo agrega el sidecar desde el fan 1, que es
-    CPU_FAN en las placas Gigabyte y en esta maquina el unico que gira con el
+    Every `fan.N.rpm` is exposed because the header -> fan mapping depends on the
+    board. `cpu.fan` is added by the sidecar from fan 1, which is CPU_FAN on
+    Gigabyte boards and, on the machine this was written against, the only one that
+    spins with the
     equipo encendido.
     """
 
@@ -159,8 +158,8 @@ class MoboProvider(_DinamicoPorInstancia):
 
     def catalog(self) -> dict:
         cat = super().catalog()
-        # cpu.fan no es de una familia por instancia: su etiqueta sale de
-        # METRICS, pero conviene que diga de donde viene.
+        # cpu.fan does not belong to a per-instance family: its label comes from
+        # METRICS, but it is worth saying where it comes from.
         if "cpu.fan" in cat:
             base = cat["cpu.fan"]
             cat["cpu.fan"] = MetricSpec(base.id, "CPU fan (header 1)",
@@ -169,13 +168,13 @@ class MoboProvider(_DinamicoPorInstancia):
 
 
 class LhmProvider(_SidecarProvider):
-    """GPU y temps de SSD. Los ids de disco se descubren de la muestra.
+    """GPU and SSD temperatures. The disk ids are discovered from the sample.
 
-    Peligro de orden: `served` lee la primera muestra que haya llegado del
-    sidecar. `Registry` llama `metrics()` una sola vez, en su constructor. Si
-    el `Registry` se arma antes de que el sidecar entregue esa primera
-    muestra (`client.wait_ready()` sin esperar), los `disk.temp.N` quedan
-    afuera para siempre en esa corrida: no hay revalidacion posterior.
+    Ordering hazard: `served` reads the first sample that arrived from the sidecar.
+    `Registry` calls `metrics()` once, in its constructor. If the `Registry` is
+    built before the sidecar delivers that first sample (`client.wait_ready()`
+    without waiting), the `disk.temp.N` ids are left out for that entire run: there
+    is no later revalidation.
     """
 
     id = "lhm"
