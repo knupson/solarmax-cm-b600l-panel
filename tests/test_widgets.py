@@ -108,7 +108,7 @@ def test_bar_with_unavailable_draws_only_the_track():
     widgets.draw(im, w, UNAVAILABLE, ctx())
     px = im.load()
     assert (57, 135, 229) not in [px[x, 18] for x in range(320)]
-    assert im.getbbox() is not None          # el track si se dibuja
+    assert im.getbbox() is not None          # the track is drawn
 
 
 def test_bar_clamps_out_of_range_values():
@@ -118,14 +118,14 @@ def test_bar_clamps_out_of_range_values():
     widgets.draw(im, w, 500.0, ctx())
     px = im.load()
     assert px[109, 18] == (57, 135, 229)
-    assert px[200, 18] == (0, 0, 0)          # no se pasa del ancho
+    assert px[200, 18] == (0, 0, 0)          # it does not overrun the width
 
 
 def test_bar_uses_metric_range_when_min_max_absent():
     im = canvas()
     w = model.BarWidget(id="b", type="bar", x=0, y=10, metric="cpu.vcore",
                         w=100, h=16, fill="#3987E5", track="#242834")
-    widgets.draw(im, w, 1.0, ctx())          # cpu.vcore va 0..2 -> mitad
+    widgets.draw(im, w, 1.0, ctx())          # cpu.vcore runs 0..2 -> half
     px = im.load()
     assert px[40, 18] == (57, 135, 229)
     assert px[80, 18] != (57, 135, 229)
@@ -148,34 +148,34 @@ def test_graph_uses_history():
 
 
 def test_graph_without_history_falls_back_to_the_current_value():
-    # El caso de --save y del PRIMER cuadro de cualquier corrida: todavia no se
-    # acumulo ninguna muestra, pero el valor de ahora ya esta y llega como
-    # argumento. Sin esto la caja sale vacia, que es lo que se veia en las
-    # capturas del README.
+    # The --save case, and the FIRST frame of any run: no sample has accumulated
+    # yet, but the current value is already there and arrives as an argument.
+    # Without this the box comes out empty, which is what the README's screenshots
+    # showed.
     im = canvas()
     w = model.GraphWidget(id="g", type="graph", x=10, y=10, metric="cpu.load",
                           w=200, h=60, color="#3987E5", samples=10)
     widgets.draw(im, w, 50.0, ctx(history={}))
     px = im.load()
     fila = [y for y in range(10, 71) if px[110, y] == (57, 135, 229)]
-    assert fila, "sin historial no dibujo la linea del valor actual"
+    assert fila, "with no history it did not draw the current value's line"
     assert 38 <= sum(fila) / len(fila) <= 42
 
 
 def test_graph_with_a_single_sample_draws_a_flat_line():
-    # El primer cuadro de una corrida tiene UNA muestra. Antes eso caia en el
-    # mismo caso que "no hay historial" y el widget quedaba en una caja vacia,
-    # que es lo que se ve en --save y en los primeros segundos del panel.
+    # The first frame of a run has ONE sample. That used to fall into the same case
+    # as "no history" and the widget was left an empty box, which is what shows in
+    # --save and in the panel's first few seconds.
     im = canvas()
     w = model.GraphWidget(id="g", type="graph", x=10, y=10, metric="cpu.load",
                           w=200, h=60, color="#3987E5", samples=10)
     widgets.draw(im, w, 50.0, ctx(history={"cpu.load": [50]}))
-    assert im.getbbox() is not None, "con una muestra no dibujo nada"
-    # 50% de un rango 0..100 en una caja de 60 de alto que arranca en y=10:
-    # la linea va por el medio, no arriba ni abajo.
+    assert im.getbbox() is not None, "with one sample it drew nothing"
+    # 50% of a 0..100 range in a 60-tall box starting at y=10: the line runs down
+    # the middle, neither at the top nor at the bottom.
     px = im.load()
     fila = [y for y in range(10, 71) if px[110, y] == (57, 135, 229)]
-    assert fila, "la linea no aparece en el medio de la caja"
+    assert fila, "the line does not appear in the middle of the box"
     assert 38 <= sum(fila) / len(fila) <= 42
 
 
@@ -191,7 +191,7 @@ def test_image_widget_is_skipped_when_the_asset_is_missing(tmp_path):
     w = model.ImageWidget(id="i", type="image", x=0, y=0, src="no-existe.png",
                           w=32, h=32)
     widgets.draw(im, w, None, ctx(assets_dir=tmp_path))
-    assert im.getbbox() is None              # no dibujo nada, y no exploto
+    assert im.getbbox() is None              # it drew nothing, and did not blow up
 
 
 def test_image_widget_draws_an_existing_asset(tmp_path):
@@ -211,13 +211,12 @@ def test_scale_moves_and_grows_a_bar():
     assert px[150, 36] == (57, 135, 229)     # x*2=20, w*2=200 -> 20..220
 
 
-# --- Casos agregados sobre el brief: bugs reales que su propio codigo tenia ---
+# --- Real bugs the earlier code had ---
 
 def test_format_value_dashes_survive_a_repr_conversion():
-    """"{!r}" hace repr(valor) ANTES de llamar a __format__, asi que un
-    _Dash sin __repr__ propio se filtraria como
-    "<...widgets._Dash object at 0x...>" en el panel en vez de "--". Con la
-    version del brief (sin __repr__) esto falla."""
+    """"{!r}" calls repr(value) BEFORE __format__, so a _Dash without its own
+    __repr__ would leak as "<...widgets._Dash object at 0x...>" onto the panel
+    instead of "--"."""
     w = text_widget(format="{!r} MHz")
     assert widgets.format_value(w, None) == "-- MHz"
     assert widgets.format_value(w, UNAVAILABLE) == "-- MHz"
@@ -230,10 +229,9 @@ def test_format_value_dashes_survive_a_str_conversion():
 
 def test_bar_never_fills_for_a_non_finite_value():
     """nan/inf no son "un numero fuera de rango", son basura de sensor. La
-    version del brief calcula max(0.0, min(1.0, nan_o_inf)) == 1.0 por como
-    Python compara con NaN, y termina dibujando la barra a full como si
-    fuera una lectura real al 100%. Debe comportarse como UNAVAILABLE: solo
-    el track."""
+    earlier version computed max(0.0, min(1.0, nan_or_inf)) == 1.0 given how Python
+    compares with NaN, and ended up drawing the bar full as if it were a real 100%
+    reading. It has to behave like UNAVAILABLE: the track only."""
     im = canvas()
     w = model.BarWidget(id="b", type="bar", x=10, y=10, metric="cpu.load",
                         w=100, h=16, fill="#3987E5", track="#242834")
@@ -244,20 +242,19 @@ def test_bar_never_fills_for_a_non_finite_value():
 
 
 def test_bar_on_an_unbounded_metric_stays_empty_without_an_explicit_max():
-    """net.down declara max=None en el spec (no tiene techo natural). La
-    version del brief, al resolver el rango, termina poniendole un 100.0 de
-    ultimo recurso a ESE hi, asi que cualquier bajada real (miles de B/s)
-    clampea a 1.0 y la barra se ve siempre llena, mintiendo igual que el
-    CpuUsage de LCD Control que este proyecto ya dejo documentado como
-    saturado. Sin un max explicito en el widget, la barra no puede calcular
-    una fraccion util y no debe dibujar relleno."""
+    """net.down declares max=None in its spec (it has no natural ceiling). An
+    earlier version, resolving the range, ended up giving THAT hi a last-resort
+    100.0, so any real download (thousands of B/s) clamped to 1.0 and the bar looked
+    permanently full, lying exactly the way LCD Control's CpuUsage did. Without an
+    explicit max on the widget, the bar cannot compute a useful fraction and must
+    not draw any fill."""
     im = canvas()
     w = model.BarWidget(id="b", type="bar", x=10, y=10, metric="net.down",
                         w=100, h=16, fill="#3987E5", track="#242834")
     widgets.draw(im, w, 5_000_000.0, ctx())
     px = im.load()
     assert (57, 135, 229) not in [px[x, 18] for x in range(320)]
-    assert im.getbbox() is not None          # el track si se dibuja
+    assert im.getbbox() is not None          # the track is drawn
 
 
 def test_bar_on_an_unbounded_metric_fills_once_the_widget_sets_a_max():
@@ -271,8 +268,8 @@ def test_bar_on_an_unbounded_metric_fills_once_the_widget_sets_a_max():
 
 
 def test_graph_on_an_unbounded_metric_without_a_max_does_not_crash():
-    """Mismo problema que la barra, pero en el grafico: _range() devolviendo
-    hi=None (rango sin resolver) no puede restarse de lo (None - float
+    """The same problem as the bar, but in the graph: _range() returning hi=None (an
+    unresolved range) cannot be subtracted from lo (None - float
     revienta) si no se lo cubre explicitamente."""
     im = canvas()
     w = model.GraphWidget(id="g", type="graph", x=10, y=10, metric="net.down",
@@ -281,10 +278,10 @@ def test_graph_on_an_unbounded_metric_without_a_max_does_not_crash():
 
 
 def test_bar_with_negative_dimensions_does_not_crash():
-    """El validador de layouts solo exige que w/h/radius sean enteros, no
-    que sean positivos. Con la version del brief, un ancho o alto negativo
-    produce una caja con la esquina invertida y Pillow tira ValueError en
-    vez de simplemente no dibujar nada."""
+    """The layout validator only requires that w/h/radius be integers, not that they
+    be positive. In an earlier version, a negative width or height produced a box
+    with an inverted corner and Pillow raised ValueError instead of simply drawing
+    nothing."""
     im = canvas()
     w = model.BarWidget(id="b", type="bar", x=10, y=10, metric="cpu.load",
                         w=-50, h=-10, radius=-5, fill="#3987E5", track="#242834")
@@ -305,7 +302,7 @@ def test_graph_with_negative_dimensions_does_not_crash():
     widgets.draw(im, w, 50.0, ctx(history={"cpu.load": [10, 30, 90]}))
 
 
-# --- humanize: rate/bytes, paridad con human_rate() del daemon viejo ---
+# --- humanize: rate/bytes ---
 
 def test_human_rate_scales_the_unit():
     assert widgets.human_rate(500) == "500 B/s"
@@ -346,9 +343,9 @@ BLUE = (57, 135, 229)
 
 
 def test_rect_fill_paints_exactly_w_by_h_pixels():
-    """En rect, w/h son el tamano real en px: un separador de h=1 mide una
-    fila, no dos. bar/graph heredan la caja inclusive de Pillow (h=16 -> 17
-    px) y quedan como estan; rect no puede, porque una hairline de 2px se
+    """On a rect, w/h are the real size in px: a separator of h=1 measures one row,
+    not two. bar/graph inherit Pillow's inclusive box (h=16 -> 17 px) and are left as
+    they are; a rect cannot be, because a 2 px hairline
     ve al doble de gruesa de lo pedido."""
     im = canvas()
     widgets.draw(im, rect_widget(), None, ctx())
@@ -356,7 +353,7 @@ def test_rect_fill_paints_exactly_w_by_h_pixels():
     assert px[10, 20] == WHITE
     assert px[109, 20] == WHITE
     assert px[110, 20] == (0, 0, 0)          # ni un pixel de mas a lo ancho
-    assert px[10, 21] == (0, 0, 0)           # ni una fila de mas de alto
+    assert px[10, 21] == (0, 0, 0)           # not one row taller
 
 
 def test_rect_stroke_only_leaves_the_interior_untouched():
@@ -366,7 +363,7 @@ def test_rect_stroke_only_leaves_the_interior_untouched():
     px = im.load()
     assert px[10, 20] == WHITE               # borde superior izquierdo
     assert px[59, 59] == WHITE               # borde inferior derecho
-    assert px[35, 40] == (0, 0, 0)           # el relleno no se dibuja
+    assert px[35, 40] == (0, 0, 0)           # the fill is not drawn
 
 
 def test_rect_draws_fill_and_stroke_together():
@@ -383,7 +380,7 @@ def test_rect_stroke_width_thickens_the_border_inward():
     widgets.draw(im, rect_widget(w=50, h=40, fill="#3987E5", stroke="#FFFFFF",
                                  stroke_width=3), None, ctx())
     px = im.load()
-    assert px[12, 22] == WHITE               # tercera fila del borde
+    assert px[12, 22] == WHITE               # the third row of the stroke
     assert px[13, 23] == BLUE                # ya es relleno
 
 
@@ -397,9 +394,9 @@ def test_rect_scales_with_the_context():
 
 
 def test_rect_hairline_survives_a_downscale():
-    """A escala < 1 un h=1 redondea a 0 px. Un separador que desaparece en
-    un panel mas chico que designed_for es una regresion silenciosa: el
-    layout se ve distinto sin que nada avise."""
+    """At a scale < 1 an h=1 rounds to 0 px. A separator that vanishes on a panel
+    smaller than designed_for is a silent regression: the layout looks different
+    with nothing warning about it."""
     im = canvas()
     widgets.draw(im, rect_widget(w=100, h=1), None, ctx(scale=0.5))
     assert im.getbbox() is not None
@@ -408,19 +405,19 @@ def test_rect_hairline_survives_a_downscale():
 def test_rect_with_negative_dimensions_does_not_crash():
     im = canvas()
     widgets.draw(im, rect_widget(w=-50, h=-10), None, ctx())
-    assert im.getbbox() is None              # no dibuja nada, tampoco revienta
+    assert im.getbbox() is None              # it draws nothing, and does not blow up
 
 
 def test_rect_radius_larger_than_the_box_does_not_crash():
-    """Pillow rechaza un radio mayor que la mitad del lado menor. El
-    validador solo exige que radius sea entero, asi que el render clampea."""
+    """Pillow rejects a radius larger than half the shorter side. The validator only
+    requires that radius be an integer, so the render clamps it."""
     im = canvas()
     widgets.draw(im, rect_widget(w=20, h=4, radius=50), None, ctx())
     assert im.getbbox() is not None
 
 
 def test_rect_without_fill_or_stroke_draws_nothing():
-    """schema.validate() lo rechaza, pero el render no vuelve a validar."""
+    """schema.validate() rejects it, but the render does not revalidate."""
     im = canvas()
     widgets.draw(im, rect_widget(fill=None), None, ctx())
     assert im.getbbox() is None
@@ -429,7 +426,7 @@ def test_rect_without_fill_or_stroke_draws_nothing():
 # --- humanize: duration ---
 
 def test_human_duration_reads_like_a_person_says_it():
-    """sys.uptime son segundos. "33098" no le dice nada a nadie; "9h 11m" si."""
+    """sys.uptime is in seconds. "33098" tells nobody anything; "9h 11m" does."""
     assert widgets.human_duration(45) == "45s"
     assert widgets.human_duration(90) == "1m 30s"
     assert widgets.human_duration(3600) == "1h 0m"

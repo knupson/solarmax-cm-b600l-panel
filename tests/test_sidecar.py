@@ -39,11 +39,11 @@ class FakeProc:
         return None
 
 
-# Los clientes creados por client_for() se cierran al terminar cada test.
-# Antes 8 de 9 tests no llamaban a close(), asi que cada uno dejaba su hilo
-# lector girando en el backoff durante el resto de la corrida de pytest: hilos
+# The clients created by client_for() are closed at the end of each test. Before,
+# 8 of 9 tests never called close(), so each one left its reader thread spinning in
+# the backoff for the rest of the pytest run: threads
 # acumulados, procesos falsos respawneados y ruido en cualquier medicion de
-# concurrencia. Ahora que close() hace join, cerrarlos es barato y deterministico.
+# concurrency. Now that close() joins, closing them is cheap and deterministic.
 _ABIERTOS = []
 
 
@@ -61,7 +61,7 @@ def client_for(sample, caps_override=None):
     payload = dict(sample)
     if caps_override is not None:
         payload["caps"] = caps_override
-    proc = FakeProc(["arrancando el sidecar", json.dumps(payload)])
+    proc = FakeProc(["starting the sidecar", json.dumps(payload)])
     c = SidecarClient(script="ignored.ps1", spawn=lambda: proc)
     c.start()
     assert c.wait_ready(timeout=2.0)
@@ -135,11 +135,11 @@ def test_stale_client_reports_not_fresh(monkeypatch):
 
 
 def test_a_stale_sidecar_stops_serving_instead_of_freezing_values(monkeypatch):
-    """SidecarClient.fresh y STALE_AFTER existian sin ningun consumidor en
-    el motor nuevo: el daemon viejo gateaba cada lectura contra eso
-    (daemon/panel.py). Sin el gate, un sensors.ps1 colgado deja el panel
-    pintando el ultimo cpu.temp para siempre y unavailable() no dice nada
-    -- la misma mentira de estado por la que existe este proyecto."""
+    """SidecarClient.fresh and STALE_AFTER existed with no consumer in the new
+    engine: the previous version gated every read against them. Without the gate, a
+    wedged sensors.ps1 leaves the panel painting the last cpu.temp forever and
+    unavailable() says nothing -- the same lying status this project exists
+    because of."""
     c, _ = client_for(SAMPLE)
     r = Registry([Gsa1Provider(c), PdhProvider(c), LhmProvider(c)])
     assert r.read()["cpu.temp"] == 42.0
@@ -152,9 +152,9 @@ def test_a_stale_sidecar_stops_serving_instead_of_freezing_values(monkeypatch):
 
 
 def test_a_capability_lost_mid_run_stops_serving_and_recovers(monkeypatch):
-    """sensors.ps1 documenta que si una fuente se cae deja de reportar
-    caps=true y se recupera sola cuando vuelve. Del lado Python eso no tenia
-    efecto: probe() corre una sola vez, en Registry.__init__."""
+    """sensors.ps1 documents that when a source fails it stops reporting caps=true
+    and recovers on its own when it comes back. On the Python side that had no
+    effect: probe() runs once, in Registry.__init__."""
     c, _ = client_for(SAMPLE)
     r = Registry([Gsa1Provider(c), PdhProvider(c), LhmProvider(c)])
     assert r.read()["cpu.temp"] == 42.0
@@ -187,19 +187,18 @@ def test_smbios_provider_is_unavailable_without_the_capability():
 
 
 def test_close_waits_for_the_process_instead_of_only_signalling_it():
-    """terminate() sin wait() vuelve enseguida: el caller que borra o mueve
-    el directorio a continuacion todavia puede pegar contra el lock de
-    LibreHardwareMonitorLib.dll, que es justo la trampa que el docstring del
-    modulo dice que este close() evita."""
+    """terminate() without wait() returns immediately: a caller that then deletes or
+    moves the directory can still hit the lock on LibreHardwareMonitorLib.dll, which
+    is exactly the trap the module's docstring says this close() avoids."""
     c, proc = client_for(SAMPLE)
     c.close()
     assert proc.terminated and proc.waited
 
 
 def test_close_during_a_respawn_does_not_leave_a_live_sidecar():
-    """Carrera real: si close() cae entre el chequeo de _stop y el _spawn(),
-    mata el proceso viejo, el thread levanta uno nuevo y sale por el return
-    sin matarlo. Queda un powershell con el DLL tomado y sin dueno."""
+    """A real race: if close() lands between the _stop check and the _spawn(), it
+    kills the old process, the thread starts a new one and leaves through the return
+    without killing it. A powershell is left holding the DLL with no owner."""
     procs = []
     holder = {}
 
@@ -218,17 +217,16 @@ def test_close_during_a_respawn_does_not_leave_a_live_sidecar():
     while time.time() < deadline and not all(p.terminated for p in procs):
         time.sleep(0.05)
 
-    assert procs, "nunca spawneo"
+    assert procs, "it never spawned"
     assert all(p.terminated for p in procs), \
-        f"{sum(1 for p in procs if not p.terminated)} sidecar(s) vivos sin dueno"
+        f"{sum(1 for p in procs if not p.terminated)} sidecar(s) alive with no owner"
 
 
 def test_a_disk_without_a_reading_does_not_shift_the_others():
-    """El sidecar emite disk.temp.N por POSICION del disco en la enumeracion,
-    con null cuando esa vuelta no hubo lectura. Antes incrementaba el indice
-    solo cuando habia temperatura, asi que un SSD intermitente corria el
-    indice de todos los que venian despues y los tres numeros del panel
-    cambiaban de significado entre muestras."""
+    """The sidecar emits disk.temp.N by the disk's POSITION in the enumeration, with
+    null when that round had no reading. It used to increment the index only when
+    there was a temperature, so one intermittent SSD shifted the index of every disk
+    after it and the panel's three numbers changed meaning between samples."""
     sample = {**SAMPLE, "lhm": {**SAMPLE["lhm"],
                                 "disk.temp.0": 34.0,
                                 "disk.temp.1": None,
@@ -237,14 +235,14 @@ def test_a_disk_without_a_reading_does_not_shift_the_others():
     r = Registry([LhmProvider(c)])
     s = r.read()
     assert s["disk.temp.0"] == 34.0
-    assert s["disk.temp.1"] is None          # ese disco, y solo ese, sin dato
+    assert s["disk.temp.1"] is None          # that disk, and only that one, with no data
     assert s["disk.temp.2"] == 41.0
 
 
 def test_the_set_of_disk_ids_does_not_depend_on_which_disks_answered():
-    """served() se descubre de la primera muestra: si un disco no aparece
-    ahi, su id no vuelve a existir en toda la corrida. Por eso la clave se
-    emite siempre, incluso en null."""
+    """served() is discovered from the first sample: if a disk does not appear
+    there, its id never exists again for the whole run. That is why the key is
+    always emitted, even as null."""
     sample = {**SAMPLE, "lhm": {**SAMPLE["lhm"],
                                 "disk.temp.0": None,
                                 "disk.temp.1": 36.0,
@@ -254,15 +252,16 @@ def test_the_set_of_disk_ids_does_not_depend_on_which_disks_answered():
 
 
 def test_close_does_not_leave_the_reader_thread_sleeping_out_the_backoff(monkeypatch):
-    """El respawn dormia con time.sleep, que no se entera de _stop: tras
-    close() el hilo lector seguia vivo hasta 10 s (el backoff mas largo). Es
-    daemon, asi que no impide salir, pero se queda con el objeto y su handle
-    de mas -- y en la corrida de pytest deja hilos girando entre tests.
+    """The respawn slept with time.sleep, which does not notice _stop: after close()
+    the reader thread stayed alive for up to 10 s (the longest backoff). It is a
+    daemon thread, so it does not prevent exiting, but it holds the object and its
+    handle longer than needed -- and in a pytest run it leaves threads spinning
+    between tests.
 
-    Se fuerza un backoff largo: con el de produccion el primer reintento
-    duerme 1 s y el test pasaria igual sin el arreglo. Y se mira EL hilo, no
-    threading.active_count(), porque otros tests de este modulo dejan hilos
-    dando vueltas y el contador global no prueba nada.
+    A long backoff is forced: with the production one the first retry sleeps 1 s and
+    the test would pass even without the fix. And THE thread is watched, not
+    threading.active_count(), because other tests in this module leave threads around
+    and the global counter proves nothing.
     """
     monkeypatch.setattr("vmaxpanel.providers.sidecar.BACKOFF", [30.0])
     procs = []
@@ -277,19 +276,19 @@ def test_close_does_not_leave_the_reader_thread_sleeping_out_the_backoff(monkeyp
     deadline = time.time() + 3.0
     while time.time() < deadline and not procs:
         time.sleep(0.02)
-    assert procs, "nunca spawneo"
-    time.sleep(0.3)                      # que entre al sleep del backoff
+    assert procs, "it never spawned"
+    time.sleep(0.3)                      # let it get into the backoff sleep
 
     t0 = time.time()
     c.close()
     assert c._thread is not None
-    assert not c._thread.is_alive(),         f"el hilo sigue durmiendo el backoff {time.time() - t0:.1f}s despues de close()"
+    assert not c._thread.is_alive(),         f"the thread is still sleeping the backoff {time.time() - t0:.1f}s after close()"
 
 
 def test_pdh_provider_derives_the_short_cpu_name():
-    """La regla vive en Python y no en sensors.ps1: el sidecar sigue
-    emitiendo el nombre crudo y el provider deriva el corto. Asi la logica
-    tiene tests y no hay que duplicarla en PowerShell."""
+    """The rule lives in Python and not in sensors.ps1: the sidecar keeps emitting
+    the raw name and the provider derives the short one. That way the logic has
+    tests and does not have to be duplicated in PowerShell."""
     c, _ = client_for({**SAMPLE, "pdh": {"cpu.clock": 4080,
                                          "cpu.name": "12th Gen Intel(R) Core(TM) i5-12400F"}})
     p = PdhProvider(c)
@@ -320,8 +319,8 @@ def cliente_completo():
 
 
 def test_cpu_lhm_provider_serves_package_power_and_per_core():
-    """cpu.power estaba documentado como imposible por WinRing0. LHM 0.9.3.0
-    lo lee sin ningun driver: el sidecar simplemente no tenia IsCpuEnabled."""
+    """cpu.power was documented as impossible because of WinRing0. LHM 0.9.3.0 reads
+    it without any driver: the sidecar simply did not have IsCpuEnabled on."""
     p = CpuLhmProvider(cliente_completo())
     assert p.probe() is True
     servidas = p.metrics()
@@ -340,7 +339,7 @@ def test_mobo_provider_serves_fans_and_board_temps():
 
 
 def test_every_id_these_providers_serve_is_valid():
-    """Un id que no valida hace que Registry se caiga en el constructor."""
+    """An id that does not validate makes Registry fall over in its constructor."""
     c = cliente_completo()
     for p in (CpuLhmProvider(c), MoboProvider(c)):
         for mid in p.metrics():
@@ -355,7 +354,7 @@ def test_their_catalogs_use_friendly_names_and_groups():
     assert "1" in cat["core.1.temp"].label
     assert grupos["core.1.temp"] == "CPU cores"
     assert grupos["fan.1.rpm"] == "Fans"
-    # el fan del CPU se identifica, no queda como "Fan 1" a secas
+    # the CPU fan is identified, not left as a bare "Fan 1"
     assert "CPU" in cat["cpu.fan"].label.upper()
     assert grupos["mb.temp.0"] == "Motherboard"
 
