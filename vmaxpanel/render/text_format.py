@@ -1,9 +1,9 @@
-"""Formateo del valor de un widget de texto: template, humanize y color.
+"""Formatting a text widget's value: template, humanize and colour.
 
-Separado de widgets.py porque no toca PIL ni fuentes: es puro texto y reglas de
-color, la mitad de ese modulo que se puede leer y probar sin nada de dibujo.
-widgets.py lo reexporta, asi que quien ya importaba `widgets.format_value` sigue
-andando.
+Split out of widgets.py because it touches neither PIL nor fonts: it is pure text
+and colour rules, the half of that module that can be read and tested without any
+drawing at all. widgets.py re-exports it, so anybody already importing
+`widgets.format_value` keeps working.
 """
 import math
 
@@ -14,12 +14,11 @@ DASH = "--"
 
 
 def _num(value):
-    """Numero utilizable para una fraccion de barra/arco/grafico o para
-    evaluar una regla de color. Rechaza bool (isinstance(True, int) es
-    True en Python) y tambien NaN/Inf: un sensor fallado que devuelve nan
-    no puede tratarse como "un numero cualquiera", porque
-    max(0.0, min(1.0, nan)) da 1.0 por como Python compara con NaN, y una
-    lectura basura terminaria dibujandose como si fuera un 100% real.
+    """A number usable for a bar/arc/graph fraction or for evaluating a colour
+    rule. It rejects bool (isinstance(True, int) is True in Python) and also
+    NaN/Inf: a failed sensor returning nan must not be treated as "just some
+    number", because max(0.0, min(1.0, nan)) gives 1.0 given how Python compares
+    with NaN, and a garbage reading would end up drawn as if it were a real 100%.
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
@@ -29,9 +28,9 @@ def _num(value):
 
 
 def human_rate(bps) -> str:
-    """1258291 -> "1.2 MB/s": paridad con el human_rate() de daemon/panel.py,
-    que un template de str.format no puede reproducir (no hay forma de
-    elegir la unidad segun la magnitud dentro de un unico campo)."""
+    """1258291 -> "1.2 MB/s": something a str.format template cannot reproduce,
+    because there is no way to pick the unit by magnitude inside a single
+    field."""
     if bps >= 1048576:
         return f"{bps / 1048576:.1f} MB/s"
     if bps >= 1024:
@@ -40,8 +39,8 @@ def human_rate(bps) -> str:
 
 
 def human_bytes(b) -> str:
-    """3221225472 -> "3.0 GiB": mismo problema que human_rate() pero en
-    unidades binarias de almacenamiento en vez de una tasa por segundo."""
+    """3221225472 -> "3.0 GiB": the same problem as human_rate() but in binary
+    storage units instead of a rate per second."""
     for unit, div in (("GiB", 1073741824), ("MiB", 1048576), ("KiB", 1024)):
         if b >= div:
             return f"{b / div:.1f} {unit}"
@@ -49,11 +48,11 @@ def human_bytes(b) -> str:
 
 
 def human_duration(segundos) -> str:
-    """33098 -> "9h 11m": una duracion como la diria una persona.
+    """33098 -> "9h 11m": a duration the way a person would say it.
 
-    Dos unidades como maximo y siempre las dos mas significativas: "1d 1h" en
-    vez de "1d 1h 0m 0s". Un uptime en segundos crudos no le dice nada a nadie
-    en un panel que se mira de reojo.
+    Two units at most, and always the two most significant: "1d 1h" rather than
+    "1d 1h 0m 0s". An uptime in raw seconds tells nobody anything on a panel
+    glanced at sideways.
     """
     s = int(max(0, segundos))
     d, resto = divmod(s, 86400)
@@ -73,13 +72,13 @@ HUMANIZERS = {"rate": human_rate, "bytes": human_bytes,
 
 
 def format_value(w: model.TextWidget, value) -> str:
-    """Aplica humanize si corresponde, si no w.format.
+    """Applies humanize when it applies, otherwise w.format.
 
-    Un valor ausente deja "--" (ver _dashed): con humanize activo no hay
-    template del que conservar un sufijo, asi que se devuelve DASH a secas.
-    Un modo de humanize desconocido (una defensa extra: schema.validate()
-    ya lo rechaza, pero format_value no vuelve a validar) cae de vuelta al
-    formato normal en vez de fallar.
+    An absent value leaves "--" (see _dashed): with humanize active there is no
+    template whose suffix could be preserved, so a bare DASH is returned. An
+    unknown humanize mode (an extra defence: schema.validate() already rejects it,
+    but format_value does not revalidate) falls back to the normal format instead
+    of failing.
     """
     humanizer = HUMANIZERS.get(getattr(w, "humanize", "none"))
     if humanizer is not None:
@@ -94,8 +93,8 @@ def format_value(w: model.TextWidget, value) -> str:
 
 
 def _dashed(fmt: str) -> str:
-    """"{:.0f} MHz" -> "-- MHz": reemplaza el campo por DASH sin perder el
-    resto del template."""
+    """"{:.0f} MHz" -> "-- MHz": replaces the field with DASH without losing the
+    rest of the template."""
     try:
         return fmt.format(_Dash())
     except Exception:
@@ -103,15 +102,15 @@ def _dashed(fmt: str) -> str:
 
 
 class _Dash:
-    """Sustituto que se formatea a si mismo como "--" sin importar el
-    format_spec (ancho, alineacion, precision, tipo de presentacion).
+    """A stand-in that formats itself as "--" whatever the format_spec (width,
+    alignment, precision, presentation type).
 
-    __repr__ tiene que devolver DASH tambien: una conversion "{!r}" o
-    "{!s}" en el template llama a repr()/str() ANTES de invocar a
-    __format__ (object.__str__ ademas delega a __repr__, asi que definir
-    uno solo ya cubre !r, !s y !a). Sin esto, un layout compartido con un
-    format como "{!r} MHz" filtraria el repr default de Python
-    ("<...widgets._Dash object at 0x...>") al panel en vez de "-- MHz".
+    __repr__ has to return DASH as well: a "{!r}" or "{!s}" conversion in the
+    template calls repr()/str() BEFORE invoking __format__ (and object.__str__
+    delegates to __repr__, so defining just one already covers !r, !s and !a).
+    Without this, a shared layout with a format like "{!r} MHz" would leak
+    Python's default repr ("<...widgets._Dash object at 0x...>") onto the panel
+    instead of "-- MHz".
     """
 
     def __format__(self, spec):

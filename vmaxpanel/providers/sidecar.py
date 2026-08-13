@@ -1,11 +1,11 @@
-"""Maneja el proceso PowerShell que lee GSA1, PDH y LibreHardwareMonitor.
+"""Manages the PowerShell process that reads GSA1, PDH and LibreHardwareMonitor.
 
-Un solo proceso alimenta tres providers. Si muere, se relanza con backoff y las
-metricas de sus namespaces quedan sin refrescar hasta que vuelva.
+One process feeds several providers. If it dies it is relaunched with backoff, and
+the metrics in its namespaces go unrefreshed until it comes back.
 
-Trampa conocida: un powershell.exe corriendo sensors.ps1 que sobrevive al
-proceso padre se queda con LibreHardwareMonitorLib.dll tomado y bloquea mover o
-borrar el directorio. Por eso close() termina el proceso siempre.
+Known trap: a powershell.exe running sensors.ps1 that outlives its parent keeps
+LibreHardwareMonitorLib.dll locked and blocks moving or deleting the directory.
+That is why close() always terminates the process.
 """
 import json
 import os
@@ -21,11 +21,11 @@ KILL_TIMEOUT = 5.0
 
 
 def _kill(proc):
-    """terminate() + wait(): pide la baja y ademas la espera.
+    """terminate() + wait(): it asks for the shutdown and then waits for it.
 
-    Cosechar el proceso es lo que libera el handle y el DLL que tenia
-    cargado. Un wait() que se pasa del timeout no puede tumbar al llamador
-    -- estamos justamente en el camino de apagado -- asi que se traga.
+    Reaping the process is what releases the handle and the DLL it had loaded. A
+    wait() that overruns its timeout must not bring the caller down -- we are on
+    the shutdown path precisely -- so it is swallowed.
     """
     if proc is None:
         return
@@ -77,18 +77,18 @@ class SidecarClient:
                 with self._lock:
                     self._proc = proc
                 if self._stop.is_set():
-                    # close() puede haber corrido entre el chequeo del while y
-                    # este spawn: mato el proceso anterior (o ninguno, si era
-                    # el primero) y este recien nacido se queda sin dueno. Sin
-                    # esta guarda queda un powershell vivo con
-                    # LibreHardwareMonitorLib.dll tomado.
+                    # close() may have run between the while check and this spawn:
+                    # it killed the previous process (or none, if this was the
+                    # first) and this newborn is left with no owner. Without this
+                    # guard a powershell stays alive holding
+                    # LibreHardwareMonitorLib.dll.
                     return
                 for line in proc.stdout:
                     if self._stop.is_set():
                         break
                     line = line.strip()
                     if not line.startswith("{"):
-                        continue        # el sidecar puede escribir avisos sueltos
+                        continue        # the sidecar can write stray warnings
                     try:
                         parsed = json.loads(line)
                     except json.JSONDecodeError:
@@ -101,16 +101,16 @@ class SidecarClient:
             except Exception:
                 pass
             finally:
-                # Cada vuelta cierra SU proceso. Sin esto, un respawn dejaba
-                # el anterior sin terminar ni cosechar -- zombie con su
-                # stdout abierto -- y el `return` de la guarda de arriba
-                # dejaba vivo justamente al que acababa de crear.
+                # Every pass closes ITS process. Without this, a respawn left the
+                # previous one neither terminated nor reaped -- a zombie with its
+                # stdout open -- and the `return` in the guard above left alive
+                # exactly the one it had just created.
                 _kill(proc)
             if not self._restart or self._stop.is_set():
                 return
-            # _stop.wait y no time.sleep: el backoff llega a 10 s y time.sleep
-            # no se entera de close(), asi que el hilo lector seguia vivo todo
-            # ese rato despues de que alguien pidio la baja.
+            # _stop.wait and not time.sleep: the backoff reaches 10 s and
+            # time.sleep does not notice close(), so the reader thread stayed alive
+            # that whole time after somebody asked it to stop.
             if self._stop.wait(BACKOFF[min(attempt, len(BACKOFF) - 1)]):
                 return
             attempt += 1
@@ -131,27 +131,26 @@ class SidecarClient:
             return dict(self._data.get(name) or {})
 
     def close(self):
-        """Baja el sidecar y espera a que muera de verdad.
+        """Brings the sidecar down and waits for it to really die.
 
-        El wait() no es un lujo: terminate() solo pide la baja, y el caller
-        que a continuacion borra o mueve el directorio todavia puede pegar
-        contra el lock de LibreHardwareMonitorLib.dll -- la trampa que este
-        modulo dice evitar. El proceso se toma bajo el lock pero se mata
-        afuera, porque wait() bloquea y namespace()/caps() lo necesitan.
+        The wait() is not a luxury: terminate() only asks, and a caller that then
+        deletes or moves the directory can still hit the lock on
+        LibreHardwareMonitorLib.dll -- the trap this module claims to avoid. The
+        process is taken under the lock but killed outside it, because wait()
+        blocks and namespace()/caps() need that lock.
         """
         self._stop.set()
         with self._lock:
             proc = self._proc
         _kill(proc)
-        # join: close() vuelve cuando el hilo lector realmente termino, no
-        # cuando se le pidio. Sin esto el llamador no tiene forma de saber
-        # cuando dejo de haber alguien tocando el proceso.
+        # join: close() returns when the reader thread has really finished, not
+        # when it was asked to. Without this the caller has no way of knowing when
+        # nobody is touching the process any more.
         #
-        # Salvo que el que llama SEA el hilo lector: join() sobre el hilo
-        # actual tira RuntimeError, y close() no puede levantar nunca -- se
-        # usa en caminos de apagado y adentro de un finally. En ese caso el
-        # _stop ya alcanza: el propio hilo se va a encontrar la bandera al
-        # volver de aca.
+        # Unless the caller IS the reader thread: join() on the current thread
+        # raises RuntimeError, and close() must never raise -- it is used on
+        # shutdown paths and inside a finally. In that case _stop is enough: the
+        # thread itself will find the flag on its way back from here.
         t = self._thread
         if t is not None and t is not threading.current_thread():
             t.join(timeout=KILL_TIMEOUT)
