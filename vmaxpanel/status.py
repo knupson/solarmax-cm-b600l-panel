@@ -1,34 +1,35 @@
-"""El estado del panel, publicado a un archivo para que se pueda leer desde afuera.
+"""The panel's status, published to a file so it can be read from outside.
 
-**El agujero que cierra.** La bandeja tiene el estado en su menu, pero desde una
-consola -- o desde un script, o desde otra sesion -- lo unico observable era el log
-y el CPU del proceso, y de ahi a "esta dibujando" hay un salto de fe. Paso tres
-veces en un dia: verificar que el panel andaba midiendo el CPU de un pythonw.
+**The gap it closes.** The tray has the status in its menu, but from a console --
+or from a script, or from another session -- the only observable things were the
+log and the process's CPU usage, and going from there to "it is drawing" is a leap
+of faith. It went wrong three times in one day: verifying the panel worked by
+watching a pythonw process's CPU.
 
-**Un archivo y no un socket ni una tuberia con nombre.** El lector no necesita
-hablar con el proceso, solo saber que ve: un archivo lo hace sin abrir un puerto,
-sin permisos raros, sin que un lector colgado afecte al motor y sin que el motor
-tenga que atender a nadie. El costo es que el dato es de hace unos segundos, y por
-eso la antiguedad se reporta siempre.
+**A file, not a socket or a named pipe.** The reader does not need to talk to the
+process, only to know what it sees: a file does that without opening a port,
+without odd permissions, without a stuck reader affecting the engine and without
+the engine having to serve anyone. The cost is that the reading is a few seconds
+old, which is why the age is always reported.
 
-**Se escribe con reemplazo atomico** (temporal + os.replace): un lector que llega
-en el medio ve el archivo viejo entero, nunca medio archivo nuevo.
+**It is written with an atomic replace** (temp file + os.replace): a reader
+arriving mid-write sees the whole old file, never half of the new one.
 """
 import json
 import os
 import time
 from pathlib import Path
 
-PERIODO = 5.0            # cada cuanto publica el motor
-VIEJO = 30.0             # a partir de aca se avisa que el dato es rancio
+PERIODO = 5.0            # how often the engine publishes
+VIEJO = 30.0             # past this, the reading is called out as stale
 
 
 class StatusFile:
-    """El archivo de estado. Nunca levanta: esto es diagnostico, no funcionalidad.
+    """The status file. It never raises: this is diagnostics, not functionality.
 
-    Un disco lleno o un permiso denegado no puede matar el hilo del motor ni la
-    bandeja -- seria un colmo que el mecanismo para saber si el panel anda fuera el
-    que lo apaga.
+    A full disk or a denied permission must not be able to kill the engine thread
+    or the tray -- it would be absurd for the mechanism that tells you whether the
+    panel works to be the thing that switches it off.
     """
 
     def __init__(self, path, clock=None):
@@ -53,7 +54,7 @@ class StatusFile:
             return False
 
     def read(self):
-        """El ultimo estado publicado, o None si no hay o no se entiende."""
+        """The last published status, or None if there is none or it is unreadable."""
         try:
             return json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -61,10 +62,10 @@ class StatusFile:
 
 
 def _vivo(pid) -> bool:
-    """Si ese pid sigue existiendo y parece un Python.
+    """Whether that pid still exists and looks like a Python process.
 
-    Lo segundo importa: los pid se reciclan, y un archivo de estado viejo cuyo pid
-    ahora es un notepad reportaria "vivo" con datos de otra corrida.
+    The second part matters: pids get recycled, and a stale status file whose pid
+    is now a notepad would report "alive" with another run's data.
     """
     try:
         import psutil
@@ -76,10 +77,10 @@ def _vivo(pid) -> bool:
 def _fps(v) -> str:
     """30.0 -> "30", 0.5 -> "0.5".
 
-    El modelo guarda fps como float a proposito: 0.5 es un cuadro cada dos segundos
-    y es la cadencia mas barata que hay. Pero "30.0 fps" en pantalla es el tipo
-    interno asomando, y eso se arregla al mostrar -- no cambiando el contrato por
-    algo cosmetico, que fue justo lo que estuve por hacer.
+    The model stores fps as a float on purpose: 0.5 is one frame every two seconds
+    and is the cheapest cadence there is. But "30.0 fps" on screen is the internal
+    type showing through, and that gets fixed at display time -- not by changing the
+    contract over something cosmetic, which is exactly what I was about to do.
     """
     if not isinstance(v, (int, float)) or isinstance(v, bool):
         return "?"
@@ -87,10 +88,10 @@ def _fps(v) -> str:
 
 
 def describe(estado, ahora=None, vivo=None) -> str:
-    """El estado en texto, para imprimir. Nunca levanta."""
+    """The status as text, ready to print. It never raises."""
     if not estado:
-        return ("el panel no esta corriendo (no hay archivo de estado). "
-                "Levantalo con la tarea PanelVitals o con "
+        return ("the panel is not running (there is no status file). "
+                "Start it with the PanelVitals task or with "
                 "'python -m vmaxpanel.tray'.")
     ahora = ahora if ahora is not None else time.time()
     vivo = vivo or _vivo
@@ -99,30 +100,30 @@ def describe(estado, ahora=None, vivo=None) -> str:
 
     lineas = []
     if not vivo(pid):
-        # Primero y explicito: con el proceso muerto todo lo que sigue es historia,
-        # y mostrar "dibujando, 12000 frames" sin decir esto seria mentir.
-        lineas.append(f"el proceso {pid} que escribio esto YA NO EXISTE: "
-                      f"lo de abajo es la ultima foto antes de que se fuera.")
+        # First and explicit: with the process gone, everything below is history,
+        # and showing "drawing, 12000 frames" without saying so would be a lie.
+        lineas.append(f"process {pid}, which wrote this, NO LONGER EXISTS: "
+                      f"what follows is the last snapshot before it went away.")
     if estado.get("paused"):
-        cabeza = "EN PAUSA (el puerto esta libre)"
+        cabeza = "PAUSED (the port is free)"
     elif estado.get("running"):
-        cabeza = "dibujando"
+        cabeza = "drawing"
     else:
-        cabeza = "DETENIDO"
-    # Sin em dash ni caracteres fuera de ASCII: esto se imprime en la consola de
-    # Windows, que en un sistema en espanol es cp850 y no tiene U+2014. Salia un "?"
-    # justo en la salida que existe para diagnosticar.
-    lineas.append(f"{cabeza} - perfil {estado.get('profile') or '?'}, "
+        cabeza = "STOPPED"
+    # No em dash and nothing outside ASCII: this prints to the Windows console,
+    # which on a Spanish-language system is cp850 and has no U+2014. It came out as
+    # a "?" in the one output that exists to diagnose things.
+    lineas.append(f"{cabeza} - profile {estado.get('profile') or '?'}, "
                   f"panel {estado.get('panel') or '?'}, "
                   f"{estado.get('frames') or 0} frames, "
                   f"{_fps(estado.get('fps'))} fps")
-    lineas.append(f"publicado hace {edad:.0f} s (pid {pid})")
+    lineas.append(f"published {edad:.0f} s ago (pid {pid})")
     if edad > VIEJO and estado.get("running"):
-        # Un proceso puede estar vivo y no publicar: un motor trabado en una
-        # escritura al puerto sigue existiendo. La antiguedad es la unica senal, y
-        # decirlo es la diferencia entre un numero viejo y un diagnostico.
-        lineas.append(f"OJO: deberia publicar cada {PERIODO:.0f} s. Con {edad:.0f} s "
-                      f"de atraso, el motor puede estar colgado.")
+        # A process can be alive and not publishing: an engine wedged in a write to
+        # the port still exists. The age is the only signal there is, and saying so
+        # is the difference between a stale number and a diagnosis.
+        lineas.append(f"CAREFUL: it should publish every {PERIODO:.0f} s. At "
+                      f"{edad:.0f} s behind, the engine may be stuck.")
     for p in (estado.get("problems") or []):
         lineas.append(f"  - {p}")
     return "\n".join(lineas)

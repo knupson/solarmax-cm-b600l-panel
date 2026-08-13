@@ -247,12 +247,9 @@ python -m vmaxpanel --status
 ```
 
 ```
-dibujando - perfil Apex, panel ok, 12043 frames, 1 fps
-publicado hace 2 s (pid 23060)
+drawing - profile Apex, panel ok, 12043 frames, 1 fps
+published 2 s ago (pid 23060)
 ```
-
-(That output is still in Spanish, like the rest of the app's messages. Translating them is the
-next step; this block shows what the command actually prints today.)
 
 Exit code **0** when it is drawing and **1** when it is not — not 2, because "not running" is an
 answer rather than a usage error, and a script has to be able to tell those apart.

@@ -65,7 +65,7 @@ def test_a_fresh_state_is_reported_as_alive(archivo):
     archivo._clock.now += 3.0
     texto = status.describe(archivo.read(), ahora=archivo._clock(),
                             vivo=lambda pid: True)
-    assert "hace 3 s" in texto
+    assert "3 s ago" in texto
     assert "Apex" in texto
     assert "colgado" not in texto
 
@@ -79,19 +79,19 @@ def test_a_stale_state_says_the_process_may_be_stuck(archivo):
     archivo._clock.now += 90.0
     texto = status.describe(archivo.read(), ahora=archivo._clock(),
                             vivo=lambda pid: True)
-    assert "hace 90 s" in texto
-    assert "colgado" in texto
+    assert "90 s ago" in texto
+    assert "stuck" in texto
 
 
 def test_a_dead_process_is_reported_as_dead(archivo):
     archivo.write({"running": True, "frames": 30})
     texto = status.describe(archivo.read(), ahora=archivo._clock(),
                             vivo=lambda pid: False)
-    assert "YA NO EXISTE" in texto
+    assert "NO LONGER EXISTS" in texto
 
 
 def test_describe_without_a_file_says_it_is_not_running():
-    assert "no esta corriendo" in status.describe(None)
+    assert "is not running" in status.describe(None)
 
 
 def test_problems_are_listed(archivo):
@@ -109,8 +109,8 @@ def test_a_paused_panel_is_not_reported_as_drawing(archivo):
     archivo.write({"running": False, "paused": True, "frames": 5})
     texto = status.describe(archivo.read(), ahora=archivo._clock(),
                             vivo=lambda p: True)
-    assert "PAUSA" in texto
-    assert "DETENIDO" not in texto
+    assert "PAUSED" in texto
+    assert "STOPPED" not in texto
 
 
 # --- integracion con la app ---
@@ -206,12 +206,12 @@ def test_the_cli_returns_one_when_the_panel_is_not_running(tmp_path, capsys,
     from vmaxpanel import cli
     monkeypatch.setattr(cli, "status_path", lambda: tmp_path / "no-existe.json")
     assert cli.main(["--estado"]) == 1
-    assert "no esta corriendo" in capsys.readouterr().out
+    assert "is not running" in capsys.readouterr().out
 
 
 def test_a_status_file_that_cannot_be_written_is_reported_once(tmp_path, capsys):
     """Si el archivo no se puede escribir -- carpeta de solo lectura, como pasaria
-    instalado en Program Files -- `--estado` diria "no esta corriendo" para un panel
+    instalado en Program Files -- `--estado` diria "is not running" para un panel
     que SI esta dibujando. Es una mentira silenciosa, y el unico lugar donde se puede
     avisar es el log. Una sola vez: el latido corre cada 5 s, para siempre."""
     from tests.test_app import app_for, wait_until
