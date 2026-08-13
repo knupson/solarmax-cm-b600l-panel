@@ -1,6 +1,6 @@
-"""La bandeja es pegamento contra Win32 y no se testea entera, pero las
-partes que son logica pura si: el texto del tooltip es lo unico que el
-usuario ve sin abrir el menu."""
+"""The tray is glue against Win32 and is not tested in full, but the parts that
+are pure logic are: the tooltip text is the only thing the user sees without
+opening the menu."""
 from vmaxpanel import tray
 
 
@@ -34,17 +34,17 @@ def test_tooltip_shows_the_profile_and_the_frame_count():
 
 
 def test_tooltip_never_exceeds_the_win32_limit():
-    """szTip es WCHAR[128]: un texto mas largo se corta solo o revienta al
-    asignarlo a la estructura."""
+    """szTip is WCHAR[128]: longer text either truncates itself or blows up on
+    assignment to the structure."""
     tip = _tip_with(FakeApp(paused=False, running=True, profile="P" * 400,
                             frames=1))
     assert len(tip) <= 127
 
 
 def test_the_tray_does_not_open_a_second_editor(monkeypatch):
-    """Dos editores sobre el mismo perfil se pisan los guardados: gana el
-    ultimo y el otro cree que guardo. Aparecio de verdad -- quedaron dos
-    ventanas abiertas sobre vitals.json."""
+    """Two editors on the same profile clobber each other's saves: the last one
+    wins and the other believes it saved. It really happened -- two windows were
+    left open on vitals.json."""
     lanzados = []
 
     class FakeProc:
@@ -67,19 +67,19 @@ def test_the_tray_does_not_open_a_second_editor(monkeypatch):
     t._default_editor()
     assert len(lanzados) == 1
     t._default_editor()
-    assert len(lanzados) == 1, "abrio un segundo editor con uno ya vivo"
+    assert len(lanzados) == 1, "it opened a second editor with one already alive"
 
-    lanzados[0].vivo = False          # el usuario lo cerro
+    lanzados[0].vivo = False          # the user closed it
     t._default_editor()
-    assert len(lanzados) == 2, "no volvio a abrir despues de que se cerro"
+    assert len(lanzados) == 2, "it did not reopen after that one closed"
 
 
 def test_the_icon_asset_ships_and_has_a_small_size_layer():
-    """Windows toma la capa que mas se acerca al tamano pedido. Sin una capa
-    de 16 px reduce la de 256 y en la bandeja queda un borron gris -- que es
-    como se veia antes, un espacio en blanco."""
+    """Windows takes the layer closest to the requested size. Without a 16 px layer
+    it shrinks the 256 one and the tray gets a grey smudge -- which is how it looked
+    before, a blank space."""
     from PIL import Image
-    assert tray.ICONO.exists(), f"falta el asset {tray.ICONO}"
+    assert tray.ICONO.exists(), f"the asset {tray.ICONO} is missing"
     with Image.open(tray.ICONO) as im:
         tamanos = set(im.info.get("sizes", []))
     assert (16, 16) in tamanos
@@ -88,12 +88,12 @@ def test_the_icon_asset_ships_and_has_a_small_size_layer():
 
 
 def test_the_fps_submenu_offers_the_measured_options():
-    """El costo de cada cadencia va en la etiqueta: elegir 60 fps sin saber
-    que son 37% de un nucleo, continuo, no es elegir."""
+    """Each cadence's cost goes in the label: choosing 60 fps without knowing it is
+    37% of one core, continuously, is not choosing."""
     class AppConFps(FakeApp):
         def fps_options(self):
-            return [(1, "1 fps · 1% de un núcleo"), (30, "30 fps · 17% de un núcleo"),
-                    (60, "60 fps · 37% de un núcleo")]
+            return [(1, "1 fps · 1% of one core"), (30, "30 fps · 17% of one core"),
+                    (60, "60 fps · 37% of one core")]
 
         def fps(self):
             return 30
@@ -128,8 +128,8 @@ def test_picking_an_fps_writes_it_through_the_app(monkeypatch):
 
 
 def test_the_fps_commands_do_not_collide_with_the_other_menu_ids():
-    """Los ids de fps son CMD_FPS_BASE + indice: si se solapan con CMD_QUIT,
-    elegir un fps cierra la app."""
+    """The fps ids are CMD_FPS_BASE + index: if they overlap CMD_QUIT, picking an
+    fps closes the app."""
     fijos = {tray.CMD_STATE, tray.CMD_TOGGLE, tray.CMD_EDITOR, tray.CMD_PROFILE,
              tray.CMD_LOG, tray.CMD_RESTART, tray.CMD_QUIT}
     for i in range(16):
@@ -137,8 +137,8 @@ def test_the_fps_commands_do_not_collide_with_the_other_menu_ids():
 
 
 def test_the_fps_picker_is_refused_while_the_editor_is_open():
-    """Los dos escriben el mismo perfil: el editor guarda su copia en memoria y
-    se llevaria puesto el fps recien elegido. Mismo motivo por el que la
+    """Both write the same profile: the editor saves its in-memory copy and would
+    wipe out the fps just chosen. Same reason the
     bandeja no abre dos editores."""
     pedidos = []
 
@@ -161,7 +161,7 @@ def test_the_fps_picker_is_refused_while_the_editor_is_open():
     t.app = AppConFps(paused=False, running=True)
     t._editor = EditorVivo()
     t._dispatch(tray.CMD_FPS_BASE + 1)
-    assert pedidos == [], "escribio el perfil con el editor abierto"
+    assert pedidos == [], "it wrote the profile with the editor open"
     assert t._editor_abierto() is True
 
 
@@ -201,13 +201,13 @@ def test_the_profile_and_fps_command_ranges_do_not_overlap():
 
 
 def test_the_menu_lists_the_problems_reported_by_the_app():
-    """Un problema que el usuario no puede ver es un problema que no existe
-    hasta que lo confunde: el perfil rechazado quedaba solo en el log."""
+    """A problem the user cannot see is a problem that does not exist until it
+    confuses them: the rejected profile stayed only in the log."""
     class AppConProblemas(FakeApp):
         def problems(self):
             return ["perfil rechazado: metrica desconocida 'x'",
                     "fuente no encontrada: Bahnschrift",
-                    "sin datos: cpu.power"]
+                    "no data: cpu.power"]
 
     t = tray.Tray.__new__(tray.Tray)
     t.app = AppConProblemas(paused=False, running=True)
@@ -215,7 +215,7 @@ def test_the_menu_lists_the_problems_reported_by_the_app():
     assert len(lineas) == 3
     assert any("rechazado" in x for x in lineas)
     for x in lineas:
-        assert len(x) <= 74, x       # una entrada de menu no puede ser un parrafo
+        assert len(x) <= 74, x       # a menu entry cannot be a paragraph
 
 
 def test_no_problems_shows_a_single_ok_line():
@@ -229,7 +229,7 @@ def test_no_problems_shows_a_single_ok_line():
 
 
 def test_too_many_problems_are_capped_with_a_counter():
-    """Veinte avisos convierten el menu en un muro ilegible."""
+    """Twenty warnings turn the menu into an illegible wall."""
     class AppRota(FakeApp):
         def problems(self):
             return [f"problema {i}" for i in range(20)]
@@ -263,9 +263,9 @@ def test_the_brightness_submenu_marks_the_current_value():
 
 
 def test_the_export_command_reaches_the_app(monkeypatch, tmp_path, capsys):
-    """El item de menu tiene que llegar a app.export_profile y, si salio bien, abrir
-    la carpeta: la bandeja no tiene ventana donde escribir un mensaje, asi que un
-    export silencioso es indistinguible de un boton que no hace nada."""
+    """The menu item has to reach app.export_profile and, if it went well, open the
+    folder: the tray has no window to write a message in, so a silent export is
+    indistinguishable from a button that does nothing."""
     llamadas, abiertos = [], []
 
     class AppQueExporta(FakeApp):
@@ -297,11 +297,11 @@ def test_a_failed_export_does_not_open_anything(monkeypatch, capsys):
     assert "could not" in capsys.readouterr().out
 
 
-# --- el icono tiene que existir de verdad ---
+# --- the icon has to really exist ---
 
 
 class FakeShell:
-    """shell32 de mentira: cuenta los NIM_ADD y puede fallar los primeros N."""
+    """A fake shell32: it counts the NIM_ADDs and can fail the first N."""
 
     def __init__(self, fallar=0):
         self.adds = 0
@@ -328,10 +328,10 @@ def _tray_con(shell, monkeypatch, app=None):
 
 
 def test_a_rejected_icon_is_retried_and_reported(monkeypatch, capsys):
-    """El retorno de Shell_NotifyIcon se ignoraba. Windows lo rechaza de verdad cuando
-    la bandeja todavia no esta lista -- y la tarea arranca esto AL LOGON, que es
-    exactamente ese momento. Sin icono no hay menu, ni pausa, ni editor: la app queda
-    dibujando y sin ninguna forma de manejarla."""
+    """Shell_NotifyIcon's return value used to be ignored. Windows really does reject
+    it when the tray is not ready yet -- and the scheduled task starts this AT LOGON,
+    which is exactly that moment. With no icon there is no menu, no pause, no editor:
+    the app is left drawing with no way to manage it."""
     shell = FakeShell(fallar=2)
     t = _tray_con(shell, monkeypatch)
     t._add_icon()
@@ -345,50 +345,50 @@ def test_an_icon_that_never_gets_accepted_says_so(monkeypatch, capsys):
     t = _tray_con(shell, monkeypatch)
     t._add_icon()
     assert t._icono_puesto is False
-    # A stderr, no a stdout: es una falla, y el log de la bandeja junta los dos.
+    # To stderr, not stdout: it is a failure, and the tray log merges both.
     salida = capsys.readouterr().err.lower()
     assert "could not" in salida
-    assert "python -m vmaxpanel.editor" in salida, "sin icono, hay que decir el plan B"
+    assert "python -m vmaxpanel.editor" in salida, "with no icon, say the plan B"
 
 
 def test_the_icon_is_added_again_when_explorer_restarts(monkeypatch):
-    """Cuando explorer se reinicia -- pasa, y no es raro -- Windows manda
-    TaskbarCreated y CADA app tiene que volver a agregar su icono. Sin eso el panel
-    sigue dibujando pero el icono no vuelve nunca: el usuario se queda sin menu hasta
-    el proximo logon."""
+    """When explorer restarts -- it happens, and it is not rare -- Windows sends
+    TaskbarCreated and EACH app has to add its icon again. Without that the panel
+    keeps drawing but the icon never comes back: the user is left with no menu until
+    the next logon."""
     shell = FakeShell()
     t = _tray_con(shell, monkeypatch)
     t._add_icon()
     assert shell.adds == 1
     t._on_message(t._hwnd, tray.WM_TASKBARCREATED, 0, 0)
-    assert shell.adds == 2, "no volvio a poner el icono"
+    assert shell.adds == 2, "it did not put the icon back"
 
 
-# --- que el icono se VEA, no solo que exista ---
+# --- that the icon is SEEN, not merely that it exists ---
 
 
 def test_the_icon_promotes_itself_when_windows_hid_it_by_default():
-    r"""Windows 11 esconde TODO icono nuevo: lo agrega al menu oculto y no a la barra.
-    Verificado en esta maquina -- la entrada existia en
-    HKCU\Control Panel\NotifyIconSettings con el tooltip "VMax Panel" y sin
-    IsPromoted, y el usuario nunca vio el icono en meses de uso. Para una app cuya
-    UNICA interfaz es ese icono, quedar escondido es quedar sin interfaz."""
+    r"""Windows 11 hides EVERY new icon: it adds it to the overflow menu and not to
+    the taskbar. Verified in practice -- the entry existed under
+    HKCU\Control Panel\NotifyIconSettings with the tooltip "VMax Panel" and no
+    IsPromoted, and the user never saw the icon in months of use. For an app whose
+    ONLY interface is that icon, staying hidden means having no interface."""
     entradas = {"111": {"ExecutablePath": r"C:\py\pythonw.exe",
                         "InitialTooltip": "VMax Panel - detenido"},
-                "222": {"ExecutablePath": r"C:\otra\app.exe",
+                "222": {"ExecutablePath": r"C:\another\app.exe",
                         "InitialTooltip": "Otra cosa"}}
     escritos = {}
     puesto = tray.promover_icono(r"C:\py\pythonw.exe", "VMax Panel",
                                  leer=lambda: entradas,
                                  escribir=lambda k, v: escritos.__setitem__(k, v))
     assert puesto is True
-    assert escritos == {"111": 1}, "promovio la entrada equivocada, o ninguna"
+    assert escritos == {"111": 1}, "it promoted the wrong entry, or none"
 
 
 def test_an_icon_the_user_hid_on_purpose_is_left_alone():
-    """Si el valor esta en 0, el usuario lo apago a mano en Configuracion. Volver a
-    prenderlo en cada arranque seria pelearle a su decision, que es justo lo que hace
-    insoportable al software que se cree importante."""
+    """If the value is 0, the user turned it off by hand in Settings. Turning it back
+    on at every start-up would be fighting their decision, which is exactly what
+    makes software that thinks it is important unbearable."""
     entradas = {"111": {"ExecutablePath": r"C:\py\pythonw.exe",
                         "InitialTooltip": "VMax Panel", "IsPromoted": 0}}
     escritos = {}
@@ -410,25 +410,26 @@ def test_an_already_visible_icon_is_not_rewritten():
 
 
 def test_promoting_never_raises_if_the_registry_is_not_there():
-    """Es cosmetico: una version de Windows sin esa clave, o un permiso denegado, no
-    puede impedir que la bandeja arranque."""
+    """It is cosmetic: a Windows version without that key, or a denied permission,
+    must not stop the tray from starting."""
     def leer_roto():
-        raise OSError("no existe la clave")
+        raise OSError("the key does not exist")
     assert tray.promover_icono("x", "y", leer=leer_roto,
                                escribir=lambda k, v: None) is False
 
 
 def test_after_promoting_the_icon_is_added_again(monkeypatch):
-    """Windows decide si el icono va a la barra o al menu oculto EN EL MOMENTO del
-    NIM_ADD. Promoverlo despues no lo mueve solo, asi que hay que volver a agregarlo
-    para que la barra lo re-evalue: sin eso el cambio recien se ve al proximo arranque.
+    """Windows decides whether the icon goes to the taskbar or the overflow menu AT
+    THE MOMENT of the NIM_ADD. Promoting it afterwards does not move it on its own,
+    so it has to be added again for the taskbar to re-evaluate it: without that the
+    change is only seen at the next start-up.
     """
     shell = FakeShell()
     t = _tray_con(shell, monkeypatch)
     monkeypatch.setattr(tray, "promover_icono", lambda *a, **kw: True)
     t._add_icon()
-    assert shell.adds == 2, "no volvio a agregar el icono despues de promoverlo"
-    assert tray.NIM_DELETE in shell.mensajes, "no borro el anterior: quedarian dos"
+    assert shell.adds == 2, "it did not add the icon again after promoting it"
+    assert tray.NIM_DELETE in shell.mensajes, "it did not delete the previous one: there would be two"
 
 
 def test_without_promotion_the_icon_is_added_once(monkeypatch):

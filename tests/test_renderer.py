@@ -37,7 +37,7 @@ def test_scale_uses_the_smaller_axis_and_centers():
 def test_widgets_are_drawn_over_the_background():
     lay = layout(background={"type": "solid", "color": "#000000"})
     im = Renderer(lay).frame(SAMPLE)
-    assert im.getbbox() is not None          # el fondo negro no cuenta como tinta
+    assert im.getbbox() is not None          # a black background does not count as ink
 
 
 def test_unavailable_metric_renders_dashes_without_crashing():
@@ -57,10 +57,10 @@ def test_set_layout_rebuilds_the_background_cache():
 
 
 def test_set_layout_closes_the_previous_background():
-    """Cada recarga en caliente pasa por set_layout(), y un fondo de video tiene
-    un ffmpeg atras. Sin cerrar el anterior, editar el perfil diez veces deja
-    diez ffmpeg decodificando para nadie -- el mismo proceso huerfano que este
-    proyecto ya tuvo con el sidecar de sensores."""
+    """Every hot reload goes through set_layout(), and a video background has an
+    ffmpeg behind it. Without closing the previous one, editing the profile ten times
+    leaves ten ffmpegs decoding for nobody -- the same orphan process this project
+    already had with the sensor sidecar."""
     r = Renderer(layout())
     viejo = r._bg
     cerrados = []
@@ -119,41 +119,39 @@ def test_history_ignores_text_metrics():
 
 def test_set_layout_forgets_stale_missing_font_warnings():
     # El editor de fase 3 mantiene un Renderer de larga vida y llama
-    # set_layout() en cada edicion. Una familia ausente en el layout VIEJO
-    # no puede seguir apareciendo en warnings() una vez que el layout nuevo
-    # ni siquiera la nombra -- si sobreviviera, el diagnostico del editor
-    # estaria mintiendo sobre el layout que esta activo ahora.
+    # set_layout() on every edit. A family missing from the OLD layout must not keep
+    # appearing in warnings() once the new layout does not even name it -- if it
+    # survived, the editor's diagnostics would be lying about the layout that is
+    # active now.
     r = Renderer(layout(fonts={"mono-14": {"family": "NoExiste", "size": 14},
                                "mono-bold-60": {"family": "NoExiste", "size": 60}}))
     assert any("NoExiste" in w for w in r.warnings())
 
-    r.set_layout(layout())  # MINIMAL, con Consolas: no nombra "NoExiste"
+    r.set_layout(layout())  # MINIMAL, with Consolas: it does not name "NoExiste"
     assert not any("NoExiste" in w for w in r.warnings())
 
 
 def test_set_layout_keeps_a_still_missing_font_warning_when_reapplied():
-    # El caso realista del editor de fase 3: llama set_layout() en CADA
-    # edicion, incluso cuando el cambio no toca las fuentes. Si "NoExiste"
-    # sigue sin existir, el segundo set_layout() (con el MISMO layout) no
-    # puede hacer desaparecer la advertencia -- ese era exactamente el
-    # defecto que quedo tras la primera ronda de este fix: is_available()
-    # se recalcula del indice cada vez que se pide warnings(), asi que no
-    # depende de que resolve() haya vuelto a anotar nada en un cache miss.
+    # The realistic editor case: it calls set_layout() on EVERY edit, even when the
+    # change does not touch the fonts. If "NoExiste" still does not exist, the second
+    # set_layout() (with the SAME layout) must not make the warning disappear -- that
+    # was exactly the defect left after the first round of this fix. is_available()
+    # is recalculated from the index every time warnings() is asked for, so it does
+    # not depend on resolve() having recorded anything again on a cache miss.
     lay = layout(fonts={"mono-14": {"family": "NoExiste", "size": 14},
                         "mono-bold-60": {"family": "NoExiste", "size": 60}})
     r = Renderer(lay)
     assert any("NoExiste" in w for w in r.warnings())
 
-    r.set_layout(lay)  # el mismo layout, "NoExiste" sigue sin existir
+    r.set_layout(lay)  # the same layout, "NoExiste" still does not exist
     assert any("NoExiste" in w for w in r.warnings())
 
 
 def test_warnings_reports_a_font_alias_unused_by_any_widget():
-    # Layout.fonts es la declaracion real: un alias de fuente que ningun
-    # widget referencia todavia (p.ej. una fuente que el usuario acaba de
-    # elegir en el editor para un widget que va a agregar despues) tiene
-    # que aparecer en warnings() si su familia no existe, aunque resolve()
-    # nunca se haya llamado para ella desde el dibujo de ningun widget.
+    # Layout.fonts is the real declaration: a font alias no widget references yet
+    # (say, a font the user has just picked in the editor for a widget they are
+    # about to add) has to appear in warnings() if its family does not exist, even
+    # though resolve() was never called for it from any widget's drawing.
     raw = dict(MINIMAL)
     raw["fonts"] = dict(MINIMAL["fonts"])
     raw["fonts"]["unused"] = {"family": "NoExiste", "size": 10}
@@ -162,26 +160,26 @@ def test_warnings_reports_a_font_alias_unused_by_any_widget():
 
 
 def test_warnings_surfaces_a_degraded_background_before_any_frame():
-    # Mismo principio que las fuentes: BackgroundSource solo agrega sus
-    # warnings la primera vez que se construye el fondo (_build(), llamado
-    # de adentro de frame()). set_layout() ahora fuerza ese build de una
-    # vez, asi que warnings() tiene que ver el aviso SIN haber llamado
+    # Same principle as the fonts: BackgroundSource only adds its warnings the first
+    # time the background is built (_build(), called from inside frame()).
+    # set_layout() now forces that build up front, so warnings() has to see the
+    # warning WITHOUT having called
     # frame() todavia.
     #
-    # Un 'image' con un archivo que no existe: es la degradacion que queda
-    # siempre disponible para probar esto. video/sequence/procedural ya estan
-    # todos implementados, asi que ninguno avisa nada por el solo hecho de
+    # An 'image' with a file that does not exist: it is the degradation always
+    # available for testing this. video/sequence/procedural are all implemented, so
+    # none of them warns about anything merely by
     # existir.
     r = Renderer(layout(background={"type": "image", "src": "no-existe.png"}))
     assert any("no-existe.png" in w for w in r.warnings())
 
 
 def _full_bleed_layout(dw, dh, color="#3987E5", bg="#0F1218"):
-    """Layout minimo con un solo widget 'bar' que cubre TODO designed_for.
-    _draw_bar dibuja su rectangulo 'track' sin condicion (el valor solo
-    afecta el relleno de progreso encima), asi que con w.track == w.fill un
-    color uniforme marca exactamente donde cae el contenido escalado, sin
-    que texto ni bordes redondeados compliquen la lectura de pixeles.
+    """A minimal layout with a single 'bar' widget covering ALL of designed_for.
+    _draw_bar draws its 'track' rectangle unconditionally (the value only affects the
+    progress fill on top), so with w.track == w.fill a uniform colour marks exactly
+    where the scaled content lands, without text or rounded corners complicating the
+    pixel reading.
     """
     raw = {
         "version": 1, "name": "letterbox-test",
@@ -199,15 +197,14 @@ def _full_bleed_layout(dw, dh, color="#3987E5", bg="#0F1218"):
 
 
 def test_fast_and_slow_paths_agree_at_identity_scale():
-    # scale == 1.0 (panel_size None) toma el camino rapido: dibuja los
-    # widgets directo sobre la copia del fondo, sin la capa RGBA
-    # intermedia que usa el caso con letterbox. Ambos caminos tienen que
-    # producir el mismo frame -- si no coincidieran, el editor de fase 3
-    # (que puede terminar en cualquiera de los dos segun el tamano de
-    # panel que este probando) mostraria una preview distinta de lo que el
-    # servicio manda al hardware. Se fuerza el camino lento a mano en vez
-    # de confiar en que algun panel_size lo dispare, para probar los dos
-    # caminos de verdad y no solo el que sale por default.
+    # scale == 1.0 (panel_size None) takes the fast path: it draws the widgets
+    # straight onto the copy of the background, without the intermediate RGBA layer
+    # the letterbox case uses. Both paths have to produce the same frame -- if they
+    # did not match, the editor (which can end up on either depending on the panel
+    # size being tried) would show a preview different from what the engine sends to
+    # the hardware. The slow path is forced by hand rather than trusting some
+    # panel_size to trigger it, so both paths are really exercised and not just the
+    # default one.
     fast = Renderer(layout())
     assert fast._exact_fit is True
     slow = Renderer(layout())
@@ -219,12 +216,11 @@ def test_fast_and_slow_paths_agree_at_identity_scale():
 
 
 def test_centering_places_content_symmetrically_away_from_both_margins():
-    # designed_for 100x200, panel 100x100: la altura manda la escala
-    # (0.5), el contenido escalado mide 50px de ancho contra un lienzo de
-    # 100 -- 50px de sobrante repartidos 25/25. Si el offset no se
-    # calculara (el bug del brief original), el bloque ocuparia las
-    # columnas 0..49 y no 25..74: se verifica el margen IZQUIERDO
-    # (ausente en ese bug) y no solo que "algo" este centrado.
+    # designed_for 100x200, panel 100x100: the height governs the scale (0.5), the
+    # scaled content measures 50 px wide against a 100 px canvas -- 50 px of slack
+    # split 25/25. If the offset were not computed (the original bug), the block
+    # would occupy columns 0..49 and not 25..74: the LEFT margin (absent in that bug)
+    # is verified, not merely that "something" is centred.
     lay = _full_bleed_layout(100, 200)
     r = Renderer(lay, panel_size=model.Size(100, 100))
     assert r.scale == 0.5
@@ -234,19 +230,19 @@ def test_centering_places_content_symmetrically_away_from_both_margins():
     im = r.frame({})
     bg, fg = (15, 18, 24), (57, 135, 229)          # #0F1218, #3987E5
     assert im.getpixel((0, 50)) == bg              # margen izquierdo
-    assert im.getpixel((24, 50)) == bg             # ultima columna aun sin contenido
-    assert im.getpixel((25, 50)) == fg             # arranca el contenido
+    assert im.getpixel((24, 50)) == bg             # last column still without content
+    assert im.getpixel((25, 50)) == fg             # the content starts
     assert im.getpixel((74, 50)) == fg             # ultima columna de contenido
     assert im.getpixel((75, 50)) == bg             # margen derecho
     assert im.getpixel((99, 50)) == bg
 
 
 def test_centering_floor_divides_an_odd_leftover_pixel():
-    # Mismo layout, pero panel 101x100: el sobrante horizontal es 51px
-    # (impar), asi que no se puede repartir igual de los dos lados.
-    # (target.width - content.width) // 2 -- floor, no round -- tiene que
-    # dar 25 a la izquierda y dejar el pixel suelto a la derecha (26), no
-    # partir la diferencia con un redondeo que numeros pares no distinguen.
+    # The same layout, but a 101x100 panel: the horizontal slack is 51 px (odd), so
+    # it cannot be split evenly on both sides. (target.width - content.width) // 2 --
+    # floor, not round -- has to give 25 on the left and leave the spare pixel on the
+    # right (26), not split the difference with a rounding that even numbers cannot
+    # tell apart.
     lay = _full_bleed_layout(100, 200)
     r = Renderer(lay, panel_size=model.Size(101, 100))
     assert r._content_size == (50, 100)
@@ -262,12 +258,13 @@ def test_centering_floor_divides_an_odd_leftover_pixel():
 
 
 def test_warnings_still_answer_after_close():
-    """`close()` suelta el fondo, y warnings() lo leia directo: una llamada
-    despues de cerrar tiraba AttributeError. Importa porque warnings() es lo que
-    la bandeja pinta al abrir el menu -- o sea que corre en otro hilo que el que
-    baja el motor, y "el panel se cerro justo cuando abriste el menu" no puede ser
-    una excepcion. Los avisos del fondo cerrado se conservan: son el motivo por el
-    que quedo asi, justo cuando el usuario lo va a leer."""
+    """`close()` releases the background, and warnings() read it directly: a call
+    after closing raised AttributeError. It matters because warnings() is what the
+    tray paints when the menu opens -- which is to say it runs on a different thread
+    from the one bringing the engine down, and "the panel closed exactly when you
+    opened the menu" cannot be an exception. The closed background's warnings are
+    kept: they are the reason it ended up this way, right when the user is about to
+    read them."""
     r = Renderer(layout(background={"type": "image", "src": "no-existe.png"}))
     antes = r.warnings()
     assert any("no-existe.png" in w for w in antes)
@@ -276,9 +273,9 @@ def test_warnings_still_answer_after_close():
 
 
 def test_warnings_say_which_family_was_used_instead():
-    """Decir "falta X" a secas obliga al usuario a adivinar qué está mirando. Con la
-    cadena declarada en el perfil, el aviso puede decir exactamente con qué se dibujó
-    -- y ese es el punto de tener la cadena."""
+    """Saying a bare "X is missing" makes the user guess what they are looking at.
+    With the chain declared in the profile, the warning can say exactly what it was
+    drawn with -- and that is the point of having the chain."""
     lay = layout(fonts={"mono-14": {"family": "NoExisteEnNingunaParte", "size": 14,
                                     "fallbacks": ["Consolas"]},
                         "mono-bold-60": {"family": "Consolas", "size": 60}})
