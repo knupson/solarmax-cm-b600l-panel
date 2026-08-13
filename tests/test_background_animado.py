@@ -135,14 +135,14 @@ def test_sequence_without_files_degrades_with_a_warning(tmp_path):
     src = BackgroundSource(model.Background(type="sequence", src="vacia"),
                            TAM, tmp_path, clock=Reloj())
     assert src.frame().size == (64, 200)
-    assert any("vacia" in w or "cuadro" in w for w in src.warnings)
+    assert any("no frames" in w or "frame" in w for w in src.warnings)
 
 
 def test_sequence_outside_the_assets_dir_is_refused(tmp_path):
     src = BackgroundSource(model.Background(type="sequence", src="../../etc"),
                            TAM, tmp_path, clock=Reloj())
     assert src.frame().size == (64, 200)
-    assert any("ruta" in w for w in src.warnings)
+    assert any("path" in w for w in src.warnings)
 
 
 def test_static_backgrounds_are_not_animated():

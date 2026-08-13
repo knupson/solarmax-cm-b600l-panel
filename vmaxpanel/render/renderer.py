@@ -57,11 +57,11 @@ def _aviso_fuente(font, resolver) -> str:
     """
     usada = resolver.substitutions().get(font.family)
     if usada:
-        return f"fuente no encontrada: {font.family} (se uso {usada})"
+        return f"font not found: {font.family} (used {usada})"
     if font.fallbacks:
-        return (f"fuente no encontrada: {font.family}, y tampoco "
+        return (f"font not found: {font.family}, nor "
                 f"{', '.join(font.fallbacks)}")
-    return f"fuente no encontrada: {font.family}"
+    return f"font not found: {font.family}"
 
 
 class History:
@@ -276,7 +276,7 @@ def to_jpeg(img: Image.Image, rotate: int = 0, quality: int = 82) -> bytes:
     entiende) en vez de depender en silencio de que el default nunca cambie.
     """
     if rotate not in ROTATIONS:
-        raise ValueError(f"rotate {rotate!r} invalido, se espera uno de "
+        raise ValueError(f"invalid rotate {rotate!r}, expected one of "
                           f"{sorted(ROTATIONS)}")
     transpose = ROTATIONS[rotate]
     if transpose is not None:

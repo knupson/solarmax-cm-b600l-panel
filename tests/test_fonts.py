@@ -183,7 +183,7 @@ def test_warnings_do_not_duplicate_a_family_by_casing():
          "b": model.Font("noexisteestafamilia", 14),
          "c": model.Font("NOEXISTEESTAFAMILIA", 16)},
         model.Background(type="solid", color="#000000"), [])
-    avisos = [w for w in Renderer(lay).warnings() if "fuente no encontrada" in w]
+    avisos = [w for w in Renderer(lay).warnings() if "font not found" in w]
     assert len(avisos) == 1, avisos
 
 

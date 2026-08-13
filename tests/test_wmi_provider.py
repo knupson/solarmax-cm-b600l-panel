@@ -62,7 +62,7 @@ def test_the_catalog_carries_the_friendly_device_name():
     cat = WmiProvider(cim=FakeCim()).catalog()
     assert "JUEGOS" in cat["vol.D.free"].label
     assert "D:" in cat["vol.D.free"].label
-    assert "libre" in cat["vol.D.free"].label.lower()
+    assert "free" in cat["vol.D.free"].label.lower()
     # un volumen sin etiqueta no puede quedar con un guion suelto
     assert cat["vol.C.free"].label.startswith("C:")
     assert "Google Drive" in cat["vol.G.load"].label
@@ -73,8 +73,8 @@ def test_the_catalog_groups_by_device():
     a que dispositivo pertenece cada metrica."""
     p = WmiProvider(cim=FakeCim())
     grupos = p.groups()
-    assert grupos["vol.D.free"] == "Disco D: (JUEGOS)"
-    assert grupos["vol.C.free"] == "Disco C:"
+    assert grupos["vol.D.free"] == "Disk D: (JUEGOS)"
+    assert grupos["vol.C.free"] == "Disk C:"
     assert grupos["sys.uptime"] == "Sistema"
 
 

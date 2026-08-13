@@ -186,7 +186,7 @@ def test_the_registry_aggregates_catalog_and_groups():
                                              "GiB", "number", 0.0, None)}
 
         def groups(self):
-            return {"vol.D.free": "Disco D: (JUEGOS)"}
+            return {"vol.D.free": "Disk D: (JUEGOS)"}
 
     class Caido(ConCatalogo):
         def probe(self):
@@ -195,7 +195,7 @@ def test_the_registry_aggregates_catalog_and_groups():
 
     r = Registry([ConCatalogo("wmi", {"vol.D.free"}, {"vol.D.free": 453.6})])
     assert r.catalog()["vol.D.free"].label == "D: (JUEGOS) — libre"
-    assert r.groups()["vol.D.free"] == "Disco D: (JUEGOS)"
+    assert r.groups()["vol.D.free"] == "Disk D: (JUEGOS)"
 
     r2 = Registry([Caido("wmi", {"vol.D.free"}, {})])
     assert "vol.D.free" not in r2.catalog()
@@ -205,7 +205,7 @@ def test_the_catalog_falls_back_to_the_generic_label():
     """Un provider que no publica catalogo igual tiene que aparecer en el
     catalogo del registry: la etiqueta sale de metrics.spec_for()."""
     r = Registry([TwoWayProvider("pdh", {"cpu.clock"}, {"cpu.clock": 4080})])
-    assert r.catalog()["cpu.clock"].label == "Clock de CPU"
+    assert r.catalog()["cpu.clock"].label == "CPU clock"
     assert r.groups().get("cpu.clock") == "CPU"
 
 

@@ -23,7 +23,7 @@ def loads(text: str) -> Layout:
     try:
         raw = json.loads(text)
     except json.JSONDecodeError as e:
-        raise LayoutError([f"JSON invalido: {e}"]) from None
+        raise LayoutError([f"invalid JSON: {e}"]) from None
     errors = schema.validate(raw)
     if errors:
         raise LayoutError(errors)
@@ -34,7 +34,7 @@ def load(path) -> Layout:
     try:
         text = open(path, encoding="utf-8").read()
     except OSError as e:
-        raise LayoutError([f"no se pudo leer {path}: {e}"]) from None
+        raise LayoutError([f"could not read {path}: {e}"]) from None
     return loads(text)
 
 

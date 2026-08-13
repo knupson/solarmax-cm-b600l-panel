@@ -7,7 +7,7 @@ from .sidecar import STALE_AFTER
 class _SidecarProvider(Provider):
     namespace = "?"
     served: set[str] = set()
-    reason = "el sidecar no reporto esta capacidad"
+    reason = "the sidecar did not report this capability"
 
     def __init__(self, client):
         self._c = client
@@ -40,7 +40,7 @@ class _SidecarProvider(Provider):
         sensors.ps1.
         """
         if not self._c.fresh:
-            raise RuntimeError(f"el sidecar no entrega datos desde hace mas "
+            raise RuntimeError(f"the sidecar has delivered no data for more "
                                f"de {STALE_AFTER:.0f} s")
         if not self._c.caps().get(self.namespace, False):
             raise RuntimeError(self.reason)
@@ -51,8 +51,8 @@ class Gsa1Provider(_SidecarProvider):
     id = "gsa1"
     namespace = "gsa1"
     served = {"cpu.temp", "cpu.vrm_temp", "cpu.vcore"}
-    reason = ("requiere placa Gigabyte con la interfaz ACPI-WMI GSA1 "
-              "(clase GSA1_ACPIMethod)")
+    reason = ("needs a Gigabyte board with the GSA1 ACPI-WMI interface "
+              "(class GSA1_ACPIMethod)")
 
 
 class PdhProvider(_SidecarProvider):
@@ -67,7 +67,7 @@ class PdhProvider(_SidecarProvider):
     id = "pdh"
     namespace = "pdh"
     served = {"cpu.clock", "cpu.name", "cpu.name_short"}
-    reason = "no se pudo leer el contador PDH % Processor Performance"
+    reason = "could not read the PDH counter % Processor Performance"
 
     def read(self):
         muestra = super().read()
@@ -94,7 +94,7 @@ class SmbiosProvider(_SidecarProvider):
     id = "smbios"
     namespace = "smbios"
     served = {"mem.speed"}
-    reason = "no se pudo leer Win32_PhysicalMemory"
+    reason = "could not read Win32_PhysicalMemory"
 
 
 class _DinamicoPorInstancia(_SidecarProvider):
@@ -141,7 +141,7 @@ class CpuLhmProvider(_DinamicoPorInstancia):
 
     id = "cpulhm"
     namespace = "cpulhm"
-    reason = "LibreHardwareMonitor no expuso sensores de CPU"
+    reason = "LibreHardwareMonitor exposed no CPU sensors"
 
 
 class MoboProvider(_DinamicoPorInstancia):
@@ -155,7 +155,7 @@ class MoboProvider(_DinamicoPorInstancia):
 
     id = "mobo"
     namespace = "mobo"
-    reason = "no se pudo leer el SuperIO de la placa"
+    reason = "could not read the board SuperIO"
 
     def catalog(self) -> dict:
         cat = super().catalog()
@@ -163,7 +163,7 @@ class MoboProvider(_DinamicoPorInstancia):
         # METRICS, pero conviene que diga de donde viene.
         if "cpu.fan" in cat:
             base = cat["cpu.fan"]
-            cat["cpu.fan"] = MetricSpec(base.id, "Fan de CPU (conector 1)",
+            cat["cpu.fan"] = MetricSpec(base.id, "CPU fan (header 1)",
                                         base.unit, base.kind, base.min, base.max)
         return cat
 
@@ -182,8 +182,8 @@ class LhmProvider(_SidecarProvider):
     namespace = "lhm"
     _FIXED = {"gpu.name", "gpu.load", "gpu.temp", "gpu.hotspot",
               "gpu.clock", "gpu.power", "gpu.vram", "gpu.fan"}
-    reason = ("no se pudo abrir LibreHardwareMonitor "
-              "(falta LibreHardwareMonitorLib.dll o HidSharp.dll al lado)")
+    reason = ("could not open LibreHardwareMonitor "
+              "(LibreHardwareMonitorLib.dll or HidSharp.dll is missing beside it)")
 
     @property
     def served(self):

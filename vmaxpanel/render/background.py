@@ -93,8 +93,8 @@ class BackgroundSource:
             return self._scroll(t)
         if self.bg.name == "pulse":
             return self._pulse(t)
-        self._avisar(f"generador procedural {self.bg.name!r} desconocido; "
-                     f"se usa un color plano")
+        self._avisar(f"unknown procedural generator {self.bg.name!r}; falling back "
+                     f"to a flat colour")
         return self._solid()
 
     def _avisar(self, texto):
@@ -160,8 +160,8 @@ class BackgroundSource:
         if self._video is None:
             seguro = safe_asset_path(self.bg.src) if self.bg.src else None
             if seguro is None:
-                self._avisar(f"fondo 'video' con ruta invalida o fuera del "
-                             f"directorio de assets: {self.bg.src!r}")
+                self._avisar(f"'video' background with an invalid path, or outside the "
+                             f"assets directory: {self.bg.src!r}")
                 return self._solid()
             self._video = VideoSource(self.assets_dir / seguro, self.size,
                                       fps=self.bg.fps).start()
@@ -197,17 +197,17 @@ class BackgroundSource:
         self._cuadros = []
         seguro = safe_asset_path(self.bg.src) if self.bg.src else None
         if seguro is None:
-            self._avisar(f"fondo 'sequence' con ruta invalida o fuera del "
-                         f"directorio de assets: {self.bg.src!r}")
+            self._avisar(f"'sequence' background with an invalid path, or outside the "
+                         f"assets directory: {self.bg.src!r}")
             return self._cuadros
         try:
             self._cuadros = sorted(p for p in (self.assets_dir / seguro).iterdir()
                                    if p.suffix.lower() in EXT_CUADROS)
         except Exception as e:
-            self._avisar(f"no se pudo leer la secuencia {self.bg.src!r}: {e}")
+            self._avisar(f"could not read the sequence {self.bg.src!r}: {e}")
             return self._cuadros
         if not self._cuadros:
-            self._avisar(f"la secuencia {self.bg.src!r} no tiene ningun cuadro")
+            self._avisar(f"the sequence {self.bg.src!r} has no frames")
         return self._cuadros
 
     def _sequence(self, t) -> Image.Image:
@@ -228,7 +228,7 @@ class BackgroundSource:
             src.load()
             return self._fit(src.convert("RGB"))
         except Exception as e:
-            self._avisar(f"no se pudo abrir el cuadro {cuadros[idx].name!r}: {e}")
+            self._avisar(f"could not open frame {cuadros[idx].name!r}: {e}")
             return self._solid()
 
     # --- estaticos ---
@@ -288,7 +288,7 @@ class BackgroundSource:
 
     def _image(self):
         if not self.bg.src:
-            self.warnings.append("fondo de tipo 'image' sin src")
+            self.warnings.append("'image' background with no src")
             return self._solid()
         # safe_asset_path() ya corrio en schema.build(), pero BackgroundSource
         # tambien se instancia directo con un Background armado a mano (como
@@ -297,13 +297,13 @@ class BackgroundSource:
         safe_src = safe_asset_path(self.bg.src)
         if safe_src is None:
             self.warnings.append(
-                f"fondo de tipo 'image' con ruta invalida: {self.bg.src!r}")
+                f"'image' background with an invalid path: {self.bg.src!r}")
             return self._solid()
         path = self.assets_dir / safe_src
         try:
             src = Image.open(path).convert("RGB")
         except Exception as e:
-            self.warnings.append(f"no se pudo abrir el fondo {self.bg.src!r}: {e}")
+            self.warnings.append(f"could not open the background {self.bg.src!r}: {e}")
             return self._solid()
         return self._fit(src)
 

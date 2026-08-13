@@ -23,8 +23,8 @@ from PIL import Image
 LIB = Path(__file__).resolve().parent.parent / "lib"
 NOMBRES = ("ffmpeg.exe", "ffmpeg")
 
-COMO_INSTALAR = ("falta ffmpeg para los fondos de video: instalalo con "
-                 "'winget install Gyan.FFmpeg' o deja ffmpeg.exe en "
+COMO_INSTALAR = ("ffmpeg is missing and video backgrounds need it: install it with "
+                 "'winget install Gyan.FFmpeg', or drop ffmpeg.exe into "
                  "vmaxpanel/lib/")
 
 # Sin ventana de consola: la bandeja corre con pythonw y un ffmpeg lanzado normal
@@ -136,7 +136,7 @@ class VideoSource:
             self._avisar(COMO_INSTALAR)
             return
         except Exception as e:
-            self._avisar(f"no se pudo abrir el video: {e}")
+            self._avisar(f"could not open the video: {e}")
             return
         ancho, alto = self.size
         tamano = ancho * alto * 3
@@ -172,10 +172,10 @@ class VideoSource:
         """
         motivo = self._stderr()
         if not hubo_cuadros:
-            self._avisar(f"ffmpeg no pudo abrir {Path(self.ruta).name}"
+            self._avisar(f"ffmpeg could not open {Path(self.ruta).name}"
                          + (f": {motivo}" if motivo else ""))
             return
-        self._avisar(f"el video se corto (ffmpeg dejo de escribir)"
+        self._avisar(f"the video was cut short (ffmpeg stopped writing)"
                      + (f": {motivo}" if motivo else ""))
 
     def _stderr(self) -> str:

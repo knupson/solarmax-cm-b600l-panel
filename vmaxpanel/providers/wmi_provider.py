@@ -45,7 +45,7 @@ def _consultar_cim() -> dict:
                        capture_output=True, text=True, timeout=20,
                        creationflags=0x08000000)
     if p.returncode != 0:
-        raise OSError(f"CIM fallo: {(p.stderr or '').strip()[:120]}")
+        raise OSError(f"CIM failed: {(p.stderr or '').strip()[:120]}")
     datos = json.loads(p.stdout)
     # ConvertTo-Json colapsa una lista de un solo elemento en un objeto.
     vols = datos.get("volumenes") or []
@@ -79,7 +79,7 @@ class WmiProvider(Provider):
         try:
             self._actual()
         except Exception as e:
-            self.unavailable_reason = f"no se pudo consultar WMI: {e}"
+            self.unavailable_reason = f"could not query WMI: {e}"
             return False
         self.unavailable_reason = None
         return True
@@ -103,7 +103,7 @@ class WmiProvider(Provider):
         try:
             datos = self._actual()
         except Exception as e:
-            self.unavailable_reason = f"no se pudo consultar WMI: {e}"
+            self.unavailable_reason = f"could not query WMI: {e}"
             return {}
         out = {"sys.uptime": float(datos.get("uptime") or 0),
                "sys.procs": float(datos.get("procesos") or 0)}
@@ -154,5 +154,5 @@ class WmiProvider(Provider):
         g = {"sys.uptime": "Sistema", "sys.procs": "Sistema"}
         for v in self._volumenes():
             for medida in MEDIDAS:
-                g[f"vol.{v['letra']}.{medida}"] = f"Disco {self._nombre(v)}"
+                g[f"vol.{v['letra']}.{medida}"] = f"Disk {self._nombre(v)}"
         return g

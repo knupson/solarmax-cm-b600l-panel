@@ -197,8 +197,8 @@ class PanelLink:
         ports = [port] if port else find_panel_ports()
         if not ports:
             raise PanelNotFound(
-                f"no se encontro un panel HL-VMAX (VID_{VID:04X}/PID_{PID:04X}). "
-                f"Revisa que este conectado y que no lo tenga tomado LCD Control.")
+                f"no HL-VMAX panel found (VID_{VID:04X}/PID_{PID:04X}). Check that it "
+                f"is plugged in and that LCD Control has not taken it.")
         return cls(SerialTransport(ports[0]))
 
     def open(self) -> str:
@@ -210,9 +210,9 @@ class PanelLink:
         # forma de probarse con lo que hay en este modulo) tampoco es un SN
         # valido.
         if len(raw) != SN_LEN:
-            raise OSError(f"el panel devolvio un SN de tamano inesperado "
-                          f"({len(raw)} de {SN_LEN} bytes); puede estar "
-                          f"tomado por otro proceso")
+            raise OSError(f"the panel returned a serial of unexpected length "
+                          f"({len(raw)} of {SN_LEN} bytes); it may be held by "
+                          f"another process")
         sn = raw.decode("ascii", "replace")
         if not _sn_plausible(sn):
             # Lectura sucia (ver el reset de buffers en SerialTransport) o un
@@ -220,9 +220,9 @@ class PanelLink:
             # reconecta, y con los buffers limpios la proxima lectura es la buena.
             # Aceptarlo dejaria un SN basura en el estado y una geometria elegida al
             # azar, que es peor que un reintento.
-            raise OSError(f"el panel devolvio un SN que no parece un numero de serie "
-                          f"({sn!r}): puede ser una lectura sucia del puerto o otro "
-                          f"dispositivo")
+            raise OSError(f"the panel returned something that is not a serial number "
+                          f"({sn!r}): it may be a dirty read from the port, or "
+                          f"another device")
         self.serial_number = sn
         self.geometry = parse_geometry(self.serial_number)
         return self.serial_number
@@ -232,15 +232,15 @@ class PanelLink:
 
     def send_frame(self, jpeg: bytes):
         if self.serial_number is None:
-            raise RuntimeError("hay que llamar a open() antes de mandar frames")
+            raise RuntimeError("open() has to be called before sending frames")
         # len(jpeg) >= 5 evita que un input de 4 bytes pase el chequeo por
         # superposicion: jpeg[:3] y jpeg[-2:] comparten byte cuando el total
         # es mas corto que header+footer (3+2), asi que sin el minimo de
         # largo b"\xff\xd8\xff\xd9" (4 bytes, ningun byte de imagen real)
         # se aprobaria como si fuera un jpeg completo.
         if len(jpeg) < 5 or jpeg[:3] != b"\xff\xd8\xff" or jpeg[-2:] != b"\xff\xd9":
-            raise ValueError("el frame no es un JPEG completo "
-                             "(tiene que abrir en FFD8FF y cerrar en FFD9)")
+            raise ValueError("the frame is not a complete JPEG "
+                             "(it has to start with FFD8FF and end with FFD9)")
         self._t.write(jpeg)
 
     def close(self):

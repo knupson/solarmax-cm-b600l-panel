@@ -16,8 +16,8 @@ class MsrProvider(Provider):
 
     def probe(self) -> bool:
         self.unavailable_reason = (
-            "requiere acceso a MSR por driver ring0 (WinRing0), bloqueado por "
-            "la blocklist de drivers vulnerables de Windows")
+            "needs MSR access through a ring0 driver (WinRing0), blocked by "
+            "the Windows vulnerable-driver blocklist")
         return False
 
     def metrics(self) -> set[str]:

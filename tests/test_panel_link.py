@@ -95,7 +95,7 @@ def test_send_frame_before_open_raises():
 
 def test_short_serial_number_read_raises():
     link = PanelLink(FakeTransport(sn="corto"))
-    with pytest.raises(OSError, match="SN"):
+    with pytest.raises(OSError, match="serial"):
         link.open()
 
 
@@ -124,7 +124,7 @@ def test_a_serial_number_that_is_not_printable_is_rejected():
     basura = PanelLink(FakeTransport(sn=bytes(range(1, 27))))
     with pytest.raises(OSError) as e:
         basura.open()
-    assert "sn" in str(e.value).lower() or "serie" in str(e.value).lower()
+    assert "serial" in str(e.value).lower()
 
 
 def test_a_real_serial_number_still_opens():

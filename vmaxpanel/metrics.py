@@ -47,41 +47,41 @@ def _t(mid, label):
 
 
 METRICS: dict[str, MetricSpec] = {m.id: m for m in [
-    _t("cpu.name", "Modelo de CPU"),
-    _t("cpu.name_short", "Modelo de CPU (corto)"),
-    _n("cpu.load", "Carga de CPU", "%", 0.0, 100.0),
-    _n("cpu.temp", "Temperatura de CPU", "°C", 0.0, 110.0),
-    _n("cpu.clock", "Clock de CPU", "MHz", 0.0, 6000.0),
+    _t("cpu.name", "CPU model"),
+    _t("cpu.name_short", "CPU model (short)"),
+    _n("cpu.load", "CPU load", "%", 0.0, 100.0),
+    _n("cpu.temp", "CPU temperature", "°C", 0.0, 110.0),
+    _n("cpu.clock", "CPU clock", "MHz", 0.0, 6000.0),
     _n("cpu.vcore", "VCore", "V", 0.0, 2.0),
-    _n("cpu.vrm_temp", "Temperatura de VRM", "°C", 0.0, 120.0),
-    _n("cpu.power", "Consumo de CPU", "W", 0.0, 300.0),
-    _n("cpu.fan", "Fan de CPU", "RPM", 0.0, 3000.0),
-    _t("gpu.name", "Modelo de GPU"),
-    _n("gpu.load", "Carga de GPU", "%", 0.0, 100.0),
-    _n("gpu.temp", "Temperatura de GPU", "°C", 0.0, 110.0),
-    _n("gpu.hotspot", "Hot spot de GPU", "°C", 0.0, 130.0),
-    _n("gpu.clock", "Clock de GPU", "MHz", 0.0, 4000.0),
-    _n("gpu.power", "Consumo de GPU", "W", 0.0, 600.0),
-    _n("gpu.vram", "VRAM usada", "%", 0.0, 100.0),
-    _n("gpu.fan", "Fan de GPU", "RPM", 0.0, 4000.0),
-    _n("mem.load", "Uso de RAM", "%", 0.0, 100.0),
-    _n("mem.used", "RAM usada", "GiB", 0.0, 256.0),
+    _n("cpu.vrm_temp", "VRM temperature", "°C", 0.0, 120.0),
+    _n("cpu.power", "CPU power", "W", 0.0, 300.0),
+    _n("cpu.fan", "CPU fan", "RPM", 0.0, 3000.0),
+    _t("gpu.name", "GPU model"),
+    _n("gpu.load", "GPU load", "%", 0.0, 100.0),
+    _n("gpu.temp", "GPU temperature", "°C", 0.0, 110.0),
+    _n("gpu.hotspot", "GPU hot spot", "°C", 0.0, 130.0),
+    _n("gpu.clock", "GPU clock", "MHz", 0.0, 4000.0),
+    _n("gpu.power", "GPU power", "W", 0.0, 600.0),
+    _n("gpu.vram", "VRAM used", "%", 0.0, 100.0),
+    _n("gpu.fan", "GPU fan", "RPM", 0.0, 4000.0),
+    _n("mem.load", "RAM usage", "%", 0.0, 100.0),
+    _n("mem.used", "RAM used", "GiB", 0.0, 256.0),
     _n("mem.total", "RAM total", "GiB", 0.0, 256.0),
     # MT/s (megatransfers), no MHz: es la unidad que reporta SMBIOS y la que
     # usa el kit para venderse. DDR5-5600 son 5600 MT/s a 2800 MHz de reloj.
-    _n("mem.speed", "Velocidad de RAM", "MT/s", 0.0, 12000.0),
-    _n("net.down", "Bajada", "B/s", 0.0, None),
-    _n("net.up", "Subida", "B/s", 0.0, None),
-    _t("clock.time", "Hora"),
-    _t("clock.time_hms", "Hora con segundos"),
-    _t("clock.date", "Fecha"),
-    _n("sys.uptime", "Encendida hace", "s", 0.0, None),
-    _n("sys.procs", "Procesos", "", 0.0, None),
+    _n("mem.speed", "RAM speed", "MT/s", 0.0, 12000.0),
+    _n("net.down", "Download", "B/s", 0.0, None),
+    _n("net.up", "Upload", "B/s", 0.0, None),
+    _t("clock.time", "Time"),
+    _t("clock.time_hms", "Time with seconds"),
+    _t("clock.date", "Date"),
+    _n("sys.uptime", "Uptime", "s", 0.0, None),
+    _n("sys.procs", "Processes", "", 0.0, None),
 ]}
 
 _DISK_RE = re.compile(r"^disk\.temp\.(\d+)$")
 
-DISK_TEMP_SPEC = _n("disk.temp.N", "Temperatura de disco", "°C", 0.0, 100.0)
+DISK_TEMP_SPEC = _n("disk.temp.N", "Disk temperature", "°C", 0.0, 100.0)
 
 
 def slug(nombre) -> str:
@@ -111,19 +111,19 @@ def slug(nombre) -> str:
 # la refina con el nombre real del dispositivo ("D: JUEGOS -- libre") en su
 # catalogo, que es de donde la saca el editor.
 _MEDIDAS_VOL = {
-    "free": ("libre", "GiB", 0.0, None),
-    "used": ("usado", "GiB", 0.0, None),
+    "free": ("free", "GiB", 0.0, None),
+    "used": ("used", "GiB", 0.0, None),
     "total": ("total", "GiB", 0.0, None),
-    "load": ("uso", "%", 0.0, 100.0),
+    "load": ("usage", "%", 0.0, 100.0),
 }
 _MEDIDAS_CORE = {
-    "temp": ("temperatura", "°C", 0.0, 110.0),
-    "clock": ("frecuencia", "MHz", 0.0, 6000.0),
-    "load": ("carga", "%", 0.0, 100.0),
+    "temp": ("temperature", "°C", 0.0, 110.0),
+    "clock": ("frequency", "MHz", 0.0, 6000.0),
+    "load": ("load", "%", 0.0, 100.0),
 }
 _MEDIDAS_NET = {
-    "down": ("bajada", "B/s", 0.0, None),
-    "up": ("subida", "B/s", 0.0, None),
+    "down": ("download", "B/s", 0.0, None),
+    "up": ("upload", "B/s", 0.0, None),
 }
 
 _FAMILIAS = [
@@ -131,12 +131,12 @@ _FAMILIAS = [
      lambda m: (f"{m.group(1)}: — {_MEDIDAS_VOL[m.group(2)][0]}",
                 *_MEDIDAS_VOL[m.group(2)][1:])),
     (re.compile(r"^core\.(\d+)\.(temp|clock|load)$"),
-     lambda m: (f"Núcleo {m.group(1)} — {_MEDIDAS_CORE[m.group(2)][0]}",
+     lambda m: (f"Core {m.group(1)} — {_MEDIDAS_CORE[m.group(2)][0]}",
                 *_MEDIDAS_CORE[m.group(2)][1:])),
     (re.compile(r"^fan\.(\d+)\.rpm$"),
      lambda m: (f"Fan {m.group(1)}", "RPM", 0.0, 3000.0)),
     (re.compile(r"^mb\.temp\.(\d+)$"),
-     lambda m: (f"Placa — temperatura {m.group(1)}", "°C", 0.0, 100.0)),
+     lambda m: (f"Motherboard — temperature {m.group(1)}", "°C", 0.0, 100.0)),
     (re.compile(r"^net\.([a-z0-9][a-z0-9-]*)\.(down|up)$"),
      lambda m: (f"{m.group(1)} — {_MEDIDAS_NET[m.group(2)][0]}",
                 *_MEDIDAS_NET[m.group(2)][1:])),
@@ -246,7 +246,7 @@ def spec_for(mid) -> MetricSpec | None:
     m = _DISK_RE.match(mid)
     if m:
         # La etiqueta LLEVA el indice. Sin eso los tres discos comparten
-        # "Temperatura de disco" y el selector del editor no los puede
+        # "Disk temperature" y el selector del editor no los puede
         # distinguir: elegir uno escribe otro.
         return MetricSpec(mid, f"Disco {m.group(1)} — temperatura",
                           DISK_TEMP_SPEC.unit, "number",

@@ -22,8 +22,8 @@ def build_registry(sidecar_script=SIDECAR, warmup=25.0):
     """(registry, client). El client puede ser None: el caller cierra los dos."""
     client = SidecarClient(sidecar_script).start()
     if not client.wait_ready(warmup):
-        print("aviso: el sidecar no entrego datos; los sensores de hardware "
-              "van a quedar no disponibles", file=sys.stderr)
+        print("warning: the sidecar delivered no data; hardware sensors will "
+              "be unavailable", file=sys.stderr)
     return Registry([PsutilProvider(), Gsa1Provider(client), PdhProvider(client),
                      LhmProvider(client), SmbiosProvider(client),
                      CpuLhmProvider(client), MoboProvider(client), WmiProvider(),

@@ -113,7 +113,7 @@ def test_image_path_traversal_degrades_safely_instead_of_escaping(tmp_path):
     im = s.frame()
     assert im.size == (64, 200)
     assert im.getpixel((0, 0)) != (9, 9, 9)            # nunca se abrio el archivo de afuera
-    assert any("invalida" in w for w in s.warnings)
+    assert any("invalid" in w for w in s.warnings)
 
 
 def test_video_without_ffmpeg_degrades_and_says_how_to_fix_it(monkeypatch):

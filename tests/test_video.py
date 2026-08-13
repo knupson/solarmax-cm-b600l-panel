@@ -214,7 +214,7 @@ def test_a_file_ffmpeg_cannot_open_says_so_instead_of_that_it_ended(tmp_path):
     fuente.close()
     assert fuente.warnings, "no aviso nada"
     aviso = " ".join(fuente.warnings)
-    assert "no pudo abrir" in aviso
+    assert "could not open" in aviso
     assert "no-existe.mp4" in aviso
     assert "termino" not in aviso
 

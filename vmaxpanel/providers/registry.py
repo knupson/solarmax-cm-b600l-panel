@@ -9,7 +9,7 @@ from .base import Provider
 PROVIDER_PRIORITY = ["gsa1", "cpulhm", "mobo", "msr", "pdh", "lhm",
                      "smbios", "wmi", "psutil"]
 
-_NO_PROVIDER = "ningun provider de esta maquina sirve esta metrica"
+_NO_PROVIDER = "no provider on this machine serves this metric"
 
 
 class Registry:
@@ -22,7 +22,7 @@ class Registry:
             for mid in p.metrics():
                 if not is_metric(mid):
                     raise ValueError(
-                        f"provider {p.id!r} declara una metrica desconocida: {mid!r}")
+                        f"provider {p.id!r} declares an unknown metric: {mid!r}")
 
         self._providers = sorted(providers, key=self._rank)
         self._available = []
@@ -33,7 +33,7 @@ class Registry:
             try:
                 ok = p.probe()
             except Exception as e:                      # un probe roto no tumba el arranque
-                ok, p.unavailable_reason = False, f"fallo al detectar: {e}"
+                ok, p.unavailable_reason = False, f"detection failed: {e}"
             if ok:
                 self._available.append(p)
             else:
