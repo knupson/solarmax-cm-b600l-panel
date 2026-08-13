@@ -1,15 +1,15 @@
-"""Dibujo de cada tipo de widget.
+"""Drawing each widget type.
 
-El formateo del valor (template, humanize, reglas de color) vive en
-text_format.py: no depende de PIL ni de fuentes y se lee sin nada de dibujo. Aca
-queda solo lo que pinta pixeles.
+Formatting the value (template, humanize, colour rules) lives in text_format.py:
+it depends on neither PIL nor fonts and reads without any drawing at all. What is
+left here is only what paints pixels.
 
-Todo recibe `scale` y nadie asume la geometria del panel: un layout disenado
-para 320x1480 se dibuja igual en otro tamano.
+Everything receives `scale` and nothing assumes the panel geometry: a layout
+designed for 320x1480 draws the same at another size.
 
-Un valor ausente se dibuja como "--". UNAVAILABLE (nadie sirve la metrica) y
-None (el provider no trajo dato esta vuelta) se ven igual en el panel; el
-editor los distingue consultando el registry.
+An absent value is drawn as "--". UNAVAILABLE (nobody serves the metric) and None
+(the provider brought no data this round) look the same on the panel; the editor
+tells them apart by asking the registry.
 """
 import math
 from dataclasses import dataclass, field
@@ -20,20 +20,21 @@ from PIL import Image, ImageDraw
 from ..layout import model
 from ..layout.schema import safe_asset_path
 from ..metrics import spec_for
-# Reexportados: el formateo de texto vive en text_format.py (no depende de PIL),
-# pero quien importaba widgets.format_value o widgets.human_rate sigue andando.
+# Re-exported: text formatting lives in text_format.py (which does not depend on
+# PIL), but anybody importing widgets.format_value or widgets.human_rate keeps
+# working.
 from .text_format import (DASH, HUMANIZERS, _dashed, _Dash, _num,  # noqa: F401
                           color_for, format_value, human_bytes,
                           human_duration, human_rate)
 
 @dataclass
 class DrawCtx:
-    """Lo que un dibujo necesita ademas del widget y su valor.
+    """What a draw needs besides the widget and its value.
 
-    `fonts` es un render.fonts.FontResolver y `history` es
-    {metric_id: [muestras]} como lo devuelve renderer.History.series(); estan
-    anotados flojo (object/dict) porque anotarlos de verdad crearia un import
-    circular con renderer.py, que importa este modulo.
+    `fonts` is a render.fonts.FontResolver and `history` is
+    {metric_id: [samples]} as renderer.History.series() returns it; they are
+    loosely annotated (object/dict) because annotating them properly would create a
+    circular import with renderer.py, which imports this module.
     """
 
     fonts: object                  # render.fonts.FontResolver
@@ -55,21 +56,21 @@ def _s(ctx, v):
 
 
 def _size(ctx, v):
-    """Escala un ancho/alto/radio y nunca deja pasar un valor negativo. El
-    validador de layouts solo exige que w/h/r/radius sean enteros, no que
-    sean positivos; una caja con la esquina invertida (x1 < x0) hace que
-    Pillow tire ValueError en vez de simplemente no dibujar nada.
+    """Scales a width/height/radius and never lets a negative value through. The
+    layout validator only requires that w/h/r/radius be integers, not that they be
+    positive; a box with an inverted corner (x1 < x0) makes Pillow raise ValueError
+    instead of simply drawing nothing.
     """
     return max(0, _s(ctx, v))
 
 
 def _span(ctx, v):
-    """Como _size(), pero un lado positivo nunca se escala hasta desaparecer.
+    """Like _size(), but a positive side never scales away to nothing.
 
-    A escala < 1 (un panel mas chico que designed_for) un separador de h=1
-    redondea a 0 px y la linea se pierde sin que nada avise: el layout se ve
-    distinto y no hay error en ningun lado. Un lado <= 0 sigue dando 0, que
-    es como el llamador sabe que no hay nada que dibujar.
+    At a scale < 1 (a panel smaller than designed_for) a separator of h=1 rounds to
+    0 px and the line is lost with nothing warning about it: the layout looks
+    different and there is no error anywhere. A side <= 0 still gives 0, which is
+    how the caller knows there is nothing to draw.
     """
     if v <= 0:
         return 0
@@ -93,18 +94,17 @@ def _draw_label(img, g, w, value, ctx):
 
 
 def _range(w):
-    """Rango efectivo (lo, hi) de un widget numerico.
+    """The effective (lo, hi) range of a numeric widget.
 
-    Si el widget no fija min/max, se completa con el spec de la metrica.
-    Si ni el widget ni el spec fijan un extremo -- p.ej. net.down, cuyo
-    spec declara max=None porque no tiene techo natural -- ese extremo
-    queda en None: es un limite explicitamente abierto, no "no se
-    especifico nada". Solo cuando la metrica no tiene spec conocido (o ya
-    quedaron ambos extremos resueltos) se aplica el ultimo recurso 0..100.
-    Inventarle un 100.0 a un extremo abierto haria que cualquier lectura
-    real (miles de B/s en una bajada de red) clampeara siempre a full,
-    mintiendo igual que el %CPU saturado de LCD Control que este proyecto
-    ya dejo documentado.
+    If the widget does not set min/max, it is filled in from the metric spec. If
+    neither the widget nor the spec sets an end -- net.down, for instance, whose
+    spec declares max=None because it has no natural ceiling -- that end stays
+    None: it is an explicitly open bound, not "nothing was specified". Only when
+    the metric has no known spec (or both ends are already resolved) does the
+    0..100 last resort apply. Inventing a 100.0 for an open end would make any real
+    reading (thousands of B/s on a network download) clamp to full every time,
+    lying exactly the way LCD Control's saturated CPU% did, which is the thing this
+    project was written to stop doing.
     """
     lo, hi = w.min, w.max
     spec = spec_for(w.metric) if (lo is None or hi is None) else None
@@ -159,24 +159,24 @@ def _draw_graph(img, g, w, value, ctx):
         g.rectangle([x, y, x + ww, y + hh], fill=w.track)
     series = list(ctx.history.get(w.metric) or [])[-w.samples:]
     if not series:
-        # Sin historial todavia -- el primer cuadro de la corrida, y el unico
-        # caso de --save, que dibuja uno y sale -- pero el valor de ahora ya
-        # llego como argumento. Usarlo es lo mismo que tener una muestra.
+        # No history yet -- the first frame of a run, and the only case for --save,
+        # which draws one and exits -- but the current value already arrived as an
+        # argument. Using it is the same as having one sample.
         actual = _num(value)
         if actual is None:
             return
         series = [actual]
     if len(series) == 1:
-        # Una sola muestra es el caso normal del primer cuadro de cualquier
-        # corrida, y de --save, que dibuja uno solo y sale. Antes caia en el
-        # mismo return que "no hay historial" y quedaba una caja vacia, que se
-        # lee como un widget roto. Se duplica para que salga una linea plana a
-        # esa altura: es la misma convencion que ya usa el resto de la funcion,
-        # que estira las muestras que haya a lo ancho de la caja.
+        # One sample is the normal case for the first frame of any run, and for
+        # --save, which draws one and exits. It used to fall into the same return as
+        # "no history" and left an empty box, which reads as a broken widget. It is
+        # duplicated so a flat line comes out at that height: the same convention
+        # the rest of this function already uses, stretching whatever samples exist
+        # across the width of the box.
         series = series * 2
     lo, hi = _range(w)
     if lo is None or hi is None or hi <= lo:
-        return                          # rango sin resolver: no hay como escalar
+        return                          # unresolved range: nothing to scale against
     span = hi - lo
     step = ww / (len(series) - 1)
     pts = []
@@ -195,7 +195,7 @@ def _draw_image(img, g, w, value, ctx):
     try:
         asset = Image.open(path).convert("RGBA")
     except Exception:
-        return                          # asset faltante o corrupto: se omite el widget
+        return                          # missing or corrupt asset: the widget is skipped
     dims = (max(1, _s(ctx, w.w)), max(1, _s(ctx, w.h)))
     resized = asset.resize(dims, Image.LANCZOS)
     img.paste(resized, (_s(ctx, w.x), _s(ctx, w.y)), resized)
@@ -204,27 +204,27 @@ def _draw_image(img, g, w, value, ctx):
 def _draw_rect(img, g, w, value, ctx):
     """Divisores y marcos.
 
-    `w`/`h` son el tamano real en pixeles, de ahi el `- 1` en la esquina
-    opuesta: la caja de Pillow es inclusive, asi que [x, y, x+w, y+h]
+    `w`/`h` are the real size in pixels, hence the `- 1` on the opposite corner:
+    Pillow's box is inclusive, so [x, y, x+w, y+h]
     dibujaria un pixel de mas por lado. bar/graph tienen esa caja de mas
-    desde fase 1 y se quedan como estan -- corregirlos moveria el perfil y
-    los goldens 1 px sin ganancia --, pero un separador de h=1 no puede
-    darse el lujo: se veria al doble del grosor pedido.
+    from the start and are left as they are -- fixing them would move the profiles
+    and the goldens by 1 px for no gain -- but a separator of h=1 cannot afford
+    that: it would appear at twice the thickness asked for.
     """
     ww, hh = _span(ctx, w.w), _span(ctx, w.h)
     if ww == 0 or hh == 0:
         return
     x, y = _s(ctx, w.x), _s(ctx, w.y)
     box = [x, y, x + ww - 1, y + hh - 1]
-    # Pillow rechaza un radio mayor que la mitad del lado menor y el
-    # validador solo exige que radius sea entero, asi que se clampea aca.
+    # Pillow rejects a radius larger than half the shorter side, and the validator
+    # only requires that radius be an integer, so it is clamped here.
     radius = min(_size(ctx, w.radius), min(ww, hh) // 2)
     if w.stroke:
         outline, width = w.stroke, max(1, _s(ctx, w.stroke_width))
     else:
         outline, width = None, 0
     if outline is None and not w.fill:
-        return                              # nada que dibujar; validate() ya lo rechaza
+        return                              # nothing to draw; validate() already rejects it
     if radius > 0:
         g.rounded_rectangle(box, radius=radius, fill=w.fill,
                             outline=outline, width=width)
