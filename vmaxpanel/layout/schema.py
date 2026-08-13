@@ -1,11 +1,11 @@
-"""Validador propio de layouts.
+"""Our own layout validator.
 
-Devuelve la lista completa de errores en castellano llano, para que el editor
-los muestre todos juntos. No usa jsonschema: los mensajes quedan atados a
-nuestro modelo y es una dependencia menos para distribuir.
+It returns the complete list of errors in plain language, so the editor can show
+them all at once. It does not use jsonschema: the messages stay tied to our own
+model, and it is one less dependency to ship.
 
-Los layouts se comparten entre usuarios, asi que un layout NO puede ejecutar
-nada: las reglas de color son comparadores parseados a mano, no expresiones.
+Layouts get shared between users, so a layout must NOT be able to execute
+anything: the colour rules are hand-parsed comparisons, not expressions.
 """
 import posixpath
 import re
@@ -18,7 +18,7 @@ from .model import (ArcWidget, Background, BarWidget, Font, GraphWidget,
 
 SUPPORTED_VERSION = 1
 
-# Refresco del panel. Ver el spike de fase 2.
+# The panel refresh rate. See the phase 2 throughput spike.
 MAX_FPS = 60
 
 WIDGET_TYPES = {
@@ -33,27 +33,27 @@ FITS = {"cover", "contain", "stretch"}
 ROTATIONS = {0, 90, 180, 270}
 HUMANIZE_MODES = {"none", "rate", "bytes", "duration"}
 
-# Derivados del modelo, no escritos a mano: agregarle un campo a PanelCfg o a
-# Font hacia que el validador empezara a rechazar layouts validos hasta que
-# alguien se acordara de actualizar el set. El chequeo de claves de widget ya se
-# derivaba de __dataclass_fields__; esto lo iguala.
+# Derived from the model, not written by hand: adding a field to PanelCfg or Font
+# used to make the validator reject valid layouts until somebody remembered to
+# update the set. The widget key check already derived from __dataclass_fields__;
+# this brings the rest in line.
 PANEL_KEYS = set(PanelCfg.__dataclass_fields__)
 FONT_KEYS = set(Font.__dataclass_fields__)
 
-# claves permitidas por tipo de background. "color" se admite en solid (relleno)
-# y en image/sequence/video (relleno de letterbox); en gradient no la lee el
-# modelo pero build() la acepta sin error, asi que la dejamos pasar en vez de
-# arriesgar un falso rechazo.
+# Allowed keys per background type. "color" is accepted on solid (the fill) and on
+# image/sequence/video (the letterbox fill); on gradient the model does not read it
+# but build() accepts it without error, so it is let through rather than risking a
+# false rejection.
 BACKGROUND_KEYS = {
     "solid": {"type", "color"},
     "gradient": {"type", "stops", "angle", "color"},
     "image": {"type", "src", "fit", "color"},
-    # sequence lleva su propio fps, independiente del panel.fps: una animacion
-    # de 12 cuadros por segundo se ve igual de fluida con el panel a 30 o a 60.
+    # sequence carries its own fps, independent of panel.fps: a 12-frames-per-second
+    # animation looks equally smooth with the panel at 30 or at 60.
     "sequence": {"type", "src", "fit", "color", "fps"},
     "video": {"type", "src", "fit", "color", "fps"},
-    # procedural parte del gradiente, asi que comparte stops/angle; name elige
-    # el generador y speed/period lo parametrizan.
+    # procedural starts from the gradient, so it shares stops/angle; name picks the
+    # generator and speed/period parameterise it.
     "procedural": {"type", "name", "stops", "angle", "color", "speed", "period"},
 }
 PROCEDURALES = {"scroll", "pulse"}
@@ -61,7 +61,7 @@ PROCEDURALES = {"scroll", "pulse"}
 _COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _RULE_RE = re.compile(r"^\s*(>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)\s*$")
 
-# campos obligatorios ademas de id/type/x/y
+# Required fields beyond id/type/x/y
 REQUIRED = {
     "text": ["metric", "font", "color", "format"],
     "label": ["text", "font", "color"],
@@ -74,16 +74,15 @@ REQUIRED = {
 
 
 def safe_asset_path(src) -> str | None:
-    """Normaliza una ruta de asset y la rechaza si se escapa del directorio.
+    """Normalises an asset path and rejects it if it escapes the directory.
 
-    El servicio corre como SYSTEM: sin esto, un '..\\..\\' le hace leer
-    cualquier archivo de la maquina.
+    The engine runs elevated: without this, a '..\\..\\' makes it read any file
+    on the machine.
 
-    Las mismas comprobaciones se aplican dos veces: sobre la entrada cruda y
-    sobre el resultado normalizado. Un '..' de mas puede consumirse contra un
-    segmento real anterior (p.ej. 'a/../C:/Windows/win.ini') y la letra de
-    unidad recien queda expuesta despues de normalizar; revisar solo la
-    entrada cruda deja pasar eso.
+    The same checks run twice: on the raw input and on the normalised result. A
+    stray '..' can be consumed against a real preceding segment (e.g.
+    'a/../C:/Windows/win.ini') and the drive letter is only exposed after
+    normalising; checking the raw input alone lets that through.
     """
     if not isinstance(src, str) or not src.strip():
         return None
@@ -98,31 +97,30 @@ def safe_asset_path(src) -> str | None:
     return norm
 
 
-# Dispositivos de Windows: `open("CON")` abre la consola y `open("COM1")` el
-# puerto serie. No es un escape del directorio de assets -- por eso no lo
-# atrapaban los chequeos de ruta -- pero una lectura puede quedarse esperando
-# para siempre y colgar el hilo de render. Con las secuencias de fondo esa ruta
-# se abre de verdad, asi que dejo de ser un problema teorico.
+# Windows devices: `open("CON")` opens the console and `open("COM1")` the serial
+# port. This is not an escape from the assets directory -- which is why the path
+# checks did not catch it -- but a read can block forever and hang the render
+# thread. With sequence backgrounds that path is really opened, so it stopped
+# being a theoretical problem.
 _DISPOSITIVOS = {"con", "prn", "aux", "nul", "conin$", "conout$"}
 _DISPOSITIVOS |= {f"com{i}" for i in range(1, 10)}
 _DISPOSITIVOS |= {f"lpt{i}" for i in range(1, 10)}
 
 
 def _es_dispositivo(segmento: str) -> bool:
-    """True si el segmento nombra un dispositivo reservado.
+    """True if the segment names a reserved device.
 
-    Se compara el nombre SIN extension: "NUL.jpg" tambien es el dispositivo nulo
-    para el subsistema de archivos de Windows. Un prefijo no alcanza --
-    "CONSOLAS.png" es un archivo legitimo -- asi que la comparacion es exacta
-    sobre el nombre base.
+    The name is compared WITHOUT its extension: "NUL.jpg" is also the null device
+    to the Windows file subsystem. A prefix is not enough -- "CONSOLAS.png" is a
+    legitimate file -- so the comparison is exact on the base name.
     """
     base = segmento.split(".", 1)[0].strip().lower()
     return base in _DISPOSITIVOS
 
 
 def _is_unsafe_normalized_path(s: str) -> bool:
-    """True si `s` es absoluta, UNC, de unidad de Windows ('C:foo'), o si algun
-    segmento nombra un dispositivo reservado."""
+    """True if `s` is absolute, UNC, a Windows drive path ('C:foo'), or if any
+    segment names a reserved device."""
     if (s.startswith("/") or s.startswith("//")
             or re.match(r"^[A-Za-z]:", s) is not None or ":" in s):
         return True
@@ -138,11 +136,11 @@ def _is_num(v):
 
 
 def _check_fallbacks(errs, alias, v):
-    """`fallbacks` tiene que ser una lista de nombres de familia usables.
+    """`fallbacks` has to be a list of usable family names.
 
-    Se valida en vez de aceptar cualquier cosa porque el error se manifiesta lejos:
-    un fallback vacio o numerico no rompe nada al cargar, y recien se nota como "la
-    fuente no se reemplazo" en la maquina de otra persona.
+    It is validated rather than accepted as-is because the error shows up far from
+    its cause: an empty or numeric fallback breaks nothing at load time, and is only
+    noticed as "the font was not substituted" on somebody else's machine.
     """
     if v is None:
         return
@@ -169,11 +167,10 @@ def _check_format(errs, where, v):
         errs.append(f"{where}: invalid format {v!r}: {e}")
         return
     fields = [f for _, f, _, _ in parsed if f is not None]
-    # Formatter().parse() solo reporta el campo de nivel superior: un campo
-    # anidado dentro del format_spec (p.ej. "{0!r:>{1}}") pasaria como "un
-    # solo campo" sin que se note que en realidad referencia un segundo
-    # argumento posicional que .format(valor) no tiene y que revienta en
-    # render, no en validate().
+    # Formatter().parse() only reports the top-level field: a field nested inside
+    # the format_spec (e.g. "{0!r:>{1}}") would pass as "exactly one field" while
+    # actually referencing a second positional argument that .format(value) does
+    # not have, and that blows up in render, not in validate().
     if any(spec and "{" in spec for _, _, spec, _ in parsed):
         errs.append(f"{where}: format {v!r} cannot nest another replacement "
                     f"field inside the format_spec")
@@ -195,8 +192,8 @@ def _parse_rule(raw):
 
 
 def _errores_de_stops(stops) -> list[str]:
-    """Valida las paradas de un degradado. Compartido entre 'gradient' y
-    'procedural', que parte del mismo gradiente."""
+    """Validates a gradient's stops. Shared between 'gradient' and 'procedural',
+    which starts from the same gradient."""
     errs = []
     for i, s in enumerate(stops):
         if not isinstance(s, dict) or not _is_num(s.get("at")):
@@ -245,15 +242,14 @@ def validate(raw) -> list[str]:
         if not _is_int(b) or not 0 <= b <= 100:
             errs.append(f"panel.brightness: {b!r} out of 0..100")
         f = p.get("fps", 1.0)
-        # 60 es el refresco del panel. Por encima, el panel descarta los
-        # frames -- no aplica contrapresion, acepta 227 fps de escritura
-        # sostenida sin frenar al host -- asi que serian frames renderizados,
-        # comprimidos y escritos para nada. Costo medido contra el panel real:
-        # 0,6% de un nucleo a 1 fps, 17% a 30, 37% a 60.
-        # Fraccionario a proposito: 0.5 es un cuadro cada dos segundos, que en un
-        # panel de datos es una cadencia legitima y la mas barata de todas. La
-        # bandeja solo ofrece 1/10/30/60, pero el perfil no tiene por que limitarse
-        # al menu.
+        # 60 is the panel's refresh rate. Above it the panel discards frames -- it
+        # applies no backpressure, and accepts 227 fps of sustained writes without
+        # slowing the host down -- so those would be frames rendered, compressed and
+        # written for nothing. Measured against the real panel: 0.6% of one core at
+        # 1 fps, 17% at 30, 37% at 60.
+        # Fractional on purpose: 0.5 is one frame every two seconds, which on a data
+        # panel is a legitimate cadence and the cheapest of all. The tray only offers
+        # 1/10/30/60, but the profile has no reason to be limited to that menu.
         if not _is_num(f) or not 0.1 <= f <= MAX_FPS:
             errs.append(f"panel.fps: {f!r} out of 0.1..{MAX_FPS} "
                         f"(the panel refreshes at {MAX_FPS} Hz)")
@@ -288,12 +284,12 @@ def validate(raw) -> list[str]:
             for k in bg:
                 if k not in allowed_bg_keys:
                     errs.append(f"background: unknown key {k!r} for type={t!r}")
-        # `color` se valida en CUALQUIER tipo que la admita, no solo en solid.
-        # En gradient/image/sequence es el relleno de letterbox y antes se
-        # aceptaba sin chequear: un valor roto ahi no fallaba, parse_hex lo
-        # degradaba en silencio a un gris. Con el editor ofreciendo el campo eso
-        # es un valor equivocado que nadie reporta. No hay ningun tipo de fondo
-        # donde algo que no sea #RRGGBB signifique algo.
+        # `color` is validated on ANY type that accepts it, not just on solid. On
+        # gradient/image/sequence it is the letterbox fill, and it used to be taken
+        # unchecked: a broken value there did not fail, parse_hex silently degraded
+        # it to a grey. With the editor offering the field, that is a wrong value
+        # nobody reports. There is no background type where something other than
+        # #RRGGBB means anything.
         if "color" in bg:
             _check_color(errs, "background", bg["color"])
         if t == "solid":
@@ -309,8 +305,8 @@ def validate(raw) -> list[str]:
                 errs.append(f"background.name: {bg.get('name')!r} is not a known "
                             f"generator, expected one of "
                             f"{sorted(PROCEDURALES)}")
-            # Los dos generadores parten del gradiente: sin paradas no hay nada
-            # que animar y quedaria un color plano en silencio.
+            # Both generators start from the gradient: with no stops there is
+            # nothing to animate and it would silently be a flat colour.
             stops = bg.get("stops")
             if not isinstance(stops, list) or len(stops) < 2:
                 errs.append("background.stops: at least two stops are expected")
@@ -320,8 +316,8 @@ def validate(raw) -> list[str]:
                 if clave not in bg:
                     continue
                 v = bg[clave]
-                # speed 0 es legitimo (un gradiente quieto); period 0 no, seria
-                # una division por cero en la fase.
+                # speed 0 is legitimate (a still gradient); period 0 is not, it
+                # would be a division by zero in the phase.
                 minimo = 0 if clave == "speed" else None
                 if not _is_num(v) or v < 0 or (minimo is None and v <= 0):
                     errs.append(f"background.{clave}: {v!r} is invalid, expected a number "
@@ -362,9 +358,9 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
     else:
         seen.add(wid)
 
-    # x/y se chequean ANTES del early return por tipo desconocido: si no, un
-    # widget con el tipo mal Y las coordenadas mal solo reportaba una de las dos
-    # cosas, y el editor muestra todos los errores juntos.
+    # x/y are checked BEFORE the early return on an unknown type: otherwise a widget
+    # with both a bad type AND bad coordinates only reported one of the two, and the
+    # editor shows every error at once.
     for k in ("x", "y"):
         if not _is_int(w.get(k)):
             errs.append(f"{where}: {k} must be an integer")
@@ -388,9 +384,9 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
         errs.append(f"{where}: unknown metric {w['metric']!r}")
 
     if "font" in REQUIRED[t] and "font" in w:
-        # El isinstance() original salteaba el chequeo cuando el alias no era
-        # texto, asi que un {"font": 3} pasaba entero y recien reventaba en
-        # ctx.layout.fonts[w.font] dentro del render.
+        # The original isinstance() skipped the check when the alias was not a
+        # string, so a {"font": 3} passed straight through and only blew up in
+        # ctx.layout.fonts[w.font] inside the render.
         if not isinstance(w["font"], str):
             errs.append(f"{where}: font must be the name of an alias in the fonts "
                         f"table, it is {w['font']!r}")
@@ -414,10 +410,10 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
                         f"expected one of {sorted(HUMANIZE_MODES)}")
         elif (humanize_mode != "none" and isinstance(w.get("format"), str)
               and w["format"] not in ("{}", "{0}")):
-            # format_value() aplica el humanizador y ni siquiera mira
-            # w.format en ese caso: un sufijo como "{} Mbps" quedaria
-            # escrito en el layout pero nunca se ve en el panel, sin ningun
-            # aviso de por que. Se rechaza en vez de ignorarlo en silencio.
+            # format_value() applies the humaniser and does not even look at
+            # w.format in that case: a suffix like "{} Mbps" would sit in the
+            # layout but never appear on the panel, with no hint as to why. It is
+            # rejected rather than silently ignored.
             errs.append(f"{where}: format {w['format']!r} has no effect with "
                         f"humanize={humanize_mode!r}; use '{{}}' or "
                         f"drop humanize")
@@ -443,15 +439,15 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
         if k in w and not _is_int(w[k]):
             errs.append(f"{where}: {k} must be an integer")
 
-    # Todo lo que sigue eran claves permitidas sin ningun chequeo de tipo: el
-    # layout validaba limpio y el TypeError aparecia adentro de
-    # Renderer.frame(), donde Engine.run() -- que captura solo (OSError,
-    # PanelNotFound) -- no lo ataja. Con hot-reload el layout malo ademas
-    # reemplaza al bueno, asi que no queda ninguno al que volver.
-    # min/max admiten null: su default en el modelo ya es None y significa
-    # "extremo abierto, completalo con el spec de la metrica". start_angle y
-    # sweep no: su default es un numero, asi que un null llega tal cual al
-    # render y revienta en w.start_angle + w.sweep.
+    # Everything below used to be an allowed key with no type check at all: the
+    # layout validated clean and the TypeError surfaced inside Renderer.frame(),
+    # where Engine.run() -- which only catches (OSError, PanelNotFound) -- does not
+    # catch it. With hot reload the bad layout also replaces the good one, so there
+    # is none left to fall back to.
+    # min/max accept null: their default in the model is already None and means
+    # "open end, fill it in from the metric spec". start_angle and sweep do not:
+    # their default is a number, so a null reaches the render as-is and blows up in
+    # w.start_angle + w.sweep.
     for k in ("min", "max"):
         if k in w and w[k] is not None and not _is_num(w[k]):
             errs.append(f"{where}: {k} must be a number, it is {w[k]!r}")
@@ -462,11 +458,11 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
     lo, hi = w.get("min"), w.get("max")
     if _is_num(lo) and _is_num(hi) and hi <= lo:
         errs.append(f"{where}: max ({hi}) has to be greater than min ({lo}); "
-                    f"si no, el widget queda vacio para cualquier valor")
+                    f"otherwise the widget is empty for every value")
 
     if "samples" in w and _is_int(w["samples"]) and w["samples"] < 1:
-        # series[-0:] es series[0:]: un 0 grafica TODO el historial en vez de
-        # nada, y un negativo corta por el frente de la serie.
+        # series[-0:] is series[0:]: a 0 plots the WHOLE history instead of none,
+        # and a negative slices from the front of the series.
         errs.append(f"{where}: samples must be >= 1, it is {w['samples']}")
 
     if t == "image" and "src" in w and safe_asset_path(w["src"]) is None:
@@ -477,7 +473,7 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
 
 
 def build(raw) -> Layout:
-    """Construye el modelo. Asume que validate(raw) devolvio []."""
+    """Builds the model. Assumes validate(raw) returned []."""
     fonts = {a: Font(s["family"], s["size"], bool(s.get("bold", False)),
                      tuple(s.get("fallbacks") or ()))
              for a, s in raw["fonts"].items()}
