@@ -35,6 +35,17 @@ def _ventana(tmp_path_factory):
     path = tmp_path_factory.mktemp("editor") / "editando.json"
     path.write_text(ORIGINAL, encoding="utf-8")
     w = EditorWindow(EditorState(path))
+    # INVISIBLE, pero mapeada. Correr la suite en una maquina que alguien esta
+    # usando le tapaba la pantalla con la ventana del editor, una vez por corrida.
+    # `withdraw()` no sirve: desmapea la ventana y winfo_width()/geometry() pasan a
+    # devolver 1, que es justo lo que miden varios de estos tests. Alpha 0 la deja
+    # mapeada -- las medidas siguen siendo reales -- y no se ve nada. `-topmost`
+    # explicito en False por si algun gestor de ventanas la promueve.
+    try:
+        w.root.wm_attributes("-alpha", 0.0)
+        w.root.wm_attributes("-topmost", False)
+    except Exception:
+        pass                      # en un Tk sin soporte de alpha, se ve; no es fatal
     w.root.update()
     yield w
     try:
@@ -177,6 +188,16 @@ def test_arrows_move_the_widget_only_when_not_editing_a_field(ventana):
               if c.winfo_class() in ("TEntry", "Entry")]
     campos[0].focus_set()
     ventana.root.update()
+    # `_flechas` decide con root.focus_get(), y eso depende del foco DEL SISTEMA:
+    # si la ventana no lo tiene -- otra aplicacion adelante, una sesion remota,
+    # un runner sin escritorio -- focus_set() no surte efecto y focus_get() no
+    # devuelve lo que se acaba de pedir. El test entonces no esta midiendo el
+    # filtro sino el humor del gestor de ventanas: fallaba en la suite completa y
+    # pasaba corriendolo solo. Se dice por que se saltea en vez de forzar el foco,
+    # que le robaria la pantalla a quien este usando la maquina.
+    if ventana.root.focus_get() is not campos[0]:
+        pytest.skip("la ventana no tiene el foco del sistema: el filtro por foco "
+                    "no se puede observar")
     campos[0].event_generate("<Left>")
     ventana.root.update()
     assert ventana.state.widget("cpu-load")["x"] == x0, \

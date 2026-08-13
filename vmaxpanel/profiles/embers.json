@@ -1,60 +1,540 @@
 {
   "version": 1,
   "name": "Embers",
-  "designed_for": {"width": 320, "height": 1480},
-  "panel": {"rotate": 180, "brightness": 100, "fps": 30, "jpeg_quality": 88},
-  "fonts": {
-    "hero": {"family": "Bahnschrift", "size": 66, "fallbacks": ["Segoe UI", "Tahoma", "Arial"]},
-    "big": {"family": "Bahnschrift", "size": 52, "fallbacks": ["Segoe UI", "Tahoma", "Arial"]},
-    "eyebrow": {"family": "Franklin Gothic Demi Cond", "size": 22, "fallbacks": ["Franklin Gothic Medium", "Bahnschrift", "Segoe UI Semibold", "Segoe UI", "Tahoma"]},
-    "dato": {"family": "Franklin Gothic Medium Cond", "size": 21, "fallbacks": ["Franklin Gothic Medium", "Bahnschrift", "Segoe UI", "Tahoma"]},
-    "micro": {"family": "Franklin Gothic Medium Cond", "size": 14, "fallbacks": ["Franklin Gothic Medium", "Bahnschrift", "Segoe UI", "Tahoma"]}
+  "designed_for": {
+    "width": 320,
+    "height": 1480
   },
-  "background": {"type": "video", "src": "embers.mp4", "fit": "cover", "fps": 30, "color": "#07080B"},
+  "panel": {
+    "rotate": 180,
+    "brightness": 100,
+    "fps": 30,
+    "jpeg_quality": 88
+  },
+  "fonts": {
+    "hero": {
+      "family": "Bahnschrift",
+      "size": 66,
+      "fallbacks": [
+        "Segoe UI",
+        "Tahoma",
+        "Arial"
+      ]
+    },
+    "big": {
+      "family": "Bahnschrift",
+      "size": 52,
+      "fallbacks": [
+        "Segoe UI",
+        "Tahoma",
+        "Arial"
+      ]
+    },
+    "eyebrow": {
+      "family": "Franklin Gothic Demi Cond",
+      "size": 22,
+      "fallbacks": [
+        "Franklin Gothic Medium",
+        "Bahnschrift",
+        "Segoe UI Semibold",
+        "Segoe UI",
+        "Tahoma"
+      ]
+    },
+    "dato": {
+      "family": "Franklin Gothic Medium Cond",
+      "size": 21,
+      "fallbacks": [
+        "Franklin Gothic Medium",
+        "Bahnschrift",
+        "Segoe UI",
+        "Tahoma"
+      ]
+    },
+    "micro": {
+      "family": "Franklin Gothic Medium Cond",
+      "size": 14,
+      "fallbacks": [
+        "Franklin Gothic Medium",
+        "Bahnschrift",
+        "Segoe UI",
+        "Tahoma"
+      ]
+    }
+  },
+  "background": {
+    "type": "video",
+    "src": "embers.mp4",
+    "fit": "cover",
+    "fps": 30,
+    "color": "#07080B"
+  },
   "widgets": [
-    {"id": "hora", "type": "text", "metric": "clock.time_hms", "x": 160, "y": 22, "font": "hero", "color": "#F6EEE8", "format": "{}", "align": "center"},
-    {"id": "fecha", "type": "text", "metric": "clock.date", "x": 160, "y": 104, "font": "micro", "color": "#9A8578", "format": "{}", "align": "center"},
-    {"id": "sep-136", "type": "rect", "x": 16, "y": 136, "w": 288, "h": 1, "fill": "#3A2418"},
-    {"id": "cpu-tit", "type": "label", "text": "CPU", "x": 16, "y": 176, "font": "eyebrow", "color": "#F6EEE8"},
-    {"id": "cpu-nota", "type": "text", "metric": "cpu.name_short", "x": 304, "y": 180, "font": "micro", "color": "#9A8578", "format": "{}", "align": "right"},
-    {"id": "cpu-pct", "type": "text", "metric": "cpu.load", "x": 304, "y": 200, "font": "big", "color": "#F6EEE8", "format": "{:.0f}%", "align": "right"},
-    {"id": "cpu-barra", "type": "bar", "metric": "cpu.load", "x": 16, "y": 262, "w": 288, "h": 8, "min": 0, "max": 100, "fill": "#FF4D00", "track": "#241812"},
-    {"id": "cpu-r0", "type": "label", "text": "TEMP", "x": 64, "y": 282, "font": "micro", "color": "#9A8578", "align": "center"},
-    {"id": "cpu-v0", "type": "text", "metric": "cpu.temp", "x": 64, "y": 298, "font": "dato", "color": "#F6EEE8", "format": "{:.0f}°", "align": "center"},
-    {"id": "cpu-r1", "type": "label", "text": "CLOCK", "x": 160, "y": 282, "font": "micro", "color": "#9A8578", "align": "center"},
-    {"id": "cpu-v1", "type": "text", "metric": "cpu.clock", "x": 160, "y": 298, "font": "dato", "color": "#F6EEE8", "format": "{:.0f}", "align": "center"},
-    {"id": "cpu-r2", "type": "label", "text": "POWER", "x": 256, "y": 282, "font": "micro", "color": "#9A8578", "align": "center"},
-    {"id": "cpu-v2", "type": "text", "metric": "cpu.power", "x": 256, "y": 298, "font": "dato", "color": "#F6EEE8", "format": "{:.0f}W", "align": "center"},
-    {"id": "sep-340", "type": "rect", "x": 16, "y": 340, "w": 288, "h": 1, "fill": "#3A2418"},
-    {"id": "gpu-tit", "type": "label", "text": "GPU", "x": 16, "y": 380, "font": "eyebrow", "color": "#F6EEE8"},
-    {"id": "gpu-nota", "type": "text", "metric": "gpu.name", "x": 304, "y": 384, "font": "micro", "color": "#9A8578", "format": "{}", "align": "right"},
-    {"id": "gpu-pct", "type": "text", "metric": "gpu.load", "x": 304, "y": 404, "font": "big", "color": "#F6EEE8", "format": "{:.0f}%", "align": "right"},
-    {"id": "gpu-barra", "type": "bar", "metric": "gpu.load", "x": 16, "y": 466, "w": 288, "h": 8, "min": 0, "max": 100, "fill": "#FF4D00", "track": "#241812"},
-    {"id": "gpu-r0", "type": "label", "text": "TEMP", "x": 64, "y": 486, "font": "micro", "color": "#9A8578", "align": "center"},
-    {"id": "gpu-v0", "type": "text", "metric": "gpu.temp", "x": 64, "y": 502, "font": "dato", "color": "#F6EEE8", "format": "{:.0f}°", "align": "center"},
-    {"id": "gpu-r1", "type": "label", "text": "VRAM", "x": 160, "y": 486, "font": "micro", "color": "#9A8578", "align": "center"},
-    {"id": "gpu-v1", "type": "text", "metric": "gpu.vram", "x": 160, "y": 502, "font": "dato", "color": "#F6EEE8", "format": "{:.0f}%", "align": "center"},
-    {"id": "gpu-r2", "type": "label", "text": "POWER", "x": 256, "y": 486, "font": "micro", "color": "#9A8578", "align": "center"},
-    {"id": "gpu-v2", "type": "text", "metric": "gpu.power", "x": 256, "y": 502, "font": "dato", "color": "#F6EEE8", "format": "{:.0f}W", "align": "center"},
-    {"id": "sep-544", "type": "rect", "x": 16, "y": 544, "w": 288, "h": 1, "fill": "#3A2418"},
-    {"id": "mem-tit", "type": "label", "text": "MEMORIA", "x": 16, "y": 584, "font": "eyebrow", "color": "#F6EEE8"},
-    {"id": "mem-nota", "type": "text", "metric": "mem.speed", "x": 304, "y": 588, "font": "micro", "color": "#9A8578", "format": "{:.0f} MT/s", "align": "right"},
-    {"id": "mem-pct", "type": "text", "metric": "mem.load", "x": 304, "y": 608, "font": "big", "color": "#F6EEE8", "format": "{:.0f}%", "align": "right"},
-    {"id": "mem-barra", "type": "bar", "metric": "mem.load", "x": 16, "y": 670, "w": 288, "h": 8, "min": 0, "max": 100, "fill": "#FF4D00", "track": "#241812"},
-    {"id": "mem-r0", "type": "label", "text": "EN USO", "x": 88, "y": 690, "font": "micro", "color": "#9A8578", "align": "center"},
-    {"id": "mem-v0", "type": "text", "metric": "mem.used", "x": 88, "y": 706, "font": "dato", "color": "#F6EEE8", "format": "{:.1f} GiB", "align": "center"},
-    {"id": "mem-r1", "type": "label", "text": "TOTAL", "x": 232, "y": 690, "font": "micro", "color": "#9A8578", "align": "center"},
-    {"id": "mem-v1", "type": "text", "metric": "mem.total", "x": 232, "y": 706, "font": "dato", "color": "#F6EEE8", "format": "{:.0f} GiB", "align": "center"},
-    {"id": "sep-748", "type": "rect", "x": 16, "y": 748, "w": 288, "h": 1, "fill": "#3A2418"},
-    {"id": "red-tit", "type": "label", "text": "RED", "x": 16, "y": 788, "font": "eyebrow", "color": "#F6EEE8"},
-    {"id": "red-baja-r", "type": "label", "text": "BAJADA", "x": 16, "y": 822, "font": "micro", "color": "#9A8578"},
-    {"id": "red-baja", "type": "text", "metric": "net.down", "x": 304, "y": 814, "font": "dato", "color": "#F6EEE8", "format": "{}", "align": "right", "humanize": "rate"},
-    {"id": "red-baja-g", "type": "graph", "metric": "net.down", "x": 16, "y": 846, "w": 288, "h": 34, "min": 0, "color": "#FF4D00", "track": "#241812", "samples": 120},
-    {"id": "red-sube-r", "type": "label", "text": "SUBIDA", "x": 16, "y": 900, "font": "micro", "color": "#9A8578"},
-    {"id": "red-sube", "type": "text", "metric": "net.up", "x": 304, "y": 892, "font": "dato", "color": "#F6EEE8", "format": "{}", "align": "right", "humanize": "rate"},
-    {"id": "red-sube-g", "type": "graph", "metric": "net.up", "x": 16, "y": 924, "w": 288, "h": 34, "min": 0, "color": "#FF4D00", "track": "#241812", "samples": 120},
-    {"id": "sep-1000", "type": "rect", "x": 16, "y": 1000, "w": 288, "h": 1, "fill": "#3A2418"},
-    {"id": "pie-r", "type": "label", "text": "ENCENDIDA", "x": 114, "y": 1432, "font": "micro", "color": "#9A8578", "align": "center"},
-    {"id": "pie", "type": "text", "metric": "sys.uptime", "x": 182, "y": 1432, "font": "micro", "color": "#9A8578", "format": "{}", "align": "center", "humanize": "duration"}
+    {
+      "id": "hora",
+      "type": "text",
+      "metric": "clock.time_hms",
+      "x": 160,
+      "y": 22,
+      "font": "hero",
+      "color": "#F6EEE8",
+      "format": "{}",
+      "align": "center"
+    },
+    {
+      "id": "fecha",
+      "type": "text",
+      "metric": "clock.date",
+      "x": 160,
+      "y": 104,
+      "font": "micro",
+      "color": "#9A8578",
+      "format": "{}",
+      "align": "center"
+    },
+    {
+      "id": "sep-136",
+      "type": "rect",
+      "x": 16,
+      "y": 136,
+      "w": 288,
+      "h": 1,
+      "fill": "#3A2418"
+    },
+    {
+      "id": "cpu-tit",
+      "type": "label",
+      "text": "CPU",
+      "x": 16,
+      "y": 176,
+      "font": "eyebrow",
+      "color": "#F6EEE8"
+    },
+    {
+      "id": "cpu-nota",
+      "type": "text",
+      "metric": "cpu.name_short",
+      "x": 304,
+      "y": 180,
+      "font": "micro",
+      "color": "#9A8578",
+      "format": "{}",
+      "align": "right"
+    },
+    {
+      "id": "cpu-pct",
+      "type": "text",
+      "metric": "cpu.load",
+      "x": 304,
+      "y": 200,
+      "font": "big",
+      "color": "#F6EEE8",
+      "format": "{:.0f}%",
+      "align": "right"
+    },
+    {
+      "id": "cpu-barra",
+      "type": "bar",
+      "metric": "cpu.load",
+      "x": 16,
+      "y": 262,
+      "w": 288,
+      "h": 8,
+      "min": 0,
+      "max": 100,
+      "fill": "#FF4D00",
+      "track": "#241812"
+    },
+    {
+      "id": "cpu-r0",
+      "type": "label",
+      "text": "TEMP",
+      "x": 64,
+      "y": 282,
+      "font": "micro",
+      "color": "#9A8578",
+      "align": "center"
+    },
+    {
+      "id": "cpu-v0",
+      "type": "text",
+      "metric": "cpu.temp",
+      "x": 64,
+      "y": 298,
+      "font": "dato",
+      "color": "#F6EEE8",
+      "format": "{:.0f}°",
+      "align": "center"
+    },
+    {
+      "id": "cpu-r1",
+      "type": "label",
+      "text": "CLOCK",
+      "x": 160,
+      "y": 282,
+      "font": "micro",
+      "color": "#9A8578",
+      "align": "center"
+    },
+    {
+      "id": "cpu-v1",
+      "type": "text",
+      "metric": "cpu.clock",
+      "x": 160,
+      "y": 298,
+      "font": "dato",
+      "color": "#F6EEE8",
+      "format": "{:.0f}",
+      "align": "center"
+    },
+    {
+      "id": "cpu-r2",
+      "type": "label",
+      "text": "POWER",
+      "x": 256,
+      "y": 282,
+      "font": "micro",
+      "color": "#9A8578",
+      "align": "center"
+    },
+    {
+      "id": "cpu-v2",
+      "type": "text",
+      "metric": "cpu.power",
+      "x": 256,
+      "y": 298,
+      "font": "dato",
+      "color": "#F6EEE8",
+      "format": "{:.0f}W",
+      "align": "center"
+    },
+    {
+      "id": "sep-340",
+      "type": "rect",
+      "x": 16,
+      "y": 340,
+      "w": 288,
+      "h": 1,
+      "fill": "#3A2418"
+    },
+    {
+      "id": "gpu-tit",
+      "type": "label",
+      "text": "GPU",
+      "x": 16,
+      "y": 380,
+      "font": "eyebrow",
+      "color": "#F6EEE8"
+    },
+    {
+      "id": "gpu-nota",
+      "type": "text",
+      "metric": "gpu.name",
+      "x": 304,
+      "y": 384,
+      "font": "micro",
+      "color": "#9A8578",
+      "format": "{}",
+      "align": "right"
+    },
+    {
+      "id": "gpu-pct",
+      "type": "text",
+      "metric": "gpu.load",
+      "x": 304,
+      "y": 404,
+      "font": "big",
+      "color": "#F6EEE8",
+      "format": "{:.0f}%",
+      "align": "right"
+    },
+    {
+      "id": "gpu-barra",
+      "type": "bar",
+      "metric": "gpu.load",
+      "x": 16,
+      "y": 466,
+      "w": 288,
+      "h": 8,
+      "min": 0,
+      "max": 100,
+      "fill": "#FF4D00",
+      "track": "#241812"
+    },
+    {
+      "id": "gpu-r0",
+      "type": "label",
+      "text": "TEMP",
+      "x": 64,
+      "y": 486,
+      "font": "micro",
+      "color": "#9A8578",
+      "align": "center"
+    },
+    {
+      "id": "gpu-v0",
+      "type": "text",
+      "metric": "gpu.temp",
+      "x": 64,
+      "y": 502,
+      "font": "dato",
+      "color": "#F6EEE8",
+      "format": "{:.0f}°",
+      "align": "center"
+    },
+    {
+      "id": "gpu-r1",
+      "type": "label",
+      "text": "VRAM",
+      "x": 160,
+      "y": 486,
+      "font": "micro",
+      "color": "#9A8578",
+      "align": "center"
+    },
+    {
+      "id": "gpu-v1",
+      "type": "text",
+      "metric": "gpu.vram",
+      "x": 160,
+      "y": 502,
+      "font": "dato",
+      "color": "#F6EEE8",
+      "format": "{:.0f}%",
+      "align": "center"
+    },
+    {
+      "id": "gpu-r2",
+      "type": "label",
+      "text": "POWER",
+      "x": 256,
+      "y": 486,
+      "font": "micro",
+      "color": "#9A8578",
+      "align": "center"
+    },
+    {
+      "id": "gpu-v2",
+      "type": "text",
+      "metric": "gpu.power",
+      "x": 256,
+      "y": 502,
+      "font": "dato",
+      "color": "#F6EEE8",
+      "format": "{:.0f}W",
+      "align": "center"
+    },
+    {
+      "id": "sep-544",
+      "type": "rect",
+      "x": 16,
+      "y": 544,
+      "w": 288,
+      "h": 1,
+      "fill": "#3A2418"
+    },
+    {
+      "id": "mem-tit",
+      "type": "label",
+      "text": "MEMORY",
+      "x": 16,
+      "y": 584,
+      "font": "eyebrow",
+      "color": "#F6EEE8"
+    },
+    {
+      "id": "mem-nota",
+      "type": "text",
+      "metric": "mem.speed",
+      "x": 304,
+      "y": 588,
+      "font": "micro",
+      "color": "#9A8578",
+      "format": "{:.0f} MT/s",
+      "align": "right"
+    },
+    {
+      "id": "mem-pct",
+      "type": "text",
+      "metric": "mem.load",
+      "x": 304,
+      "y": 608,
+      "font": "big",
+      "color": "#F6EEE8",
+      "format": "{:.0f}%",
+      "align": "right"
+    },
+    {
+      "id": "mem-barra",
+      "type": "bar",
+      "metric": "mem.load",
+      "x": 16,
+      "y": 670,
+      "w": 288,
+      "h": 8,
+      "min": 0,
+      "max": 100,
+      "fill": "#FF4D00",
+      "track": "#241812"
+    },
+    {
+      "id": "mem-r0",
+      "type": "label",
+      "text": "IN USE",
+      "x": 88,
+      "y": 690,
+      "font": "micro",
+      "color": "#9A8578",
+      "align": "center"
+    },
+    {
+      "id": "mem-v0",
+      "type": "text",
+      "metric": "mem.used",
+      "x": 88,
+      "y": 706,
+      "font": "dato",
+      "color": "#F6EEE8",
+      "format": "{:.1f} GiB",
+      "align": "center"
+    },
+    {
+      "id": "mem-r1",
+      "type": "label",
+      "text": "TOTAL",
+      "x": 232,
+      "y": 690,
+      "font": "micro",
+      "color": "#9A8578",
+      "align": "center"
+    },
+    {
+      "id": "mem-v1",
+      "type": "text",
+      "metric": "mem.total",
+      "x": 232,
+      "y": 706,
+      "font": "dato",
+      "color": "#F6EEE8",
+      "format": "{:.0f} GiB",
+      "align": "center"
+    },
+    {
+      "id": "sep-748",
+      "type": "rect",
+      "x": 16,
+      "y": 748,
+      "w": 288,
+      "h": 1,
+      "fill": "#3A2418"
+    },
+    {
+      "id": "red-tit",
+      "type": "label",
+      "text": "NETWORK",
+      "x": 16,
+      "y": 788,
+      "font": "eyebrow",
+      "color": "#F6EEE8"
+    },
+    {
+      "id": "red-baja-r",
+      "type": "label",
+      "text": "DOWN",
+      "x": 16,
+      "y": 822,
+      "font": "micro",
+      "color": "#9A8578"
+    },
+    {
+      "id": "red-baja",
+      "type": "text",
+      "metric": "net.down",
+      "x": 304,
+      "y": 814,
+      "font": "dato",
+      "color": "#F6EEE8",
+      "format": "{}",
+      "align": "right",
+      "humanize": "rate"
+    },
+    {
+      "id": "red-baja-g",
+      "type": "graph",
+      "metric": "net.down",
+      "x": 16,
+      "y": 846,
+      "w": 288,
+      "h": 34,
+      "min": 0,
+      "color": "#FF4D00",
+      "track": "#241812",
+      "samples": 120
+    },
+    {
+      "id": "red-sube-r",
+      "type": "label",
+      "text": "UP",
+      "x": 16,
+      "y": 900,
+      "font": "micro",
+      "color": "#9A8578"
+    },
+    {
+      "id": "red-sube",
+      "type": "text",
+      "metric": "net.up",
+      "x": 304,
+      "y": 892,
+      "font": "dato",
+      "color": "#F6EEE8",
+      "format": "{}",
+      "align": "right",
+      "humanize": "rate"
+    },
+    {
+      "id": "red-sube-g",
+      "type": "graph",
+      "metric": "net.up",
+      "x": 16,
+      "y": 924,
+      "w": 288,
+      "h": 34,
+      "min": 0,
+      "color": "#FF4D00",
+      "track": "#241812",
+      "samples": 120
+    },
+    {
+      "id": "sep-1000",
+      "type": "rect",
+      "x": 16,
+      "y": 1000,
+      "w": 288,
+      "h": 1,
+      "fill": "#3A2418"
+    },
+    {
+      "id": "pie-r",
+      "type": "label",
+      "text": "UPTIME",
+      "x": 114,
+      "y": 1432,
+      "font": "micro",
+      "color": "#9A8578",
+      "align": "center"
+    },
+    {
+      "id": "pie",
+      "type": "text",
+      "metric": "sys.uptime",
+      "x": 182,
+      "y": 1432,
+      "font": "micro",
+      "color": "#9A8578",
+      "format": "{}",
+      "align": "center",
+      "humanize": "duration"
+    }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "name": "Apex",
+  "name": "Apex (castellano)",
   "designed_for": {
     "width": 320,
     "height": 1480
@@ -129,7 +129,7 @@
     {
       "id": "head-r0",
       "type": "label",
-      "text": "DATE",
+      "text": "FECHA",
       "x": 90,
       "y": 84,
       "font": "micro",
@@ -150,7 +150,7 @@
     {
       "id": "head-r1",
       "type": "label",
-      "text": "UPTIME",
+      "text": "ENCENDIDA",
       "x": 230,
       "y": 84,
       "font": "micro",
@@ -402,7 +402,7 @@
     {
       "id": "core-r",
       "type": "label",
-      "text": "PER-CORE LOAD AND TEMPERATURE",
+      "text": "CARGA Y TEMPERATURA POR NÚCLEO",
       "x": 20,
       "y": 396,
       "font": "micro",
@@ -928,7 +928,7 @@
     {
       "id": "ram-eyebrow",
       "type": "label",
-      "text": "MEMORY",
+      "text": "MEMORIA",
       "x": 20,
       "y": 828,
       "font": "eyebrow",
@@ -982,7 +982,7 @@
     {
       "id": "ram-f1-r0",
       "type": "label",
-      "text": "IN USE",
+      "text": "EN USO",
       "x": 90,
       "y": 910,
       "font": "micro",
@@ -1042,7 +1042,7 @@
     {
       "id": "disk-eyebrow",
       "type": "label",
-      "text": "STORAGE",
+      "text": "ALMACENAMIENTO",
       "x": 20,
       "y": 970,
       "font": "eyebrow",
@@ -1062,7 +1062,7 @@
     {
       "id": "vol-C-n",
       "type": "label",
-      "text": "SYSTEM",
+      "text": "SISTEMA",
       "x": 48,
       "y": 998,
       "font": "micro",
@@ -1325,7 +1325,7 @@
     {
       "id": "net-eyebrow",
       "type": "label",
-      "text": "NETWORK",
+      "text": "RED",
       "x": 20,
       "y": 1178,
       "font": "eyebrow",
@@ -1345,7 +1345,7 @@
     {
       "id": "net-d-r",
       "type": "label",
-      "text": "DOWN",
+      "text": "BAJADA",
       "x": 20,
       "y": 1204,
       "font": "micro",
@@ -1380,7 +1380,7 @@
     {
       "id": "net-u-r",
       "type": "label",
-      "text": "UP",
+      "text": "SUBIDA",
       "x": 20,
       "y": 1266,
       "font": "micro",
@@ -1433,7 +1433,7 @@
     {
       "id": "mb-eyebrow",
       "type": "label",
-      "text": "SYSTEM",
+      "text": "SISTEMA",
       "x": 20,
       "y": 1350,
       "font": "eyebrow",
@@ -1453,7 +1453,7 @@
     {
       "id": "sys-f1-r0",
       "type": "label",
-      "text": "BOARD",
+      "text": "PLACA",
       "x": 66,
       "y": 1376,
       "font": "micro",
@@ -1536,7 +1536,7 @@
     {
       "id": "sys-f2-r0",
       "type": "label",
-      "text": "PROCESSES",
+      "text": "PROCESOS",
       "x": 160,
       "y": 1424,
       "font": "micro",

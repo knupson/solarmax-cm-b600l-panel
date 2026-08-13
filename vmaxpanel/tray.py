@@ -336,7 +336,7 @@ class Tray:
         st = self.app.state()
         menu = user32.CreatePopupMenu()
 
-        panel = st.get("panel", "desconectado")
+        panel = st.get("panel", "disconnected")
         if st.get("paused"):
             titulo = "Paused"
         elif not st.get("running"):

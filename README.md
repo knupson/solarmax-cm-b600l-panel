@@ -26,11 +26,13 @@ driver of any kind.
 any noncommercial purpose. Selling it is not allowed. To contribute, see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-> **On language:** the docs and the command-line interface are in English. The code comments,
-> the tray and editor menus and the remaining messages are still in Spanish — translation is in
-> progress, in that order. Every command-line flag keeps its old Spanish name as an alias
+> **On language:** everything you see — the docs, the command line, the tray menu, the editor
+> and the shipped profiles — is in English. The code comments are still in Spanish; translating
+> them is in progress. Every command-line flag keeps its old Spanish name as an alias
 > (`--status` and `--estado` are the same flag), so nothing already installed or scripted
-> breaks.
+> breaks. `apex-es.json` is the author's own Spanish version of Apex, kept as an example of
+> how far a profile can be localised: labels are data, so translating one is editing text in a
+> JSON file.
 
 ## From scratch
 

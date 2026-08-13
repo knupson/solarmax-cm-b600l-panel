@@ -86,7 +86,7 @@ def test_state_reports_the_panel_and_the_profile(tmp_path):
     # El estado "ok" solo tiene sentido MIENTRAS el link esta abierto: run()
     # cierra y descarta el link al volver (por cualquier motivo, ver
     # test_clean_exit_closes_the_link), asi que state() consultado despues
-    # de run() siempre da "desconectado". Para probar el estado "conectado"
+    # de run() siempre da "disconnected". Para probar el estado "conectado"
     # de verdad hay que mirarlo desde adentro del loop, no despues.
     eng, _, _ = engine(tmp_path, iterations=1)
     captured = {}
@@ -186,13 +186,13 @@ def test_serial_failure_reconnects_with_backoff(tmp_path):
     # nada lo cierra, el handle recien abierto queda filtrado en cada
     # intento de reconexion en vez de liberarse antes del siguiente intento.
     assert dead.closed is True
-    # "desconectado", no "ok": run() ya termino (se agoto max_iterations
+    # "disconnected", no "ok": run() ya termino (se agoto max_iterations
     # DESPUES de reconectar con exito), asi que nada esta escribiendo en el
     # panel en este instante. Es el contrato, no un descuido -- el campo es
-    # binario ("ok" | "desconectado") y no existe un tercer estado de
+    # binario ("ok" | "disconnected") y no existe un tercer estado de
     # "estuvo conectado pero ya no". Que no se revierta a "ok" creyendo que
     # es "se conecto bien" cuando en realidad describe el estado ACTUAL.
-    assert eng.state()["panel"] == "desconectado"
+    assert eng.state()["panel"] == "disconnected"
 
 
 def test_clean_exit_closes_the_link(tmp_path):
@@ -202,14 +202,14 @@ def test_clean_exit_closes_the_link(tmp_path):
     # que quedo abierto tiene que cerrarse igual, no solo cuando hay una
     # reconexion de por medio.
     assert made[0].closed is True
-    # "desconectado", no "ok": el mismo contrato binario que documenta el
+    # "disconnected", no "ok": el mismo contrato binario que documenta el
     # test de arriba. Un link cerrado reportando "ok" seria la misma clase
     # de status mintiendo que este proyecto entero existe para evitar (LCD
     # Control mostrando una carga de CPU que no era la real) -- aca aplicado
     # al campo de conexion en vez de a una metrica. No revertir esto a "ok"
     # pensando que "el ultimo intento salio bien": state() describe el
     # presente, no el historial.
-    assert eng.state()["panel"] == "desconectado"
+    assert eng.state()["panel"] == "disconnected"
 
 
 def test_stop_ends_the_loop(tmp_path):

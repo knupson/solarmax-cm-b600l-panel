@@ -406,7 +406,7 @@ class PanelApp:
             return self._snapshot()
         # Motor bajado: se devuelve la ultima foto viva, con running/paused
         # actualizados. Reconstruirlo desde un engine ya cerrado daria
-        # "desconectado" y cero metricas, borrando el motivo por el que se
+        # "disconnected" y cero metricas, borrando el motivo por el que se
         # cayo justo cuando el usuario lo va a leer.
         return {**self._last_state, "running": False, "paused": self._paused}
 
@@ -414,7 +414,7 @@ class PanelApp:
         eng = self._engine
         if eng is None:
             return {"running": False, "paused": self._paused, "frames": 0,
-                    "profile": None, "panel": "desconectado", "warnings": [],
+                    "profile": None, "panel": "disconnected", "warnings": [],
                     "unavailable": {}, "resolution": {}, "last_error": None}
         st = dict(eng.state())
         st["running"] = self.running()

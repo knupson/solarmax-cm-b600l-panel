@@ -58,7 +58,7 @@ class Engine:
     def state(self) -> dict:
         layout = self.store.current
         return {
-            "panel": "ok" if self._link is not None else "desconectado",
+            "panel": "ok" if self._link is not None else "disconnected",
             "profile": layout.name if layout else None,
             "sn": self._link.serial_number if self._link else None,
             "fps": layout.panel.fps if layout else None,
@@ -125,8 +125,8 @@ class Engine:
             # state()["panel"] == "ok" para un puerto cerrado es un status
             # field mintiendo por la misma razon, solo que en un campo
             # distinto. El contrato de este campo es binario -- "ok" o
-            # "desconectado", sin un tercer estado de "estuvo conectado
-            # pero ya no" -- asi que "desconectado" es la unica respuesta
+            # "disconnected", sin un tercer estado de "estuvo conectado
+            # pero ya no" -- asi que "disconnected" es la unica respuesta
             # honesta una vez que run() termino, para cualquier motivo por
             # el que haya terminado.
             self._drop_link()
