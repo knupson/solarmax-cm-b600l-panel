@@ -1,8 +1,9 @@
-# VMax Panel — driver propio del panel del gabinete
+# Solarmax CM-B600L — driver abierto para el panel LCD del gabinete
 
-Reemplazo de **LCD Control** (software vendor) para el panel **Solarmax CM-B600L**,
-320x1480, `HL-VMAX-USB-Device` (VID_33C3 / PID_F101). El puerto COM y la geometría se
-autodetectan: no hay nada del panel hardcodeado.
+Reemplazo libre de **LCD Control**, el software vendor del panel LCD de 320x1480 del
+gabinete **Solarmax CM-B600L**, que Windows enumera como `HL-VMAX-USB-Device`
+(VID_33C3 / PID_F101). Sirve para cualquier gabinete que monte el mismo panel: el puerto
+COM y la geometría se autodetectan, no hay nada del hardware hardcodeado.
 
 Escrito el 2026-08-11 porque la app vendor mostraba **CPU 100%** con carga real de 65%.
 

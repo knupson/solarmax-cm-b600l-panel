@@ -22,7 +22,7 @@ El código que mandes queda bajo la [PolyForm Noncommercial 1.0.0](LICENSE), com
 ## Arrancar
 
 ```powershell
-git clone https://github.com/knupson/vmax-panel && cd vmax-panel
+git clone https://github.com/knupson/solarmax-cm-b600l-panel && cd solarmax-cm-b600l-panel
 pip install -r requirements.txt
 pip install pytest
 python -m pytest                          # 594 tests, ~85 s
