@@ -50,6 +50,45 @@ def esperar(pred, timeout=5.0):
     return False
 
 
+def test_the_first_frame_call_waits_for_the_decoder():
+    # --save y --once dibujan UN cuadro y salen. Si frame() devuelve None porque
+    # ffmpeg todavia no escupio nada, el fondo cae al color plano y la funcion
+    # entera queda invisible justo donde se la previsualiza.
+    src = VideoSource("x.mp4", TAM, fps=30, spawn=spawner_falso([(255, 0, 0)]))
+    src.start()
+    try:
+        img = src.frame()
+        assert img is not None, "el primer frame() devolvio None"
+        assert img.getpixel((0, 0)) == (255, 0, 0)
+    finally:
+        src.close()
+
+
+def test_frame_waits_only_once_when_no_frame_ever_arrives():
+    # La contracara: si el decoder nunca produce nada (ffmpeg que no abre el
+    # archivo), esperar en CADA llamada colgaria el bucle del panel para
+    # siempre. Se espera una vez y nunca mas.
+    def spawn_mudo():
+        return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"],
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    src = VideoSource("x.mp4", TAM, fps=30, spawn=spawn_mudo)
+    src.espera_primero = 0.3
+    src.start()
+    try:
+        t0 = time.time()
+        assert src.frame() is None
+        primera = time.time() - t0
+        t1 = time.time()
+        for _ in range(5):
+            assert src.frame() is None
+        siguientes = time.time() - t1
+        assert primera >= 0.25, "la primera llamada no espero"
+        assert siguientes < 0.1, "frame() sigue esperando despues de la primera vez"
+    finally:
+        src.close()
+
+
 def test_frames_arrive_and_advance():
     src = VideoSource("x.mp4", TAM, fps=30, spawn=spawner_falso([(255, 0, 0),
                                                                 (0, 255, 0)]))
@@ -94,6 +133,11 @@ def test_a_partial_frame_is_never_shown():
                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
     src = VideoSource("x.mp4", TAM, fps=30, spawn=spawn)
+    # Sin espera del primer cuadro: lo que se prueba aca es QUE se publica, no
+    # cuanto espera el que lo pide. Con la espera puesta, la primera llamada se
+    # quedaria hasta que el frame completo llegue y no se podria observar el
+    # estado intermedio, que es justo el que tiene que dar None.
+    src.espera_primero = 0
     src.start()
     try:
         time.sleep(0.15)

@@ -147,6 +147,23 @@ def test_graph_uses_history():
     assert im.getbbox() is not None
 
 
+def test_graph_with_a_single_sample_draws_a_flat_line():
+    # El primer cuadro de una corrida tiene UNA muestra. Antes eso caia en el
+    # mismo caso que "no hay historial" y el widget quedaba en una caja vacia,
+    # que es lo que se ve en --save y en los primeros segundos del panel.
+    im = canvas()
+    w = model.GraphWidget(id="g", type="graph", x=10, y=10, metric="cpu.load",
+                          w=200, h=60, color="#3987E5", samples=10)
+    widgets.draw(im, w, 50.0, ctx(history={"cpu.load": [50]}))
+    assert im.getbbox() is not None, "con una muestra no dibujo nada"
+    # 50% de un rango 0..100 en una caja de 60 de alto que arranca en y=10:
+    # la linea va por el medio, no arriba ni abajo.
+    px = im.load()
+    fila = [y for y in range(10, 71) if px[110, y] == (57, 135, 229)]
+    assert fila, "la linea no aparece en el medio de la caja"
+    assert 38 <= sum(fila) / len(fila) <= 42
+
+
 def test_graph_with_empty_history_does_not_crash():
     im = canvas()
     w = model.GraphWidget(id="g", type="graph", x=10, y=10, metric="cpu.load",

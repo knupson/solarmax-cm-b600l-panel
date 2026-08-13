@@ -37,6 +37,21 @@ $memSpeed = $mem.ConfiguredClockSpeed
 if (-not $memSpeed -or $memSpeed -le 0) { $memSpeed = $mem.Speed }
 if (-not $memSpeed -or $memSpeed -le 0) { $memSpeed = 0 }
 
+# --- VRAM total por adaptador: una sola vez, no cambia ---
+# Hace falta porque en AMD LibreHardwareMonitor NO expone el total, solo cuanta
+# VRAM hay usada (SmallData 'D3D Dedicated Memory Used', en MB). Sin el total no
+# hay porcentaje.
+# La fuente NO es Win32_VideoController.AdapterRAM: ese campo es un uint32 y se
+# desborda arriba de 4 GB, asi que en una placa de 16 GB miente. qwMemorySize es
+# de 64 bits y lo escribe el propio driver.
+$vramTotalMB = @{}
+$claseDisplay = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}'
+foreach ($k in (Get-ChildItem $claseDisplay)) {
+    $p = Get-ItemProperty $k.PSPath
+    $q = $p.'HardwareInformation.qwMemorySize'
+    if ($q -and $p.DriverDesc) { $vramTotalMB[[string]$p.DriverDesc] = [math]::Round($q / 1MB) }
+}
+
 # --- LHM: setup una sola vez ---
 $comp = $null
 try {
@@ -142,7 +157,23 @@ while ($true) {
                 'Gpu*' {
                     $l.'gpu.name'    = $hw.Name
                     $l.'gpu.load'    = Sensor $hw 'Load' 'GPU Core'
-                    $l.'gpu.vram'    = Sensor $hw 'Load' 'GPU Memory'
+                    # 'Load' 'GPU Memory' NO es la VRAM ocupada: en AMD es la
+                    # carga del BUS de memoria. Daba 1% con 1,5 GB de 16 GB en
+                    # uso, o sea un 9% real, y la metrica se llama "VRAM usada".
+                    # NVIDIA e Intel sirven usado y total directo; AMD solo el
+                    # usado, y el total sale del registro (ver $vramTotalMB).
+                    $vramUsadaMB = Sensor $hw 'SmallData' 'GPU Memory Used'
+                    $vramTotal   = Sensor $hw 'SmallData' 'GPU Memory Total'
+                    if ($null -eq $vramUsadaMB) {
+                        $vramUsadaMB = Sensor $hw 'SmallData' 'D3D Dedicated Memory Used'
+                    }
+                    if ($null -eq $vramTotal) { $vramTotal = $vramTotalMB[[string]$hw.Name] }
+                    # Sin total no se publica nada: la metrica queda no
+                    # disponible y el panel lo dice, que es mejor que un numero
+                    # inventado con un total adivinado.
+                    if ($null -ne $vramUsadaMB -and $vramTotal -gt 0) {
+                        $l.'gpu.vram' = [math]::Round(100 * $vramUsadaMB / $vramTotal, 1)
+                    }
                     $l.'gpu.temp'    = Sensor $hw 'Temperature' 'GPU Core'
                     $l.'gpu.hotspot' = Sensor $hw 'Temperature' 'GPU Hot Spot'
                     $l.'gpu.power'   = Sensor $hw 'Power' 'GPU Package'

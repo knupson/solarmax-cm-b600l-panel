@@ -158,8 +158,16 @@ def _draw_graph(img, g, w, value, ctx):
     if w.track:
         g.rectangle([x, y, x + ww, y + hh], fill=w.track)
     series = list(ctx.history.get(w.metric) or [])[-w.samples:]
-    if len(series) < 2:
+    if not series:
         return
+    if len(series) == 1:
+        # Una sola muestra es el caso normal del primer cuadro de cualquier
+        # corrida, y de --save, que dibuja uno solo y sale. Antes caia en el
+        # mismo return que "no hay historial" y quedaba una caja vacia, que se
+        # lee como un widget roto. Se duplica para que salga una linea plana a
+        # esa altura: es la misma convencion que ya usa el resto de la funcion,
+        # que estira las muestras que haya a lo ancho de la caja.
+        series = series * 2
     lo, hi = _range(w)
     if lo is None or hi is None or hi <= lo:
         return                          # rango sin resolver: no hay como escalar

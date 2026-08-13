@@ -69,6 +69,12 @@ class VideoSource:
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._ultimo = None
+        # ffmpeg tarda decenas de milisegundos en escupir el primer cuadro, y
+        # --save dibuja uno solo y sale: sin esperarlo, el fondo de video sale
+        # como color plano. Se espera UNA vez y a lo sumo esto.
+        self.espera_primero = 2.0
+        self._hubo_uno = threading.Event()
+        self._ya_espere = False
 
     # --- arranque y baja ---
 
@@ -110,6 +116,16 @@ class VideoSource:
 
     def _leer(self):
         try:
+            self._leer_hasta_el_final()
+        finally:
+            # Pase lo que pase -- ffmpeg que no esta, archivo ilegible, corte en
+            # el medio -- el que espera el primer cuadro tiene que dejar de
+            # esperar. Sin esto, un decoder que muere al instante deja a frame()
+            # pagando el timeout completo para nada.
+            self._hubo_uno.set()
+
+    def _leer_hasta_el_final(self):
+        try:
             self._proc = self._spawn()
         except FileNotFoundError:
             # Siempre el texto accionable, sin importar que diga la excepcion: un
@@ -141,6 +157,7 @@ class VideoSource:
             img = Image.frombytes("RGB", (ancho, alto), bytes(datos))
             with self._lock:
                 self._ultimo = img
+            self._hubo_uno.set()
 
     def _explicar_el_final(self, hubo_cuadros):
         """Distingue "no se pudo abrir" de "se corto en el medio".
@@ -191,7 +208,17 @@ class VideoSource:
             self.warnings.append(texto)
 
     def frame(self):
-        """El ultimo cuadro completo, o None si todavia no llego ninguno."""
+        """El ultimo cuadro completo, o None si todavia no llego ninguno.
+
+        La PRIMERA llamada espera hasta `espera_primero` segundos a que el
+        decoder produzca algo; las siguientes no esperan nunca. Esa asimetria es
+        el punto: el que dibuja un solo cuadro necesita el primero de verdad,
+        y el bucle del panel no puede pagar una espera por cuadro si el video
+        nunca abre.
+        """
+        if not self._ya_espere:
+            self._ya_espere = True
+            self._hubo_uno.wait(self.espera_primero)
         with self._lock:
             return self._ultimo
 
