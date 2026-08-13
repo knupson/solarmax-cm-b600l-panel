@@ -102,8 +102,8 @@ def parse_geometry(sn) -> Size:
         # truncamiento documentado arriba de _GEOM_RE). None/"" no entran
         # aca -- ese es el caso ordinario de "no hay nada que parsear" y no
         # amerita aviso.
-        print(f'aviso: no se pudo parsear la geometria del panel desde el SN '
-              f'"{sn}"; usando default {DEFAULT_GEOMETRY.width}x'
+        print(f'warning: could not parse the panel geometry out of the serial '
+              f'"{sn}"; falling back to {DEFAULT_GEOMETRY.width}x'
               f'{DEFAULT_GEOMETRY.height}', file=sys.stderr)
     return DEFAULT_GEOMETRY
 

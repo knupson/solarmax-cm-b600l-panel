@@ -299,8 +299,8 @@ class Tray:
                 # que promover: Windows la crea al aceptar el icono, con un nombre de
                 # subclave que calcula el. Por eso no se puede hacer en --instalar.
                 if promover_icono(sys.executable, "VMax Panel"):
-                    print("el icono estaba escondido (default de Windows 11): "
-                          "lo puse visible en la barra")
+                    print("the icon was hidden (the Windows 11 default): "
+                          "promoted it to the taskbar")
                     # Windows decide barra vs menu oculto EN EL MOMENTO del NIM_ADD:
                     # promoverlo despues no lo mueve solo. Se borra y se agrega de
                     # nuevo para que la barra lo re-evalue, o el cambio recien se
@@ -600,7 +600,7 @@ def main(argv=None) -> int:
 
     ap = argparse.ArgumentParser(prog="vmaxpanel-tray")
     ap.add_argument("--profile", type=Path, default=default_profile_path())
-    ap.add_argument("--port", help="COM del panel; por defecto se autodetecta")
+    ap.add_argument("--port", help="the panel's COM port; autodetected by default")
     ap.add_argument("--log", type=Path)
     a = ap.parse_args(argv)
 

@@ -447,7 +447,7 @@ def test_undo_refreshes_the_fields_and_the_preview(ventana):
 
 def test_undo_with_empty_history_says_so_in_the_status(ventana):
     ventana._undo()
-    assert "deshacer" in ventana.estado.cget("text").lower()
+    assert "undo" in ventana.estado.cget("text").lower()
 
 
 def test_the_rules_editor_appears_only_for_text_widgets(ventana):

@@ -1722,7 +1722,7 @@ class EditorWindow:
         self._show_errors()
         self._marcar_titulo()
         if not errores:
-            self.estado.config(text="guardado; el panel lo levanta solo",
+            self.estado.config(text="saved; the panel picks it up on its own",
                                foreground="#006000")
 
     def _pendiente_al_tipear(self, var, tipo, clave):
@@ -1786,7 +1786,7 @@ class EditorWindow:
         fuentes o la lista de widgets, no solo el campo que se estaba editando.
         Sin repintar, los controles siguen mostrando el valor deshecho."""
         if not self.state.undo():
-            self.estado.config(text="no hay nada que deshacer",
+            self.estado.config(text="there is nothing to undo",
                                foreground="#606060")
             return
         self._refresh()
@@ -1845,10 +1845,10 @@ class EditorWindow:
         except bundle.BundleError as e:
             self.estado.config(text=str(e), foreground="#A00000")
             return
-        assets = ", ".join(info["assets"]) or "sin assets"
+        assets = ", ".join(info["assets"]) or "no assets"
         self.estado.config(
-            text=f"exportado a {destino.name} ({assets}). Las fuentes no viajan: "
-                 f"se piden por familia.", foreground="#006000")
+            text=f"exported to {destino.name} ({assets}). Fonts do not travel: "
+                 f"they are requested by family.", foreground="#006000")
 
     def _pedir_importar(self):
         from tkinter import filedialog
@@ -1915,7 +1915,7 @@ def main(argv=None) -> int:
     try:
         EditorWindow(state).run()
     except ImportError as e:
-        print(f"el editor necesita Tkinter: {e}", file=sys.stderr)
+        print(f"the editor needs Tkinter: {e}", file=sys.stderr)
         return 3
     return 0
 
