@@ -1,23 +1,24 @@
-"""Fondos: solid, gradient, image (estaticos) y procedural, sequence, video
-(animados).
+"""Backgrounds: solid, gradient and image (static), procedural, sequence and
+video (animated).
 
-`video` delega en ffmpeg como proceso externo (ver render/video.py) y degrada a
-color plano -- con un aviso que dice como instalarlo -- si no esta: un perfil
-compartido que use video tiene que seguir abriendo en una maquina sin ffmpeg.
+`video` delegates to ffmpeg as an external process (see render/video.py) and
+degrades to a flat colour -- with a warning saying how to install it -- when it is
+absent: a shared profile using video has to keep opening on a machine without
+ffmpeg.
 
-Los estaticos se cachean porque no cambian entre frames mientras el layout sea
-el mismo; el loop de render solo copia el cache y le dibuja los widgets encima.
-Los animados calculan cada cuadro en funcion del reloj, que se INYECTA: un fondo
-que dependa de time.monotonic() directo no se puede testear de forma
-determinista.
+The static ones are cached because they do not change between frames while the
+layout stays the same; the render loop only copies the cache and draws the widgets
+on top. The animated ones compute each frame from the clock, which is INJECTED: a
+background depending on time.monotonic() directly cannot be tested
+deterministically.
 
-Quien construye un BackgroundSource es quien tiene que descartarlo y crear uno
-nuevo si el layout (o el tamano) cambia: esta clase no se entera de esos cambios
-sola, no hay invalidacion automatica.
+Whoever builds a BackgroundSource is the one who has to discard it and create a
+new one if the layout (or the size) changes: this class does not notice those
+changes on its own, there is no automatic invalidation.
 
-Costos medidos en el spike de fase 2 (perfil real, 320x1480, presupuesto de
-16,7 ms por cuadro a 60 fps): gradiente reconstruido 7,7 ms, secuencia 2,8 ms,
-scroll procedural 0,5 ms.
+Costs measured in the throughput spike (real profile, 320x1480, a 16.7 ms budget
+per frame at 60 fps): rebuilt gradient 7.7 ms, sequence 2.8 ms, procedural scroll
+0.5 ms.
 """
 import math
 import time
@@ -35,16 +36,16 @@ EXT_CUADROS = (".png", ".jpg", ".jpeg", ".bmp", ".gif")
 
 
 def parse_hex(color, default=FALLBACK):
-    """Convierte "#RRGGBB" a (r, g, b). Devuelve `default`, en silencio, ante
-    cualquier cosa que no matchee.
+    """Converts "#RRGGBB" to (r, g, b). Returns `default`, silently, for anything
+    that does not match.
 
-    validate() en layout/schema.py exige #RRGGBB para 'solid' y para cada
-    stop de 'gradient' via _check_color, pero NO para bg.color en
-    'image'/'sequence'/'video' (BACKGROUND_KEYS lo permite como clave sin
-    validarlo): un color roto ahi si puede llegar hasta aca desde un layout
-    compartido. El default silencioso es lo que evita que ese hueco de
-    validacion tire una excepcion en vez de, como mucho, pintar el letterbox
-    con un color que no es el pedido.
+    validate() in layout/schema.py requires #RRGGBB for 'solid' and for every
+    stop of 'gradient' via _check_color, but NOT for bg.color on
+    'image'/'sequence'/'video' (BACKGROUND_KEYS allows it as a key without
+    validating it): a broken colour there really can reach this point from a shared
+    layout. The silent default is what keeps that validation gap from raising an
+    exception instead of, at worst, painting the letterbox in a colour that is not
+    the one asked for.
     """
     if not isinstance(color, str) or not color.startswith("#") or len(color) != 7:
         return default
@@ -61,11 +62,11 @@ class BackgroundSource:
         self.assets_dir = Path(assets_dir)
         self.warnings: list[str] = []
         self._cache = None
-        self._tira = None          # el gradiente y su espejo, para el scroll
-        self._cuadros = None       # rutas de una sequence, leidas una sola vez
-        self._video = None         # el ffmpeg del fondo de video, si hay uno
-        # monotonic y no time(): un ajuste de hora del sistema -- o el cambio de
-        # horario -- no puede hacer saltar la animacion hacia atras.
+        self._tira = None          # the gradient and its mirror, for the scroll
+        self._cuadros = None       # a sequence's paths, read only once
+        self._video = None         # the video background's ffmpeg, if there is one
+        # monotonic and not time(): a system clock adjustment -- or a daylight
+        # saving change -- must not make the animation jump backwards.
         self._clock = clock or time.monotonic
 
     @property
@@ -73,9 +74,9 @@ class BackgroundSource:
         return self.bg.type in ANIMADOS
 
     def frame(self) -> Image.Image:
-        """Devuelve una copia del fondo. Copia, no el original: quien recibe el
-        frame le dibuja widgets encima, y si eso mutara el cache el siguiente
-        frame arrancaria con la basura del anterior."""
+        """Returns a copy of the background. A copy, not the original: whoever
+        receives the frame draws widgets on top of it, and if that mutated the
+        cache the next frame would start with the previous one's leftovers."""
         if self.animated:
             return self._animado(self._clock())
         if self._cache is None:
@@ -98,21 +99,22 @@ class BackgroundSource:
         return self._solid()
 
     def _avisar(self, texto):
-        """Aviso sin duplicar.
+        """Warn without duplicating.
 
-        Un fondo animado recalcula hasta 60 veces por segundo: si cada vuelta
-        agregara su aviso, warnings() creceria sin limite y la bandeja mostraria
-        el mismo texto mil veces.
+        An animated background recomputes up to 60 times a second: if every pass
+        added its warning, warnings() would grow without bound and the tray would
+        show the same text a thousand times.
         """
         if texto not in self.warnings:
             self.warnings.append(texto)
 
     def _tira_doble(self) -> Image.Image:
-        """El gradiente y su espejo apilados: 2x el alto del panel.
+        """The gradient and its mirror stacked: twice the panel height.
 
-        Es lo que hace que el scroll cierre sin salto. Con una sola copia, al
-        dar la vuelta el ultimo color choca con el primero y se ve un tiron en
-        cada ciclo; con el espejo el recorrido es continuo en los dos sentidos.
+        This is what makes the scroll close without a jump. With a single copy, on
+        wrapping around the last colour collides with the first and there is a
+        visible jolt every cycle; with the mirror the journey is continuous in both
+        directions.
         """
         if self._tira is None:
             base = self._gradient()
@@ -129,7 +131,7 @@ class BackgroundSource:
         desp = int(round((self.bg.speed or 0.0) * t)) % (alto * 2)
         if desp + alto <= alto * 2:
             return tira.crop((0, desp, ancho, desp + alto))
-        # La ventana quedo partida entre el final de la tira y su principio.
+        # The window ended up split between the end of the strip and its start.
         out = Image.new("RGB", self.size)
         primera = alto * 2 - desp
         out.paste(tira.crop((0, desp, ancho, alto * 2)), (0, 0))
@@ -137,10 +139,11 @@ class BackgroundSource:
         return out
 
     def _pulse(self, t) -> Image.Image:
-        """El gradiente con el brillo respirando.
+        """The gradient with its brightness breathing.
 
-        El factor no baja de 0.55: un fondo que se va a negro deja el texto
-        flotando en el vacio, y el punto de un fondo es acompanar, no competir.
+        The factor never drops below 0.55: a background that fades to black leaves
+        the text floating in a void, and the point of a background is to accompany,
+        not to compete.
         """
         if self._cache is None:
             self._cache = self._gradient()
@@ -150,12 +153,12 @@ class BackgroundSource:
         return ImageEnhance.Brightness(self._cache).enhance(k)
 
     def _video_frame(self) -> Image.Image:
-        """El ultimo cuadro que entrego ffmpeg, o un color plano mientras no haya.
+        """The last frame ffmpeg delivered, or a flat colour while there is none.
 
-        El video NO usa el reloj inyectado: lo marca ffmpeg, que ya pacea la
-        salida al ritmo natural del archivo. Pedirle un cuadro por tiempo
-        implicaria bufferear el video entero o hacer seek por cuadro, y las dos
-        cosas son peores que dejar que el decoder haga su trabajo.
+        Video does NOT use the injected clock: ffmpeg sets the pace, and it already
+        paces its output at the file's natural rate. Asking it for a frame by
+        timestamp would mean buffering the whole video or seeking per frame, and
+        both are worse than letting the decoder do its job.
         """
         if self._video is None:
             seguro = safe_asset_path(self.bg.src) if self.bg.src else None
@@ -171,13 +174,13 @@ class BackgroundSource:
         return img if img is not None else self._solid()
 
     def close(self):
-        """Suelta lo que este fondo tenga abierto.
+        """Releases whatever this background has open.
 
-        Hoy solo el ffmpeg de un video, pero el metodo existe para todos: el
-        Renderer descarta y recrea el BackgroundSource en cada set_layout, o sea
-        en cada recarga en caliente, y sin un close() cada una dejaria un ffmpeg
-        mas decodificando para nadie. Es exactamente el patron de proceso
-        huerfano que este proyecto ya tuvo con el sidecar de sensores.
+        Today only a video's ffmpeg, but the method exists for all of them: the
+        Renderer discards and recreates the BackgroundSource on every set_layout,
+        which is to say on every hot reload, and without a close() each one would
+        leave another ffmpeg decoding for nobody. It is exactly the orphan-process
+        pattern this project already had with the sensor sidecar.
         """
         if self._video is not None:
             try:
@@ -186,11 +189,10 @@ class BackgroundSource:
                 self._video = None
 
     def _lista_cuadros(self):
-        """Rutas de los cuadros, ordenadas y leidas una sola vez.
+        """The frames' paths, sorted and read only once.
 
-        Una sola vez porque el conjunto de ids/cuadros no puede cambiar entre
-        muestras: es la misma razon por la que los adaptadores de red y el
-        indice de los discos se fijan al arrancar.
+        Only once because the set of frames cannot change between samples: the same
+        reason the network adapters and the disk indices are fixed at start-up.
         """
         if self._cuadros is not None:
             return self._cuadros
@@ -211,12 +213,12 @@ class BackgroundSource:
         return self._cuadros
 
     def _sequence(self, t) -> Image.Image:
-        """Cuadro `int(t * fps) % n`, decodificado en el momento.
+        """Frame `int(t * fps) % n`, decoded on the spot.
 
-        Los cuadros decodificados NO se cachean a proposito: a 320x1480 cada uno
-        ocupa 1,4 MB en RAM, asi que una secuencia de 60 se comeria 85 MB para
-        ahorrar los 2,8 ms que cuesta decodificar y escalar (medido en el
-        spike). El archivo ya lo cachea el sistema operativo.
+        Decoded frames are deliberately NOT cached: at 320x1480 each one takes
+        1.4 MB of RAM, so a 60-frame sequence would eat 85 MB to save the 2.8 ms
+        decoding and scaling costs (measured in the spike). The file itself is
+        already cached by the operating system.
         """
         cuadros = self._lista_cuadros()
         if not cuadros:
@@ -234,9 +236,8 @@ class BackgroundSource:
     # --- estaticos ---
 
     def _build(self) -> Image.Image:
-        # Se llama una sola vez (frame() cachea el resultado), asi que los
-        # warnings que agregan las ramas de aca abajo no se duplican aunque
-        # frame() se llame muchas veces.
+        # Called only once (frame() caches the result), so the warnings added by
+        # the branches below do not duplicate even if frame() is called many times.
         t = self.bg.type
         if t == "gradient":
             return self._gradient()
@@ -248,17 +249,17 @@ class BackgroundSource:
         return Image.new("RGB", self.size, parse_hex(self.bg.color))
 
     def _gradient(self):
-        """Degradado lineal entre paradas ordenadas por 'at'.
+        """A linear gradient between stops sorted by 'at'.
 
-        Angulo: solo distingue vertical de horizontal, no un angulo
-        arbitrario. `angle % 180` en [45, 135) = vertical; el resto =
-        horizontal. No hay diagonales rotadas -- fase 1 no las necesita.
+        Angle: it only distinguishes vertical from horizontal, not an arbitrary
+        angle. `angle % 180` in [45, 135) is vertical; everything else is
+        horizontal. There are no rotated diagonals.
 
-        La tira muestreada tiene 1px en el eje perpendicular al degradado,
-        pero YA tiene resolucion completa en el eje del degradado (`n` es el
-        ancho/alto real, no 1). El resize final solo estira ese eje
-        perpendicular; como cada fila/columna es de un solo color, no hay
-        banding ni perdida de paradas intermedias por la interpolacion.
+        The sampled strip is 1 px on the axis perpendicular to the gradient, but it
+        ALREADY has full resolution along the gradient axis (`n` is the real
+        width/height, not 1). The final resize only stretches that perpendicular
+        axis; since each row/column is a single colour, there is no banding and no
+        intermediate stop is lost to interpolation.
         """
         stops = sorted(self.bg.stops, key=lambda s: s["at"])
         if len(stops) < 2:
@@ -290,10 +291,10 @@ class BackgroundSource:
         if not self.bg.src:
             self.warnings.append("'image' background with no src")
             return self._solid()
-        # safe_asset_path() ya corrio en schema.build(), pero BackgroundSource
-        # tambien se instancia directo con un Background armado a mano (como
-        # en los tests). Revalidar es la misma defensa en profundidad que ya
-        # usa widgets._draw_image con w.src.
+        # safe_asset_path() already ran in schema.build(), but BackgroundSource is
+        # also instantiated directly with a hand-built Background (as in the tests).
+        # Revalidating is the same defence in depth widgets._draw_image already
+        # applies to w.src.
         safe_src = safe_asset_path(self.bg.src)
         if safe_src is None:
             self.warnings.append(
@@ -313,10 +314,10 @@ class BackgroundSource:
             return src.resize(self.size, Image.LANCZOS)
         sw, sh = src.size
         k = max(tw / sw, th / sh) if self.bg.fit == "cover" else min(tw / sw, th / sh)
-        # round(), no int(): el eje que manda deberia dar sw*k == tw (o
-        # sh*k == th) exacto, pero en punto flotante puede quedar en
-        # 199.99999999999997. int() trunca a 199 y "cover" deja un borde de
-        # 1px sin cubrir; round() lo corrige sin tocar los casos ya exactos.
+        # round(), not int(): the governing axis should give sw*k == tw (or
+        # sh*k == th) exactly, but in floating point it can land on
+        # 199.99999999999997. int() truncates to 199 and "cover" leaves a 1 px edge
+        # uncovered; round() fixes that without touching the already-exact cases.
         scaled = src.resize((max(1, round(sw * k)), max(1, round(sh * k))), Image.LANCZOS)
         out = Image.new("RGB", self.size, parse_hex(self.bg.color, (0, 0, 0)))
         out.paste(scaled, ((tw - scaled.width) // 2, (th - scaled.height) // 2))
