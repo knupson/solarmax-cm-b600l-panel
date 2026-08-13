@@ -1,7 +1,7 @@
-"""EditorState: todo lo que el editor hace, sin Tkinter.
+"""EditorState: everything the editor does, without Tkinter.
 
-La ventana (vmaxpanel/editor.py) solo ata controles a estos metodos, igual que
-la bandeja con PanelApp.
+The window (vmaxpanel/editor.py) only wires controls to these methods, the same
+way the tray does with PanelApp.
 """
 import json
 
@@ -14,8 +14,8 @@ PROFILE = "vmaxpanel/profiles/vitals.json"
 
 
 def state_for(tmp_path):
-    # Se copia el archivo TAL CUAL, con su formato: los tests de guardado
-    # comparan contra el original y un re-dump como linea base los invalida.
+    # The file is copied AS IS, with its formatting: the save tests compare against
+    # the original and a re-dump as the baseline would invalidate them.
     path = tmp_path / "editando.json"
     path.write_text(open(PROFILE, encoding="utf-8").read(), encoding="utf-8")
     return EditorState(path)
@@ -29,8 +29,8 @@ def test_loads_the_profile_without_errors(tmp_path):
 
 
 def test_demo_sample_covers_every_metric(tmp_path):
-    """Un preview lleno de "--" no sirve para disenar: el editor tiene que
-    mostrar valores plausibles para las metricas que esta maquina no sirve."""
+    """A preview full of "--" is useless for designing: the editor has to show
+    plausible values for the metrics this machine does not serve."""
     sample = demo_sample()
     for mid in METRICS:
         assert mid in sample, mid
@@ -56,8 +56,8 @@ def test_numeric_fields_are_coerced_not_stored_as_text(tmp_path):
 
 
 def test_text_fields_stay_text_even_when_they_look_numeric(tmp_path):
-    """Un label con texto "6000" no puede convertirse en el entero 6000: el
-    validador exige que `text` sea texto."""
+    """A label with the text "6000" must not become the integer 6000: the validator
+    requires `text` to be a string."""
     st = state_for(tmp_path)
     st.set_field("cpu-hdr", "text", "6000")
     assert st.widget("cpu-hdr")["text"] == "6000"
@@ -85,9 +85,9 @@ def test_a_valid_edit_saves_and_roundtrips(tmp_path):
 
 
 def test_preview_keeps_working_while_the_layout_is_invalid(tmp_path):
-    """Mientras el usuario tipea un color a medias el layout es invalido. El
-    editor no puede quedarse sin preview -- se mantiene el ultimo valido, la
-    misma regla que el panel."""
+    """While the user is halfway through typing a colour the layout is invalid. The
+    editor cannot be left without a preview -- the last valid one is kept, the same
+    rule as the panel."""
     st = state_for(tmp_path)
     bueno = st.preview()
     st.set_field("cpu-load", "color", "#00FF0")      # a medio tipear
@@ -118,8 +118,8 @@ def test_adding_and_removing_a_widget(tmp_path):
 
 
 def test_a_new_widget_is_valid_out_of_the_box(tmp_path):
-    """Agregar un widget no puede dejar el layout invalido: si el default no
-    valida, el usuario ve un error que no cometio."""
+    """Adding a widget must not leave the layout invalid: if the default does not
+    validate, the user sees an error they did not make."""
     st = state_for(tmp_path)
     for tipo in ("text", "label", "bar", "arc", "graph", "rect"):
         assert st.add_widget(tipo, f"nuevo-{tipo}") == [], tipo
@@ -135,21 +135,21 @@ def test_duplicate_ids_are_rejected(tmp_path):
 
 
 def test_saving_preserves_the_raw_json_structure(tmp_path):
-    """Guardar reconstruyendo el modelo reescribe el archivo entero con el
-    orden y el formato del serializador, y el perfil se edita a mano: el
-    formato compacto de dos lineas por widget es parte del valor. Se guarda
-    el dict crudo, que ademas no puede perder nada por el camino."""
+    """Saving by rebuilding the model rewrites the whole file in the serialiser's
+    order and formatting, and the profile is edited by hand: the compact
+    two-lines-per-widget layout is part of the value. The raw dict is saved, which
+    also cannot lose anything along the way."""
     st = state_for(tmp_path)
     antes = json.loads(st.path.read_text(encoding="utf-8"))
     st.set_field("cpu-load", "color", "#00FF00")
     assert st.save() == []
     despues = json.loads(st.path.read_text(encoding="utf-8"))
 
-    assert list(despues) == list(antes)                       # mismo orden de claves
+    assert list(despues) == list(antes)                       # the same key order
     assert [w["id"] for w in despues["widgets"]] == [w["id"] for w in antes["widgets"]]
     uno = [w for w in despues["widgets"] if w["id"] == "cpu-load"][0]
     viejo = [w for w in antes["widgets"] if w["id"] == "cpu-load"][0]
-    assert list(uno) == list(viejo)                            # y de cada widget
+    assert list(uno) == list(viejo)                            # and of each widget
     assert uno["color"] == "#00FF00"
 
 
@@ -162,15 +162,15 @@ def test_saving_does_not_bloat_the_file(tmp_path):
     assert despues <= antes * 1.2, f"{antes} -> {despues} lineas"
 
 
-# --- catalogo de metricas para el selector ---
+# --- the metric catalogue for the selector ---
 
 def test_the_state_exposes_metrics_grouped_by_device(tmp_path):
     """El selector muestra "D: (JUEGOS) — libre" agrupado bajo "Disco D:", no
-    una lista plana de cien ids tecnicos."""
+    a flat list of a hundred technical ids."""
     st = state_for(tmp_path)
     grupos = st.metric_groups()
-    assert grupos, "el catalogo salio vacio"
-    # cada grupo trae pares (id, etiqueta) ordenados por etiqueta
+    assert grupos, "the catalogue came out empty"
+    # each group carries (id, label) pairs sorted by label
     for nombre, entradas in grupos.items():
         assert isinstance(nombre, str) and nombre
         for mid, etiqueta in entradas:
@@ -180,7 +180,7 @@ def test_the_state_exposes_metrics_grouped_by_device(tmp_path):
 
 
 def test_the_catalog_includes_the_metrics_the_profile_already_uses(tmp_path):
-    """Si una metrica en uso no esta en el selector, el usuario no puede
+    """If a metric in use is not in the selector, the user cannot
     volver a elegirla despues de cambiarla."""
     st = state_for(tmp_path)
     todas = {mid for entradas in st.metric_groups().values() for mid, _ in entradas}
@@ -190,12 +190,12 @@ def test_the_catalog_includes_the_metrics_the_profile_already_uses(tmp_path):
 
 
 def test_the_catalog_works_without_any_sensor_backend(tmp_path, monkeypatch):
-    """El editor tiene que abrir en una maquina sin sidecar ni WMI: el
-    catalogo cae a las metricas registradas."""
+    """The editor has to open on a machine with neither a sidecar nor WMI: the
+    catalogue falls back to the registered metrics."""
     import vmaxpanel.editor as ed
 
     def sin_nada():
-        raise OSError("sin backend")
+        raise OSError("no backend")
 
     monkeypatch.setattr(ed, "build_registry_without_sensors", sin_nada)
     st = ed.EditorState(state_for(tmp_path).path)
@@ -205,8 +205,8 @@ def test_the_catalog_works_without_any_sensor_backend(tmp_path, monkeypatch):
 
 
 def test_friendly_labels_win_over_the_generic_ones(tmp_path):
-    """La etiqueta del provider nombra el dispositivo real; la generica solo
-    repite el id. Si esta el volumen D, su etiqueta tiene que traer la letra."""
+    """The provider's label names the real device; the generic one just repeats the
+    id. If volume D is present, its label has to carry the letter."""
     st = state_for(tmp_path)
     etiquetas = {mid: et for entradas in st.metric_groups().values()
                  for mid, et in entradas}
@@ -216,24 +216,25 @@ def test_friendly_labels_win_over_the_generic_ones(tmp_path):
 
 
 def test_no_two_metrics_share_a_label_in_the_picker(tmp_path):
-    """Dos metricas con la misma etiqueta hacen que el selector no las pueda
-    distinguir: elegir una escribe la otra. Paso de verdad con disk.temp.0/1/2,
-    que compartian "Temperatura de disco", y solo se veia una corrida de cada
-    dos porque el orden de un set en Python varia entre procesos."""
+    """Two metrics with the same label make the selector unable to tell them apart:
+    choosing one writes the other. It really happened with disk.temp.0/1/2, which
+    shared "Disk temperature", and it only showed on every other run because a
+    Python set's ordering varies between processes."""
     st = state_for(tmp_path)
     vistas = {}
     for entradas in st.metric_groups().values():
         for mid, etiqueta in entradas:
             assert etiqueta not in vistas, \
-                f"{mid} y {vistas.get(etiqueta)} comparten la etiqueta {etiqueta!r}"
+                f"{mid} and {vistas.get(etiqueta)} share the label {etiqueta!r}"
             vistas[etiqueta] = mid
 
 
-# --- edicion del fondo y del panel ---
+# --- editing the background and the panel ---
 
 def test_switching_background_type_leaves_it_valid(tmp_path):
-    """Cambiar de tipo tiene que dar un fondo que valide solo. Si el usuario
-    elige 'procedural' y queda invalido porque faltan stops, ve un error que no
+    """Changing type has to produce a background that validates on its own. If the
+    user picks 'procedural' and it ends up invalid because stops are missing, they
+    see an error they
     cometio."""
     st = state_for(tmp_path)
     for tipo in ("solid", "gradient", "procedural", "sequence", "image"):
@@ -243,8 +244,8 @@ def test_switching_background_type_leaves_it_valid(tmp_path):
 
 
 def test_switching_to_procedural_keeps_the_existing_stops(tmp_path):
-    """El gradiente que el usuario ya afino no se pierde al animarlo: es
-    justamente el punto de que procedural parta del gradiente."""
+    """The gradient the user already tuned is not lost when animating it: that is
+    precisely the point of procedural starting from the gradient."""
     st = state_for(tmp_path)
     antes = [dict(s) for s in st.raw["background"]["stops"]]
     st.set_background_type("procedural")
@@ -281,8 +282,8 @@ def test_stops_can_be_added_edited_and_removed(tmp_path):
 
 
 def test_a_gradient_cannot_be_left_with_one_stop(tmp_path):
-    """Menos de dos paradas no es un degradado: el validador lo rechaza, asi
-    que borrar la penultima tiene que negarse en vez de dejar el perfil roto."""
+    """Fewer than two stops is not a gradient: the validator rejects it, so deleting
+    the second-to-last has to refuse rather than leave the profile broken."""
     st = state_for(tmp_path)
     while len(st.raw["background"]["stops"]) > 2:
         st.remove_stop(0)
@@ -301,8 +302,8 @@ def test_panel_fields_are_editable_and_validated(tmp_path):
 
 
 def test_the_editor_publishes_the_background_fields_for_each_type(tmp_path):
-    """La UI dibuja los campos que el tipo elegido admite; si los inventara,
-    escribiria claves que el validador rechaza."""
+    """The UI draws the fields the chosen type accepts; if it invented them, it
+    would write keys the validator rejects."""
     st = state_for(tmp_path)
     assert set(st.background_fields("solid")) == {"color"}
     assert "stops" not in st.background_fields("solid")
@@ -312,7 +313,7 @@ def test_the_editor_publishes_the_background_fields_for_each_type(tmp_path):
     assert "speed" not in st.background_fields("sequence")
 
 
-# --- cajas y hit test, para arrastrar sobre la vista previa ---
+# --- boxes and hit testing, for dragging on the preview ---
 
 def test_every_widget_has_a_bounding_box(tmp_path):
     st = state_for(tmp_path)
@@ -324,9 +325,9 @@ def test_every_widget_has_a_bounding_box(tmp_path):
 
 
 def test_a_text_box_follows_the_rendered_text(tmp_path):
-    """La caja de un texto sale de medir la fuente con el valor de demo, no de
-    un radio inventado: un reloj de 74 px y una etiqueta de 14 no pueden tener
-    la misma zona sensible."""
+    """A text's box comes from measuring the font with the demo value, not from an
+    invented radius: a 74 px clock and a 14 px label cannot have the same hit
+    area."""
     st = state_for(tmp_path)
     reloj = st.widget_bbox("clock")
     etiqueta = st.widget_bbox("cpu-temp-tag")
@@ -356,20 +357,20 @@ def test_hit_test_returns_none_on_empty_space(tmp_path):
 
 
 def test_hit_test_prefers_the_one_drawn_last(tmp_path):
-    """El orden de la lista es el orden de pintado: el de arriba es el que el
-    usuario ve y el que espera agarrar."""
+    """The list order is the paint order: the top one is what the user sees and what
+    they expect to grab."""
     st = state_for(tmp_path)
     st.add_widget("rect", "tapa")
     st.set_field("tapa", "x", "24")
     st.set_field("tapa", "y", "316")
     st.set_field("tapa", "w", "272")
     st.set_field("tapa", "h", "16")
-    assert st.hit_test(100, 320) == "tapa"      # tapa a cpu-bar, que esta antes
+    assert st.hit_test(100, 320) == "tapa"      # it covers cpu-bar, which comes before
 
 
 def test_dragging_moves_the_widget_to_the_point(tmp_path):
-    """Arrastrar mueve por DELTA, no reposiciona la esquina en el cursor: si no,
-    el widget salta al agarrarlo desde cualquier lugar que no sea su esquina."""
+    """Dragging moves by DELTA, it does not put the corner under the cursor:
+    otherwise the widget jumps when grabbed anywhere other than that corner."""
     st = state_for(tmp_path)
     x0, y0 = st.widget("cpu-load")["x"], st.widget("cpu-load")["y"]
     st.begin_drag("cpu-load", x0 + 10, y0 + 5)
@@ -380,7 +381,7 @@ def test_dragging_moves_the_widget_to_the_point(tmp_path):
 
 
 def test_dragging_clamps_to_the_canvas(tmp_path):
-    """Un widget arrastrado fuera del lienzo desaparece del panel y no hay
+    """A widget dragged off the canvas disappears from the panel and there is no
     forma de volver a agarrarlo."""
     st = state_for(tmp_path)
     st.begin_drag("cpu-load", 20, 248)
@@ -416,8 +417,8 @@ def test_a_duplicate_font_alias_is_rejected(tmp_path):
 
 
 def test_a_font_in_use_cannot_be_removed(tmp_path):
-    """Borrar un alias que algun widget usa deja el layout invalido: el
-    validador rechaza el perfil y el panel se queda con el anterior."""
+    """Deleting an alias some widget uses leaves the layout invalid: the validator
+    rejects the profile and the panel keeps the previous one."""
     st = state_for(tmp_path)
     errores = st.remove_font("hero")
     assert errores and any("hero" in e for e in errores)
@@ -426,15 +427,15 @@ def test_a_font_in_use_cannot_be_removed(tmp_path):
 
 def test_an_unused_font_can_be_removed(tmp_path):
     st = state_for(tmp_path)
-    st.add_font("sin-usar")
-    assert st.remove_font("sin-usar") == []
-    assert "sin-usar" not in st.raw["fonts"]
+    st.add_font("unused")
+    assert st.remove_font("unused") == []
+    assert "unused" not in st.raw["fonts"]
 
 
 def test_the_available_families_are_offered(tmp_path):
-    """El combo de familia se llena con las fuentes instaladas: tipear el
-    nombre a mano es como se escribe una familia que no existe y el widget
-    termina con la fuente por defecto sin avisar."""
+    """The family combo is filled from the installed fonts: typing the name by hand
+    is how a family that does not exist gets written and the widget ends up with the
+    default font with no warning."""
     st = state_for(tmp_path)
     familias = st.font_families()
     assert familias, "no encontro ninguna familia instalada"
@@ -473,7 +474,7 @@ def test_undo_walks_back_several_steps(tmp_path):
 
 
 def test_a_whole_drag_is_one_undo_step(tmp_path):
-    """Arrastrar dispara un cambio por pixel de mouse. Si cada uno fuera un paso,
+    """Dragging fires one change per mouse pixel. If each were a step,
     deshacer un arrastre pediria cincuenta Ctrl+Z."""
     st = state_for(tmp_path)
     x0 = st.widget("cpu-load")["x"]
@@ -509,8 +510,8 @@ def test_undo_covers_the_background_and_the_fonts(tmp_path):
 
 
 def test_the_undo_history_is_bounded(tmp_path):
-    """Un historial sin limite guarda una copia del layout por cada pixel de
-    arrastre: son 300 KB por copia con 154 widgets."""
+    """An unbounded history stores one copy of the layout per pixel of drag: that is
+    300 KB a copy with 154 widgets."""
     st = state_for(tmp_path)
     for i in range(200):
         st.set_field("cpu-load", "x", str(20 + i % 50))
@@ -520,8 +521,8 @@ def test_the_undo_history_is_bounded(tmp_path):
 # --- reglas de color ---
 
 def test_rules_are_listed_parsed(tmp_path):
-    """El JSON guarda la regla como "> 90"; la UI necesita el operador y el
-    numero por separado para poner un combo y un campo."""
+    """The JSON stores the rule as "> 90"; the UI needs the operator and the number
+    separately in order to offer a combo and a field."""
     st = state_for(tmp_path)
     reglas = st.rules("cpu-load")
     assert reglas and reglas[0]["op"] == ">" and reglas[0]["value"] == "90"
@@ -548,7 +549,7 @@ def test_editing_the_pieces_of_a_rule(tmp_path):
     assert st.set_rule("cpu-load", 0, "color", "#00FF00") == []
     r = st.rules("cpu-load")[0]
     assert (r["op"], r["value"], r["color"]) == (">=", "75.5", "#00FF00")
-    # y en el JSON quedo como el comparador que el validador espera
+    # and in the JSON it ended up as the comparison the validator expects
     crudo = st.widget("cpu-load")["rules"][0]
     assert crudo["when"] == ">= 75.5"
 
@@ -590,9 +591,9 @@ def test_the_operators_offered_are_the_ones_the_validator_accepts(tmp_path):
 
 
 def test_the_video_hint_says_ffmpeg_is_needed(monkeypatch):
-    """La pista es el unico lugar donde el usuario se entera de que el video
-    depende de un ejecutable externo. Si falta, tiene que decir COMO conseguirlo:
-    un aviso que diga "necesita ffmpeg" y nada mas lo deja donde estaba."""
+    """The hint is the only place the user learns that video depends on an external
+    executable. If it is missing, it has to say HOW to get it: a warning reading
+    "needs ffmpeg" and nothing else leaves them where they were."""
     from vmaxpanel import editor
     from vmaxpanel.render import video
     monkeypatch.setattr(video, "buscar_ffmpeg", lambda: None)
@@ -611,9 +612,9 @@ def test_the_video_hint_confirms_ffmpeg_when_it_is_there(monkeypatch):
 
 
 def test_the_sequence_hint_explains_that_src_is_a_folder():
-    """Estaba escrito pero era inalcanzable: la guarda de arriba capturaba
-    'sequence' junto con 'procedural' y devolvia antes, asi que el usuario nunca
-    veia la unica linea que le explicaba que src es una carpeta."""
+    """It was written but unreachable: the guard above caught 'sequence' along with
+    'procedural' and returned early, so the user never saw the one line explaining
+    that src is a folder."""
     from vmaxpanel import editor
     assert "folder" in editor.pista_fondo("sequence")
 
