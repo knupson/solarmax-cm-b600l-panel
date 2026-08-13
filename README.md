@@ -1,396 +1,405 @@
-# Solarmax CM-B600L — driver abierto para el panel LCD del gabinete
+# Solarmax CM-B600L — open driver for the case LCD panel
 
-Reemplazo libre de **LCD Control**, el software vendor del panel LCD de 320x1480 del
-gabinete **Solarmax CM-B600L**, que Windows enumera como `HL-VMAX-USB-Device`
-(VID_33C3 / PID_F101). Sirve para cualquier gabinete que monte el mismo panel: el puerto
-COM y la geometría se autodetectan, no hay nada del hardware hardcodeado.
+A free replacement for **LCD Control**, the vendor software for the 320x1480 LCD panel in the
+**Solarmax CM-B600L** case, which Windows enumerates as `HL-VMAX-USB-Device`
+(VID_33C3 / PID_F101). It works with any case carrying the same panel: the COM port and the
+panel geometry are autodetected, nothing about the hardware is hardcoded.
 
-Escrito el 2026-08-11 porque la app vendor mostraba **CPU 100%** con carga real de 65%.
+Written on 2026-08-11 because the vendor app showed **CPU 100%** at a real load of 65%.
 
 <p align="center">
-  <img src="docs/img/apex.png"   alt="Perfil Apex"   width="215">
-  <img src="docs/img/embers.png" alt="Perfil Embers" width="215">
-  <img src="docs/img/vitals.png" alt="Perfil Vitals" width="215">
+  <img src="docs/img/apex.png"   alt="Apex profile"   width="215">
+  <img src="docs/img/embers.png" alt="Embers profile" width="215">
+  <img src="docs/img/vitals.png" alt="Vitals profile" width="215">
 </p>
 <p align="center">
-  <em>Apex, Embers y Vitals — los tres perfiles que vienen con el repo, tal como salen de
-  <code>--save</code>. Ninguno tiene un solo valor escrito a mano: todo se lee de la máquina.</em>
+  <em>Apex, Embers and Vitals — the three profiles shipped with the repo, exactly as
+  <code>--save</code> renders them. Not one value is hand-written: everything is read from the
+  machine.</em>
 </p>
 
-El layout es **datos, no código**: un JSON por perfil que se recarga en caliente, con editor
-gráfico y app de bandeja. Sensores por WMI, PDH y LibreHardwareMonitor, sin ningún driver
-ring0.
+The layout is **data, not code**: one JSON per profile, hot-reloaded on save, with a graphical
+editor and a tray app. Sensors come from WMI, PDH and LibreHardwareMonitor, with no ring0
+driver of any kind.
 
-**Licencia [PolyForm Noncommercial 1.0.0](LICENSE)**: usalo, modificalo y compartilo para
-cualquier fin no comercial. Venderlo, no. Para contribuir, mirá
+**Licensed under [PolyForm Noncommercial 1.0.0](LICENSE)**: use it, modify it and share it for
+any noncommercial purpose. Selling it is not allowed. To contribute, see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Empezar de cero
+> The code comments and the app's own messages are still in Spanish. Translating them is in
+> progress; the docs came first.
 
-En una máquina nueva, en este orden:
+## From scratch
+
+On a new machine, in this order:
 
 ```powershell
-git clone <este repo> && cd Solarmax_Display
+git clone https://github.com/knupson/solarmax-cm-b600l-panel
+cd solarmax-cm-b600l-panel
 pip install -r requirements.txt
-python -m vmaxpanel --diagnostico            # dice qué falta y qué es opcional
-python -m vmaxpanel --save preview.png       # un PNG, sin tocar el panel: prueba que renderiza
-python -m vmaxpanel --profile vmaxpanel\profiles\apex.json --instalar   # consola de administrador
+python -m vmaxpanel --diagnostico          # says what is missing and what is optional
+python -m vmaxpanel --save preview.png     # a PNG, without touching the panel: proves it renders
+python -m vmaxpanel --profile vmaxpanel\profiles\apex.json --instalar   # administrator console
 ```
 
-**Verificado clonando el repo limpio** (2026-08-12): las 575 pruebas pasan y el panel se
-dibuja completo *sin* las DLL de sensores — reloj, carga de CPU, temperatura y VCORE (esos
-salen de GSA1, no de las DLL), RAM, discos con tamaños reales, uptime y procesos. Lo que
-falta sin ellas es GPU, temperatura por núcleo, potencia del paquete, temperatura de discos
-y RPM de fans; el diagnóstico lo marca **opcional** y dice de dónde bajarlas. Es el único
-paso que no se puede automatizar: son de terceros y este repo no las redistribuye.
+**Verified from a clean clone**: the full test suite passes and the panel draws completely
+*without* the sensor DLLs — clock, CPU load, temperature and VCORE (those come from GSA1, not
+from the DLLs), RAM, disks with real sizes, uptime and process count. What you lose without
+them is the GPU, per-core figures, disk temperatures and fan RPM. The diagnostic marks them
+**optional** and tells you where to download them. It is the one step that cannot be
+automated: they are third-party binaries and this repo does not redistribute them.
 
-`--instalar` necesita **consola de administrador** porque la tarea corre elevada (sin
-elevación no hay GSA1 ni SMART).
+`--instalar` needs an **administrator console**, because the scheduled task runs elevated
+(without elevation there is no GSA1 and no SMART).
 
-## Por qué existe
+## Why it exists
 
-`CpuUsage` y `CpuUse`, los únicos tokens de CPU de LCD Control, son
-**`% Processor Utility` de PDH**: carga × (clock actual / clock base). En el i5-12400F
-(base 2500 MHz, all-core ~4080) el factor es **~1,63**, así que el valor pasa de 100 y el
-panel lo **clampea en 100 con cualquier carga real ≥ ~61%**.
+`CpuUsage` and `CpuUse`, the only CPU tokens LCD Control exposes, are PDH's
+**`% Processor Utility`**: load × (current clock / base clock). On an i5-12400F (2500 MHz
+base, ~4080 all-core) that factor is **~1.63**, so the value goes past 100 and the panel
+**clamps it at 100 for any real load above roughly 61%**.
 
-Verificado por dos lados en el mismo segundo:
+Confirmed from both sides within the same second:
 
-| Fuente | Valor |
+| Source | Value |
 |---|---|
-| stdout interno de la app | `Processor 110,7` |
-| mi contador PDH `% Processor Utility` | `110,5` |
-| carga real (`% Processor Time`) | `69,2` |
+| The app's own internal stdout | `Processor 110,7` |
+| My PDH counter `% Processor Utility` | `110,5` |
+| Real load (`% Processor Time`) | `69,2` |
 
-Los 34 sensores de la app son todos contadores PDH; incluso su per-thread pasa de 100
-(`CPU #9 = 107,2`). No hay ningún token con la carga time-based: probé ~38 nombres.
+All 34 sensors in that app are PDH counters; even its per-thread readings exceed 100
+(`CPU #9 = 107,2`). There is no token carrying time-based load: about 38 names were tried.
 
-## Protocolo del panel
+## The panel protocol
 
-Reverseado con frida hookeando `WriteFile` en el proceso de la app.
+Reverse-engineered with frida, hooking `WriteFile` inside the vendor app's process.
 
 ```
-open \\.\COM3                       (CDC; el baud es irrelevante)
+open \\.\COM<n>                     (CDC; the baud rate is irrelevant)
 TX  F0 A5 5A 0F                     handshake
-RX  "VMAXA170320*1480S261001155"    SN, 26 bytes ASCII
-TX  AA BB <brillo 0..100> CC DD
-TX  <JPEG>                          un WriteFile por frame, ~1 fps
+RX  "VMAXA170320*1480S<serial>"     serial number, 26 ASCII bytes
+TX  AA BB <brightness 0..100> CC DD
+TX  <JPEG>                          one WriteFile per frame
 ```
 
-El frame es un **JPEG crudo 320x1480 baseline 4:2:0**, sin header ni framing: arranca en
-`FFD8FF` y termina en `FFD9`. El panel está montado al revés en el gabinete: se manda
-**rotado 180°** (`--rotate`).
+The frame is a **raw 320x1480 baseline 4:2:0 JPEG**, with no header and no framing: it starts
+at `FFD8FF` and ends at `FFD9`. The panel is mounted upside down inside the case, so frames go
+out **rotated 180°** (`--rotate`).
 
-## Sensores
+The panel width and height are parsed out of that serial number, which is why nothing is
+hardcoded. The COM port is found by VID/PID.
 
-El driver ring0 de LibreHardwareMonitor (**WinRing0**) está **bloqueado** en esta máquina:
-`StartService → 0xE1` (`ERROR_VIRUS_INFECTED`, está en la blocklist de drivers vulnerables
-de Windows). Sin MSR. Todo lo de acá abajo es **driverless y read-only**.
+## Sensors
 
-| Dato | Fuente |
+LibreHardwareMonitor's ring0 driver (**WinRing0**) is **blocked** on Windows:
+`StartService → 0xE1` (`ERROR_VIRUS_INFECTED` — it is on the vulnerable-driver blocklist). No
+MSR access. Everything below is **driverless and read-only**.
+
+| Reading | Source |
 |---|---|
-| Carga CPU (real) | PDH `% Processor Time` vía psutil |
-| Clock CPU | PDH `% Processor Performance` × 2500 |
-| Temp CPU | Gigabyte GSA1 ACPI-WMI, `ZFCGetCurrentTemp(id=2)` |
-| Temp VRM | idem, `id=4` |
-| VCore | idem, `EZVGetVoltage(Id=5)` (mV) |
-| GPU: load, VRAM, temp, hot spot, power, clock, fan | LibreHardwareMonitor (ADL) |
-| Temp de los 3 SSD | LibreHardwareMonitor (NVMe SMART) |
-| RAM (uso), red | psutil |
-| Velocidad de RAM | `Win32_PhysicalMemory.ConfiguredClockSpeed` (MT/s), con `Speed` de respaldo |
+| CPU load (real) | PDH `% Processor Time` via psutil |
+| CPU clock | PDH `% Processor Performance` × the CPU's real base clock |
+| CPU temperature | Gigabyte GSA1 ACPI-WMI, `ZFCGetCurrentTemp(id=2)` |
+| VRM temperature | same interface, `id=4` |
+| VCore | same interface, `EZVGetVoltage(Id=5)` (mV) |
+| CPU package power | LibreHardwareMonitor, Intel RAPL |
+| Per-core load, clock and temperature | LibreHardwareMonitor |
+| Fan RPM | LibreHardwareMonitor, motherboard SuperIO (ITE IT8689E) |
+| GPU load, temperature, hot spot, power, clock, fan | LibreHardwareMonitor |
+| VRAM used | `D3D Dedicated Memory Used`, over the adapter's real total (see below) |
+| SSD temperatures | LibreHardwareMonitor, NVMe SMART |
+| RAM usage, network | psutil |
+| RAM speed | `Win32_PhysicalMemory.ConfiguredClockSpeed` (MT/s), falling back to `Speed` |
 
-**GSA1** = `root\WMI`, clase `GSA1_ACPIMethod`, instancia `ACPI\PNP0C14\GSADEV0_0`.
-Identifiqué los ids por correlación con carga: id2 subió +10 °C y id4 +9 °C bajo 100% de
-CPU; 0/1/3/5 no se movieron. `ECLReadByte/Word` **no está implementado** en la B760M D3HP
-("Objeto no válido"). `PIORead8` sí funciona.
+**GSA1** is `root\WMI`, class `GSA1_ACPIMethod`, instance `ACPI\PNP0C14\GSADEV0_0`. The ids
+were identified by correlating with load: id2 rose +10 °C and id4 +9 °C under 100% CPU, while
+0/1/3/5 did not move. `ECLReadByte/Word` is **not implemented** on the B760M D3HP ("invalid
+object"). `PIORead8` does work.
 
-> **Cuidado:** GSA1 también expone `PIOWrite*`, `MEMWrite*`, `PCIWrite*` — escritura
-> arbitraria a puertos, memoria física y espacio PCI. El daemon usa **solo métodos de
-> lectura**. No agregar escrituras sin entender exactamente el registro destino.
+> **Careful:** GSA1 also exposes `PIOWrite*`, `MEMWrite*` and `PCIWrite*` — arbitrary writes to
+> I/O ports, physical memory and PCI space. This driver uses **read methods only**. Do not add
+> writes without knowing exactly which register they land on.
 
-### Lo que no se puede
+Two readings need more than a sensor name:
 
-- **Package power (W)**: necesita MSR RAPL → driver ring0.
-- **Fan RPM de CPU**: necesita escrituras al índice del SuperIO (IT87xx).
+- **VRAM used.** LibreHardwareMonitor's `Load / GPU Memory` is *not* the fraction of VRAM in
+  use — on AMD it is memory-bus utilization, which read 1% while 1.5 GB of 16 GB were
+  allocated. The used figure comes from `SmallData`, preferring `GPU Memory Used`/`Total` when
+  the card serves them (NVIDIA, Intel) and falling back to `D3D Dedicated Memory Used` (AMD).
+  The total does **not** come from `Win32_VideoController.AdapterRAM`: that field is a uint32
+  and overflows above 4 GB. It comes from the driver's own 64-bit
+  `HardwareInformation.qwMemorySize`. With no total available the metric is simply not
+  published, which the panel reports honestly instead of showing a number computed against a
+  guess.
+- **Package power and CPU fan RPM** were long documented here as impossible, because they were
+  believed to need MSR and SuperIO index writes. They are not: LibreHardwareMonitor 0.9.3 reads
+  RAPL without loading any ring0 driver, and the fans come off the ITE SuperIO. Both are on the
+  panel today.
 
-Esos dos slots del layout se reetiquetaron a **VCORE** y **VRM** en `assets/back.png`.
-
-## Estructura
+## Layout of the repo
 
 ```
-vmaxpanel/    motor data-driven: app.py (supervisor), tray.py (bandeja), editor.py,
+vmaxpanel/    the data-driven engine: app.py (supervisor), tray.py, editor.py,
               engine.py, cli.py, layout/, render/, providers/, transport/, profiles/
-daemon/       panel.py, sensors.ps1, start.ps1, stop.ps1, assets/, DLLs, panel.log
-research/     herramientas de reversing y evidencia (sniffers frida, sondas, capturas, CSVs)
-docs/memory/  copia de las memorias del proyecto
-transcript/   transcript de la sesión donde se construyó esto
+daemon/       the previous version, kept byte-identical as the rollback path
+docs/         design specs, implementation plans and the README screenshots
+tests/        594 tests, no hardware required
 ```
 
-## Operación
+## Running it
 
 ```powershell
-cd E:\Claude\Solarmax_Display\daemon
-.\start.ps1                 # idempotente; -Force reinicia
-.\stop.ps1                  # mata daemon + sidecar, y barre huérfanos
-.\start.ps1 -Fps 2 -Brightness 60 -Rotate 180
-python panel.py --save preview.png    # previsualizar sin tocar el panel
+python -m vmaxpanel.tray --log vmaxpanel.log   # tray icon and menu; supervises the engine
+python -m vmaxpanel                            # engine only, with the default profile
+python -m vmaxpanel --once                     # a single frame
+python -m vmaxpanel --save preview.png         # render to PNG, does not touch the panel
+python -m vmaxpanel --save p.png --no-sensors  # same, without launching the sensor sidecar
+python -m vmaxpanel.editor                     # layout editor
+python -m vmaxpanel --estado                   # is it drawing right now?
+python -m vmaxpanel --parar                    # bring the whole thing down
 ```
 
-`start.ps1` escribe `panel.pid`. `stop.ps1` no confía solo en el pidfile: también barre por
-línea de comandos, porque los sidecars huérfanos se quedan con el DLL de LHM tomado.
+Editing `vmaxpanel/profiles/<profile>.json` **reloads live**, with no restart. A broken JSON
+does not blank the panel: the previous layout stays up and the error shows in the status.
 
-### La app de bandeja
+### The tray app
+
+The tray menu carries the status (connection, frames drawn, last error, metrics with no data),
+pause and resume, restart the engine, open the editor, open the JSON and view the log.
+**Pausing releases the COM port**, which is how you hand the panel over to LCD Control without
+closing anything.
+
+The editor saves atomically and the engine picks the change up live. There is no IPC between
+the two processes: **the file is the protocol**. The editor never saves an invalid layout,
+because the engine would reject it and the user would have "saved" something the panel ignores.
+
+The design notes are in `docs/superpowers/specs/2026-08-12-vmax-panel-fase3-design.md`,
+including **why there is no Windows service**: a service runs in session 0, and from there it
+cannot show a tray icon or a window at all.
+
+### Install and autostart
 
 ```powershell
-python -m vmaxpanel.tray --log vmaxpanel.log   # ícono + menú, supervisa el motor
-python -m vmaxpanel.editor                     # editor de layout (lo abre la bandeja)
+python -m vmaxpanel --diagnostico                  # checks and exits, changes nothing
+python -m vmaxpanel --profile <profile> --instalar # checks, then registers the logon task
+python -m vmaxpanel --desinstalar                  # removes the task
 ```
 
-El menú de la bandeja tiene el estado (conexión, frames, último error, métricas sin datos),
-pausar/reanudar, reiniciar el motor, abrir el editor, abrir el JSON y ver el log. **Pausar
-suelta COM3**, así que es la forma de prestarle el panel a LCD Control sin cerrar nada.
+`--diagnostico` is what to run when "it does not work": dependencies (named as pip names, not
+import names — "PIL is missing" sends people looking for a package that does not exist), the
+sensor DLL, the profile and the panel. Three states rather than two: **ok**, **MISSING**
+(blocks operation, and blocks `--instalar`) and **optional** — without ffmpeg you lose video
+backgrounds and nothing else, and an unplugged panel is not a problem because the tray keeps
+retrying. An "Access denied" on the port is translated to *in use*: pyserial wraps the
+`PermissionError` in a `SerialException`, and read literally it sends you to fight UAC instead
+of to close LCD Control.
 
-El editor guarda con escritura atómica y el motor levanta el cambio en caliente: no hay
-comunicación entre los dos procesos, **el archivo es el protocolo**. El editor nunca guarda un
-layout inválido, porque el motor lo rechazaría y el usuario habría "guardado" algo que el panel
-ignora.
+`--instalar` registers the task **from XML**, not via `/SC ONLOGON`, because the schtasks
+defaults refuse to start on battery, kill the task when you unplug, and stop it after 72 hours:
+on a laptop that is the panel switching itself off. It uses **`RunLevel HighestAvailable`** —
+GSA1 and NVMe SMART both need elevation — which is why registering it needs an administrator
+console. It registers with `/F`, so reinstalling replaces and running it twice leaves a single
+task. The XML is written as UTF-16 because schtasks rejects UTF-8 with "The task XML is
+malformed" without ever mentioning that the encoding is the problem.
 
-Detalle de diseño en `docs/superpowers/specs/2026-08-12-vmax-panel-fase3-design.md`, incluido
-**por qué no hay un servicio de Windows**: corre en la sesión 0 y desde ahí no se puede mostrar
-ni un ícono ni una ventana.
+`pythonw.exe` has no console, so **`--log` is not optional here**: without it, an engine that
+dies at logon leaves a black screen and no trace. The log is flushed per line and includes the
+traceback of anything that escapes. It earned its keep on the tray's first run, catching an
+`OverflowError` inside a Win32 callback (`DefWindowProcW` without `argtypes`, with a 64-bit
+`LPARAM`) that Python swallows as "Exception ignored" and that left the window silently unable
+to process messages.
 
-### Instalación y autostart
+To test the task without rebooting: `Stop-ScheduledTask PanelVitals` then
+`Start-ScheduledTask PanelVitals`, and read the log. Watch out for two instances fighting over
+the COM port — kill the manual one first.
 
-```powershell
-python -m vmaxpanel --diagnostico                          # revisa y sale, no toca nada
-python -m vmaxpanel --profile <perfil> --instalar          # revisa y registra la tarea al logon
-python -m vmaxpanel --desinstalar                          # borra la tarea
-```
+If LCD Control is started by hand it will fight for the port. The engine retries every 5 s, but
+it is better not to run both.
 
-`--diagnostico` es lo que hay que correr cuando "no anda": dependencias (con el nombre de pip,
-no el de import — "falta PIL" manda a buscar un paquete que no existe), la DLL de sensores, el
-perfil y el panel. Tres estados y no dos: **ok**, **FALTA** (impide funcionar, y bloquea
-`--instalar`) y **opcional** — sin ffmpeg no hay fondos de video y nada más; el panel
-desenchufado no es un problema porque la bandeja reintenta sola. Un "Acceso denegado" del
-puerto se traduce a *está en uso*: pyserial envuelve el `PermissionError` en `SerialException`
-y leído crudo manda a pelear con el UAC en vez de a cerrar LCD Control.
-
-`--instalar` registra `PanelVitals` **por XML**, no con `/SC ONLOGON`, porque los defaults de
-schtasks no arrancan la tarea a batería, la matan al desenchufar y la cortan a las 72 horas: en
-una notebook eso es el panel apagándose solo. **`RunLevel HighestAvailable`** — GSA1 y el SMART
-de los SSD piden elevación —, y por eso registrarla necesita una consola de administrador. Con
-`/F`: reinstalar reemplaza, así que correrlo dos veces deja una sola tarea. El XML va en UTF-16
-porque schtasks rechaza UTF-8 con "The task XML is malformed" sin decir que el problema es la
-codificación.
-
-**Registrado el 2026-08-11** a mano, apuntado a la bandeja el 2026-08-12, y regenerado con
-`--instalar` el mismo día. La tarea vendor `LCD ControlPowerBoot` quedó deshabilitada
-(`Disable-ScheduledTask -TaskName 'LCD ControlPowerBoot'`); revertir eso es
-`Enable-ScheduledTask`.
-
-`pythonw.exe` no tiene consola, así que **`--log` no es opcional acá**: sin él, un motor que
-muere al logon deja la pantalla negra sin dejar rastro. El log va a `vmaxpanel.log` en la raíz
-del repo (gitignored) y se escribe con flush por línea, incluido el traceback de una excepción
-que se escape. Se ganó el sueldo en la primera corrida de la bandeja: cazó un `OverflowError`
-dentro del callback de Win32 (`DefWindowProcW` sin `argtypes`, con un `LPARAM` de 64 bits) que
-Python se come como "Exception ignored" y que dejaba la ventana sin responder mensajes sin que
-nada fallara a la vista.
-
-Probar la tarea sin reiniciar: `Stop-ScheduledTask PanelVitals` + `Start-ScheduledTask
-PanelVitals`, y revisar el log. Ojo que dos instancias se pelean por COM3: matar la manual
-antes.
-
-Para volver al daemon viejo en el autostart, la versión anterior de esta sección está en el
-historial de git (`-Execute pythonw.exe -Argument '-u panel.py --fps 1 --log panel.log'` con
-`-WorkingDirectory` en `daemon/`).
-
-Si LCD Control arranca a mano pelea por COM3; el daemon reintenta cada 5s, pero conviene
-no tener los dos.
-
-## Editar
-
-Fase 1 (`vmaxpanel/`) reemplaza al `daemon/` original por un motor data-driven: el layout
-vive en JSON, no hardcodeado en Python, y se recarga en caliente al guardar. `daemon/` sigue
-intacto y es lo que corre hoy en producción — el cutover (autostart) todavía no se hizo, ver
-"Estado" en `CLAUDE.md`. Mientras tanto, para probar el motor nuevo sin tocar el panel real:
-`python -m vmaxpanel --save preview.png --no-sensors`.
-
-| Qué querés cambiar | Dónde |
-|---|---|
-| Posición, formato o color de un valor | `vmaxpanel/profiles/vitals.json` — se recarga en caliente al guardar |
-| Etiquetas de texto | widgets de tipo `label` en el mismo JSON |
-| Líneas separadoras, marcos, bloques de color | widgets de tipo `rect` en el mismo JSON |
-| Fondo | el bloque `background` del perfil |
-| Qué métricas existen | `vmaxpanel/metrics.py` |
-| De dónde sale cada métrica | `vmaxpanel/providers/` |
-| Sensores nuevos del sidecar | `vmaxpanel/sensors.ps1` |
-
-El `daemon/panel.py` viejo (sin motor, todo hardcodeado) se sigue editando como antes: ver el
-historial de este archivo antes de la fase 1 si hace falta esa tabla.
-
-### El widget `rect`
-
-Cubre divisores, marcos y bloques de color. `fill` y `stroke` son opcionales por separado,
-pero al menos uno tiene que estar — un rect sin ninguno de los dos no dibuja nada, así que el
-validador lo rechaza en vez de dejarlo invisible.
-
-```json
-{ "id": "cpu-rule", "type": "rect", "x": 24, "y": 164, "w": 272, "h": 1, "fill": "#242834" }
-{ "id": "marco", "type": "rect", "x": 14, "y": 540, "w": 292, "h": 320,
-  "radius": 8, "stroke": "#242834", "stroke_width": 2 }
-```
-
-Dos cosas que no se adivinan:
-
-- **`w`/`h` son el tamaño real en píxeles**: `"h": 1` es una línea de 1 px. `bar` y `graph`
-  usan la caja inclusive de Pillow y quedan un píxel más grandes que lo escrito (`"h": 16` →
-  17 px); no se corrigieron para no mover el perfil ni los goldens, pero un separador no puede
-  darse ese lujo. El `radius` se clampea a la mitad del lado menor.
-- **El orden de la lista `widgets` es el orden de pintado.** No hay campo `z`: un `rect` con
-  `fill` puesto después de un texto lo tapa. Los separadores del perfil van antes del header
-  de su sección.
-
-### Bajarlo de verdad
+### Bringing it down for real
 
 ```powershell
 python -m vmaxpanel --parar
 ```
 
-Tres cosas, porque hacen falta las tres: detiene la tarea (si no, vuelve al siguiente
-logon), mata la bandeja y el motor, y mata el **sidecar de sensores** — un `powershell.exe`
-corriendo `sensors.ps1` que sobrevive se queda con `LibreHardwareMonitorLib.dll` tomado y
-bloquea mover o borrar el directorio. Es la trampa recurrente de este proyecto.
+Three things, because all three are needed: it stops the scheduled task (otherwise it returns
+at the next logon), kills the tray and the engine, and kills the **sensor sidecar** — a
+`powershell.exe` running `sensors.ps1` that outlives everything keeps
+`LibreHardwareMonitorLib.dll` locked and blocks moving or deleting the directory. That is this
+project's recurring trap.
 
-Reconoce sus procesos **por línea de comandos, no por nombre de imagen**: son todos
-`python.exe`/`pythonw.exe`/`powershell.exe` y matar por nombre se lleva puesto cualquier
-script del usuario. Si un proceso no se puede inspeccionar o matar — la bandeja corre elevada
-— lo dice y pide una consola de administrador, en vez de informar "no había nada".
+It recognises its own processes **by command line, not by image name**: they are all
+`python.exe`, `pythonw.exe` and `powershell.exe`, and killing by name would take out any of the
+user's own scripts. If a process cannot be inspected or killed — the tray runs elevated — it
+says so and asks for an administrator console, instead of reporting that there was nothing to
+do.
 
-`daemon/stop.ps1` sigue sin conocer al motor nuevo **y no se puede tocar**: `daemon/` es la
-vuelta atrás byte-idéntica de toda la fase (`git diff 50e146e -- daemon/` tiene que dar vacío).
+`daemon/stop.ps1` does not know about the new engine **and cannot be fixed**: `daemon/` is the
+byte-identical rollback path for the whole rewrite.
 
-### Saber si está andando
+### Knowing whether it is running
 
 ```powershell
 python -m vmaxpanel --estado
 ```
 
 ```
-dibujando — perfil Apex, panel ok, 12043 frames, 30 fps
+dibujando - perfil Apex, panel ok, 12043 frames, 1 fps
 publicado hace 2 s (pid 23060)
 ```
 
-Código de salida **0** si está dibujando y **1** si no — no 2, porque "no está corriendo" es una
-respuesta, no un error de uso, y un script tiene que poder distinguirlas.
+(That output is still in Spanish, like the rest of the app's messages. Translating them is the
+next step; this block shows what the command actually prints today.)
 
-El proceso que maneja el panel publica su estado a `vmaxpanel-estado.json` cada 5 s, con
-reemplazo atómico. Un archivo y no un socket: el lector no necesita hablar con el proceso, sólo
-saber qué ve, y así no hay puerto que abrir ni lector colgado que afecte al motor. **La
-antigüedad se reporta siempre** porque un proceso puede estar vivo y no publicar — un motor
-trabado en una escritura al puerto sigue existiendo —, y con más de 30 s de atraso lo dice.
-También distingue *pausado* de *detenido*: pausar suelta COM3 a pedido del usuario, y confundirlo
-manda a reiniciar algo que no hace falta.
+Exit code **0** when it is drawing and **1** when it is not — not 2, because "not running" is an
+answer rather than a usage error, and a script has to be able to tell those apart.
 
-Existe porque no había forma: la bandeja tiene el estado en su menú, pero desde una consola lo
-único observable era el log y el CPU del proceso. Verificar que el panel andaba midiendo el CPU
-de un `pythonw` es adivinar, y pasó tres veces en un día.
+The process driving the panel publishes its status to `vmaxpanel-estado.json` every 5 s, with
+an atomic replace. A file rather than a socket: the reader does not need to talk to the
+process, only to know what it sees, so there is no port to open and no stuck reader that could
+affect the engine. **The age is always reported**, because a process can be alive and not
+publishing — an engine wedged in a write to the port still exists — and anything more than 30 s
+stale is called out. It also distinguishes *paused* from *stopped*: pausing releases the port on
+purpose, and confusing the two sends people to restart something that is fine.
 
-### Compartir y respaldar un perfil
+It exists because there was no other way. The tray has the status in its menu, but from a
+console the only observable things were the log and the process's CPU usage. Verifying the
+panel works by watching a `pythonw` process's CPU is guessing, and it went wrong three times in
+one day.
+
+### Sharing and backing up a profile
 
 ```powershell
-python -m vmaxpanel --profile <perfil> --exportar mi-perfil.vmaxpanel
-python -m vmaxpanel --importar mi-perfil.vmaxpanel
-python -m vmaxpanel --importar otro.vmaxpanel --si-existe renombrar
+python -m vmaxpanel --profile <profile> --exportar my-profile.vmaxpanel
+python -m vmaxpanel --importar my-profile.vmaxpanel
+python -m vmaxpanel --importar other.vmaxpanel --si-existe renombrar
 ```
 
-También desde el editor (**Exportar… / Importar…**, con diálogo de archivo) y desde la bandeja
-(**Exportar el perfil…**, que guarda en `perfiles-exportados/` con la fecha en el nombre y abre
-la carpeta — la bandeja es ctypes puro y no tiene ventana donde poner un mensaje).
+Also from the editor (**Exportar… / Importar…**, with a file dialog) and from the tray
+(**Exportar el perfil…**, which writes into `perfiles-exportados/` with the date in the
+filename and opens the folder — the tray is pure ctypes and has no window to put a message in).
+Those menu labels are still in Spanish, as noted above.
 
-Un `.vmaxpanel` es un zip con `perfil.json`, los assets que el fondo referencia y un
-`bundle.json` con el manifiesto. **Copiar el `.json` suelto no alcanza:** un perfil referencia
-assets y nombra fuentes, así que del otro lado aparece con el fondo degradado y las fuentes
-cambiadas sin que nadie entienda por qué.
+A `.vmaxpanel` file is a zip holding `perfil.json`, whatever assets the background references,
+and a `bundle.json` manifest. **Copying the bare `.json` is not enough:** a profile references
+assets and names fonts, so on the other side it shows up with a degraded background and
+different fonts, and nobody understands why.
 
-Cuatro decisiones que no se adivinan:
+Four decisions that are not obvious:
 
-- **Las fuentes no se empaquetan.** Consolas y las Franklin Gothic son de Microsoft. Se listan
-  en el manifiesto y al importar se avisa cuál falta *en esta máquina* — que es la diferencia
-  entre "se ve raro" y "te falta esta fuente". La pregunta sólo se puede contestar del lado que
-  recibe, así que se contesta al importar, no al exportar.
-- **El JSON viaja byte a byte**, leído y escrito en bytes. Con `read_text` Python traduce CRLF a
-  LF y el perfil que volvía tenía 60 bytes menos que el original: "es el mismo" habría sido
-  mentira. Lo cazó una verificación contra los perfiles reales del repo, no el test — el test
-  usaba un fixture de una sola línea.
-- **Importar no pisa nada por defecto.** Dos personas exportando "apex" es lo normal; el layout
-  del usuario es trabajo suyo. `--si-existe renombrar` o `pisar` si es lo que se quiere.
-- **Un zip ajeno se trata como hostil.** Se valida el perfil *antes* de escribir nada (un bundle
-  roto no puede dejar assets a medio copiar), se rechaza cualquier miembro absoluto, con `..` o
-  con letra de unidad — zip-slip, y este proceso corre elevado —, y se corta por tamaño
-  declarado para no descomprimir una bomba.
+- **Fonts are not packaged.** Consolas and the Franklin Gothic family belong to Microsoft. They
+  are listed in the manifest, and on import you are told which ones are missing *on this
+  machine* — the difference between "it looks wrong" and "you are missing this font". That
+  question can only be answered on the receiving side, so it is answered on import, not on
+  export.
+- **The JSON travels byte for byte**, read and written as bytes. With `read_text` Python
+  translates CRLF to LF, and the profile that came back was 60 bytes smaller than the original:
+  "it is the same file" would have been a lie. A check against the repo's real profiles caught
+  it, not the test — the test used a single-line fixture.
+- **Import never overwrites by default.** Two people exporting "apex" is normal, and the user's
+  layout is their own work. Use `--si-existe renombrar` or `pisar` when that is what you want.
+- **A zip from elsewhere is treated as hostile.** The profile is validated *before* anything is
+  written (a broken bundle must not leave assets half-copied), any member that is absolute,
+  contains `..` or carries a drive letter is rejected — zip-slip, and this process runs
+  elevated — and extraction is bounded by declared size so a zip bomb cannot run away.
 
-`perfiles-exportados/` tiene los bundles de los perfiles que vienen con el repo, como respaldo
-listo para copiar a otra máquina.
+### Backgrounds
 
-### Fondos
+`background.type` accepts six: `solid`, `gradient` and `image` (static, cached once), and
+`procedural`, `sequence` and `video` (animated, one frame per draw).
 
-`background.type` acepta seis: `solid`, `gradient`, `image` (estáticos, se cachean una vez) y
-`procedural`, `sequence`, `video` (animados, un cuadro por frame).
-
-| Tipo | Claves propias | Nota |
+| Type | Own keys | Note |
 |---|---|---|
 | `solid` | `color` | |
-| `gradient` | `stops`, `angle` | `angle % 180` en [45,135) = vertical; el resto horizontal. No hay diagonales |
-| `image` | `src`, `fit`, `color` | `color` es el relleno del letterbox |
-| `procedural` | `name` (`scroll`\|`pulse`), `speed`, `period`, `stops` | parte del degradado; `scroll` usa el gradiente **y su espejo** para que el ciclo cierre sin tirón |
-| `sequence` | `src` (carpeta), `fit`, `fps`, `color` | decodifica por cuadro a propósito: cachearlos son 1,4 MB cada uno |
-| `video` | `src` (archivo), `fit`, `fps`, `color` | mp4, webm, mkv, gif — lo que ffmpeg sepa abrir |
+| `gradient` | `stops`, `angle` | `angle % 180` in [45,135) is vertical, the rest horizontal. No diagonals |
+| `image` | `src`, `fit`, `color` | `color` fills the letterbox |
+| `procedural` | `name` (`scroll`\|`pulse`), `speed`, `period`, `stops` | built from the gradient; `scroll` uses the gradient **and its mirror** so the cycle closes without a jump |
+| `sequence` | `src` (folder), `fit`, `fps`, `color` | decoded per frame on purpose: caching them is 1.4 MB each |
+| `video` | `src` (file), `fit`, `fps`, `color` | mp4, webm, mkv, gif — whatever ffmpeg opens |
 
-En el editor, el campo `src` tiene un botón **Elegir…** que abre el diálogo de archivos y
-**copia lo elegido a `vmaxpanel/assets/`**. Eso no es comodidad: `safe_asset_path` rechaza
-cualquier ruta que se escape de ese directorio — con razón, el motor corre elevado —, así que un
-video del Escritorio sólo puede funcionar copiándolo adentro. Si el nombre ya existe con otro
-contenido, se guarda como `-2` en vez de pisar el asset de otro perfil; si existe con el mismo
-contenido, se reusa.
+In the editor the `src` field has a **Choose…** button that opens a file dialog and **copies
+the chosen file into `vmaxpanel/assets/`**. That is not a convenience: `safe_asset_path`
+rejects any path escaping that directory — rightly so, the engine runs elevated — so a video on
+the Desktop can only work by being copied in. If the name already exists with different
+content it is saved as `-2` rather than overwriting another profile's asset; if it exists with
+identical content, it is reused.
 
-**El video necesita ffmpeg**, que es externo: se busca en `vmaxpanel/lib/` y después en el PATH
-(`winget install Gyan.FFmpeg`, o dejar `ffmpeg.exe` en `vmaxpanel/lib/`). Si falta, el fondo
-degrada a color plano y el aviso dice el comando — no es una excepción. Externo y no PyAV ni
-imageio-ffmpeg porque esas son una rueda binaria por plataforma y versión de Python, y el
-criterio del proyecto es no sumar dependencias.
+**Video needs ffmpeg**, which is external: it is looked up in `vmaxpanel/lib/` and then on
+PATH (`winget install Gyan.FFmpeg`, or drop `ffmpeg.exe` into `vmaxpanel/lib/`). If it is
+missing, the background degrades to a flat colour and the warning carries the install command —
+it is not an exception. External rather than PyAV or imageio-ffmpeg because those ship a binary
+wheel per platform and Python version, and this project's rule is to add no dependencies.
 
-Un ffmpeg por fondo, escupiendo rgb24 crudo del tamaño exacto del panel; un hilo lo drena y
-solo publica cuadros completos (`W*H*3` bytes), porque medio cuadro es basura dibujada. El loop
-lo hace ffmpeg (`-stream_loop -1`) y el ritmo también (`-re`): sin `-re` decodifica a fondo y
-quema un núcleo adelantando cuadros que nadie va a ver.
+One ffmpeg per background, emitting raw rgb24 at the panel's exact size; a thread drains it and
+publishes only complete frames (`W*H*3` bytes), because half a frame is garbage on screen.
+ffmpeg does the looping (`-stream_loop -1`) and the pacing (`-re`): without `-re` it decodes
+flat out and burns a core producing frames nobody will see.
 
-**Ciclo de vida, que es donde estaba el riesgo real:** `Renderer.set_layout()` cierra el fondo
-anterior y `Engine._drop_link()` cierra el renderer. Sin eso, cada guardado del perfil (recarga
-en caliente) y cada reconexión dejaban un ffmpeg decodificando para nadie — el mismo patrón de
-proceso huérfano que este proyecto ya tuvo con `sensors.ps1` y el DLL de LHM.
+The first call for a frame waits up to two seconds for the decoder, and later calls never wait.
+That asymmetry matters: a single-shot render needs the real first frame, and the panel loop
+cannot pay a wait per frame if the video never opens at all.
 
-Los animados en el editor se ven quietos: la vista previa es **un** cuadro. La pista de la
-pestaña Fondo lo dice, junto con si ffmpeg está o no.
+**Lifecycle is where the real risk was:** `Renderer.set_layout()` closes the previous
+background and `Engine._drop_link()` closes the renderer. Without that, every profile save (a
+live reload) and every reconnection left an ffmpeg decoding for nobody — the same orphan-process
+pattern this project already had with `sensors.ps1` and the LHM DLL.
 
-## Dependencias
+Animated backgrounds look frozen in the editor: the preview is **one** frame. The hint on the
+Background tab says so, along with whether ffmpeg is present.
 
-Python 3.13 + `psutil`, `pyserial`, `pillow`. `ffmpeg` es opcional y solo para fondos de
-video. Los 3 DLL (`LibreHardwareMonitorLib`, `HidSharp`, `HidLibrary`) van en
-`vmaxpanel/lib/` — LHM necesita HidSharp al lado o `Open()` falla. **No están en el repo**:
-son de terceros y no se redistribuyen; `python -m vmaxpanel --diagnostico` dice de dónde
-bajarlas y qué se pierde sin ellas. `frida-tools` se usó solo para reversear el protocolo;
-el driver no la necesita.
+## Editing a layout
 
-## Licencia
+| What you want to change | Where |
+|---|---|
+| Position, format or colour of a value | the profile JSON — hot-reloaded on save |
+| Text labels | `label` widgets in the same JSON |
+| Separators, frames, colour blocks | `rect` widgets in the same JSON |
+| Background | the profile's `background` block |
+| Which metrics exist | `vmaxpanel/metrics.py` |
+| Where each metric comes from | `vmaxpanel/providers/` |
+| New sidecar sensors | `vmaxpanel/sensors.ps1` |
 
-[PolyForm Noncommercial 1.0.0](LICENSE) — cualquier uso no comercial está permitido,
-incluido modificarlo y compartirlo. El uso comercial no.
+### The `rect` widget
 
-Lo que **no** cubre esa licencia, porque no es mío:
+It covers dividers, frames and colour blocks. `fill` and `stroke` are independently optional,
+but at least one must be present — a rect with neither draws nothing, so the validator rejects
+it rather than letting it sit there invisible.
+
+```json
+{ "id": "cpu-rule", "type": "rect", "x": 24, "y": 164, "w": 272, "h": 1, "fill": "#242834" }
+{ "id": "frame", "type": "rect", "x": 14, "y": 540, "w": 292, "h": 320,
+  "radius": 8, "stroke": "#242834", "stroke_width": 2 }
+```
+
+Two things that are not obvious:
+
+- **`w`/`h` are the real size in pixels**: `"h": 1` is a one-pixel line. `bar` and `graph` use
+  Pillow's inclusive box and end up one pixel larger than written (`"h": 16` → 17 px). They were
+  left alone so the profiles and goldens would not move, but a separator cannot afford that.
+  `radius` is clamped to half the shorter side.
+- **The order of the `widgets` list is the paint order.** There is no `z` field: a `rect` with
+  `fill` placed after a text covers it. The profiles' separators come before their section
+  header.
+
+## Dependencies
+
+Python 3.13 plus `psutil`, `pyserial` and `pillow`. `ffmpeg` is optional, and only for video
+backgrounds. The three DLLs (`LibreHardwareMonitorLib`, `HidSharp`, `HidLibrary`) go in
+`vmaxpanel/lib/` — LHM needs HidSharp beside it or `Open()` fails. **They are not in the
+repo**: they are third-party and are not redistributed here. `python -m vmaxpanel
+--diagnostico` says where to get them and what you lose without them. `frida-tools` was only
+used to reverse the protocol; the driver does not need it.
+
+## Licence
+
+[PolyForm Noncommercial 1.0.0](LICENSE) — any noncommercial use is allowed, including
+modifying and sharing it. Commercial use is not.
+
+What that licence does **not** cover, because it is not mine:
 
 | | |
 |---|---|
-| `LibreHardwareMonitorLib.dll`, `HidSharp.dll`, `HidLibrary.dll` | MPL-2.0 y MIT, de terceros. No están en el repo |
-| Consolas, Bahnschrift, Franklin Gothic | Fuentes de Microsoft. Se piden por familia, no se empaquetan |
-| `daemon/assets/back.png` | Arte del tema Vitals de LCD Control. No está en el repo |
-| ffmpeg | Externo y opcional, con su propia licencia |
+| `LibreHardwareMonitorLib.dll`, `HidSharp.dll`, `HidLibrary.dll` | MPL-2.0 and MIT, third-party. Not in the repo |
+| Consolas, Bahnschrift, Franklin Gothic | Microsoft fonts. Requested by family, never packaged |
+| `daemon/assets/back.png` | Artwork from LCD Control's Vitals theme. Not in the repo |
+| ffmpeg | External and optional, under its own licence |
