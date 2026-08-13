@@ -1,121 +1,129 @@
-# Contribuir a VMax Panel
+# Contributing to the Solarmax CM-B600L panel driver
 
-Se aceptan aportes. Esto explica cómo está armado el proyecto, qué se espera de un cambio y
-qué cosas **no** hay que tocar.
+Contributions are welcome. This explains how the project is put together, what is expected of
+a change, and what **not** to touch.
 
-## Acuerdo de contribución (CLA)
+> The code comments, the app's messages and the test names are still in Spanish. Translating
+> them is in progress. Until a file has been translated, follow the language of the file you
+> are editing.
 
-Al mandar un pull request aceptás que:
+## Contributor agreement (CLA)
 
-1. El aporte es tuyo, o tenés derecho a cederlo.
-2. Le cedés al dueño del proyecto (Alejandro, [@knupson](https://github.com/knupson)) un
-   derecho de copyright **no exclusivo, mundial, perpetuo, irrevocable y libre de regalías**
-   para usar, modificar, publicar y relicenciar tu aporte como parte de este proyecto.
-3. Seguís siendo dueño de tu aporte y podés usarlo donde quieras.
+By opening a pull request you agree that:
 
-Está para que el proyecto pueda mantener una licencia única y coherente, y para que el
-dueño pueda relicenciarlo más adelante sin tener que rastrear a cada persona que alguna vez
-mandó un parche. No te pide exclusividad ni te saca nada.
+1. The contribution is yours, or you have the right to license it.
+2. You grant the project's owner (Alejandro, [@knupson](https://github.com/knupson)) a
+   **non-exclusive, worldwide, perpetual, irrevocable, royalty-free** copyright licence to use,
+   modify, publish and relicense your contribution as part of this project.
+3. You keep ownership of your contribution and can use it anywhere else you like.
 
-El código que mandes queda bajo la [PolyForm Noncommercial 1.0.0](LICENSE), como el resto.
+This exists so the project can keep a single coherent licence, and so the owner can relicense
+later without having to track down everyone who ever sent a patch. It does not ask for
+exclusivity and it takes nothing away from you.
 
-## Arrancar
+Code you contribute is covered by the [PolyForm Noncommercial 1.0.0](LICENSE) licence, like the
+rest of the project.
+
+## Getting started
 
 ```powershell
-git clone https://github.com/knupson/solarmax-cm-b600l-panel && cd solarmax-cm-b600l-panel
+git clone https://github.com/knupson/solarmax-cm-b600l-panel
+cd solarmax-cm-b600l-panel
 pip install -r requirements.txt
 pip install pytest
-python -m pytest                          # 594 tests, ~85 s
-python -m vmaxpanel --diagnostico         # qué falta en esta máquina
-python -m vmaxpanel --save preview.png    # renderiza sin tocar el panel
+python -m pytest                          # 594 tests, about 85 s
+python -m vmaxpanel --diagnostico         # what is missing on this machine
+python -m vmaxpanel --save preview.png    # renders without touching the panel
 ```
 
-**No hace falta el panel para desarrollar.** `--save` dibuja a un PNG y los tests no tocan
-hardware: se corren en cualquier Windows. Lo que sí es específico de esta máquina son
-algunos sensores, y el diagnóstico dice cuáles.
+**You do not need the panel to develop.** `--save` draws to a PNG and the tests never touch
+hardware, so they run on any Windows machine. What *is* machine-specific is some of the
+sensors, and the diagnostic tells you which.
 
-Tampoco hacen falta las DLL de LibreHardwareMonitor: sin ellas se pierden GPU, temperaturas
-de disco y RPM, y todo lo demás anda.
+You do not need the LibreHardwareMonitor DLLs either: without them you lose the GPU, disk
+temperatures and fan RPM, and everything else works.
 
-## El mapa
+Two tests need ffmpeg installed, because they check the text ffmpeg writes to stderr. Without
+it they skip themselves.
+
+## The map
 
 ```
 vmaxpanel/
-  cli.py          argumentos, --save/--once/--estado/--instalar/--parar
-  app.py          arma el motor con sus dependencias
-  engine.py       el bucle: leer sensores -> renderizar -> mandar al panel
-  tray.py         app de bandeja (ctypes/Win32 puro)
-  editor.py       editor de layout (Tkinter puro)
-  metrics.py      catálogo de métricas: id, nombre, unidad, rango
+  cli.py          arguments: --save / --once / --estado / --instalar / --parar
+  app.py          wires the engine up with its dependencies
+  engine.py       the loop: read sensors -> render -> send to the panel
+  tray.py         tray app (pure ctypes/Win32)
+  editor.py       layout editor (pure Tkinter)
+  metrics.py      the metric catalogue: id, name, unit, range
   layout/
-    schema.py     valida el JSON del perfil y explica cada error
-    model.py      dataclasses del layout
-    loader.py     carga y recarga en caliente (por hash del contenido)
+    schema.py     validates the profile JSON and explains every error
+    model.py      the layout dataclasses
+    loader.py     loading and hot reload (by content hash)
   render/
-    renderer.py   compone el cuadro, escala el layout al panel real
+    renderer.py   composes the frame, scales the layout to the real panel
     widgets.py    text, label, bar, arc, graph, image, rect
     background.py solid, gradient, image, sequence, procedural, video
-    video.py      ffmpeg como proceso externo
-    fonts.py      resuelve familias y cadenas de alternativas
+    video.py      ffmpeg as an external process
+    fonts.py      resolves families and fallback chains
   providers/
-    registry.py   resuelve cada métrica al provider disponible de más prioridad
-    sidecar.py    habla con sensors.ps1
+    registry.py   resolves each metric to the highest-priority available provider
+    sidecar.py    talks to sensors.ps1
     ...
   transport/
-    panel_link.py protocolo serial, autodetección por VID/PID
-  sensors.ps1     sidecar de PowerShell: GSA1, PDH, LibreHardwareMonitor, SMBIOS
+    panel_link.py the serial protocol, autodetection by VID/PID
+  sensors.ps1     PowerShell sidecar: GSA1, PDH, LibreHardwareMonitor, SMBIOS
 ```
 
-## Cómo agregar cosas
+## Adding things
 
-**Un widget nuevo.** Una dataclass en `layout/model.py`, su entrada en `WIDGET_TYPES` de
-`layout/schema.py`, y un `_draw_*` en `render/widgets.py`. Los tests van en
-`tests/test_widgets.py`: dibujá sobre un canvas y afirmá sobre píxeles concretos, no sobre
-"no explotó".
+**A new widget.** A dataclass in `layout/model.py`, its entry in `WIDGET_TYPES` in
+`layout/schema.py`, and a `_draw_*` function in `render/widgets.py`. Tests go in
+`tests/test_widgets.py`: draw onto a canvas and assert on specific pixels, not on "it did not
+crash".
 
-**Una métrica nueva.** Entrada en `metrics.py` (id, nombre, unidad, mínimo, máximo) y algún
-provider que la sirva. Si sale de PowerShell, va en `sensors.ps1` y en
-`providers/sidecar_providers.py`. El orden de preferencia entre providers está en
-`PROVIDER_PRIORITY`, en `providers/registry.py`.
+**A new metric.** An entry in `metrics.py` (id, name, unit, minimum, maximum) and some provider
+that serves it. If it comes from PowerShell, it goes in `sensors.ps1` and in
+`providers/sidecar_providers.py`. The preference order between providers is `PROVIDER_PRIORITY`
+in `providers/registry.py`.
 
-**Un fondo nuevo.** `BACKGROUND_TYPES` en `layout/schema.py` y una rama en
-`render/background.py`. Si es animado, sumalo a `ANIMADOS`. Si abre un proceso o un archivo,
-tiene que cerrarse en `close()`: cada fondo animado que no cierra deja un proceso huérfano
-por cada guardado del perfil.
+**A new background.** `BACKGROUND_TYPES` in `layout/schema.py` and a branch in
+`render/background.py`. If it is animated, add it to `ANIMADOS`. If it opens a process or a
+file, it must close it in `close()`: every animated background that does not close leaves an
+orphan process behind on every profile save.
 
-## Lo que se espera de un cambio
+## What is expected of a change
 
-- **Test que falla primero.** El proyecto se hizo así y se nota: los bugs que llegaron a
-  producción son justo los que ningún test miraba. Si arreglás algo, el test tiene que
-  fallar antes del fix.
-- **Mirá el resultado, no sólo el test.** Tres defectos visibles sobrevivieron 590 tests
-  verdes hasta que alguien renderizó un PNG y lo miró. `--save` es barato.
-- **Sin dependencias nuevas.** Son tres (`Pillow`, `pyserial`, `psutil`) y la idea es que
-  sigan siendo tres. La bandeja es ctypes y el editor es Tkinter justo por eso.
-- **Comentarios que digan por qué, no qué.** El repo está lleno de comentarios que explican
-  la trampa que motivó cada línea. Es deliberado: son la razón por la que un bug no vuelve.
-- Los comentarios y los mensajes están **en castellano** hoy. Hay una traducción al inglés
-  en camino; hasta entonces, seguí el idioma del archivo que estés tocando.
+- **A failing test first.** The project was built that way and it shows: the bugs that reached
+  users are exactly the ones no test was looking at. If you fix something, the test has to fail
+  before the fix.
+- **Look at the result, not just the test.** Four visible defects survived 590 green tests
+  until someone rendered a PNG and looked at it. `--save` is cheap.
+- **No new dependencies.** There are three (`Pillow`, `pyserial`, `psutil`) and the idea is that
+  there stay three. The tray is ctypes and the editor is Tkinter for exactly that reason.
+- **Comments that say why, not what.** The repo is full of comments explaining the trap that
+  motivated each line. That is deliberate: they are the reason a given bug does not come back.
 
-## Lo que no hay que tocar
+## What not to touch
 
-- **`daemon/`** es la vuelta atrás byte-idéntica de la versión anterior. `git diff` contra su
-  commit base tiene que seguir dando vacío. Si necesitás cambiar algo ahí, no lo necesitás.
-- **`daemon/stop.ps1` no sirve para el motor nuevo** y no se arregla, por lo de arriba. Para
-  bajar el panel: `python -m vmaxpanel --parar`.
-- **WinRing0 y cualquier driver ring0.** Está en la blocklist de Windows y no se va a
-  habilitar. Si una métrica necesita MSR, no se lee y listo.
-- **Escrituras por GSA1.** La interfaz WMI de Gigabyte expone `PIOWrite`, `MEMWrite` y
-  `PCIWrite`: escritura arbitraria a puertos de I/O, memoria física y espacio PCI. El
-  proyecto usa **sólo métodos de lectura** y así se queda.
-- **Fuentes y DLL de terceros.** No se committean. Las fuentes se piden por familia con una
-  cadena de alternativas; las DLL las baja el usuario.
+- **`daemon/`** is the byte-identical rollback path for the previous version. A `git diff`
+  against its base commit has to stay empty. If you think you need to change something in
+  there, you do not.
+- **`daemon/stop.ps1` does not work for the new engine** and is not fixed, for the reason
+  above. To bring the panel down: `python -m vmaxpanel --parar`.
+- **WinRing0 and any ring0 driver.** It is on the Windows vulnerable-driver blocklist and it is
+  not going to be enabled. If a metric needs MSR access, it does not get read.
+- **GSA1 writes.** Gigabyte's WMI interface exposes `PIOWrite`, `MEMWrite` and `PCIWrite`:
+  arbitrary writes to I/O ports, physical memory and PCI space. This project uses **read
+  methods only** and it stays that way.
+- **Third-party fonts and DLLs.** They are not committed. Fonts are requested by family with a
+  fallback chain; the DLLs are downloaded by the user.
 
-## Reportar un bug
+## Reporting a bug
 
-Abrí un issue con la salida de `python -m vmaxpanel --diagnostico` y, si tiene que ver con
-lo que se dibuja, el PNG de `python -m vmaxpanel --save bug.png`. Con esas dos cosas casi
-siempre alcanza.
+Open an issue with the output of `python -m vmaxpanel --diagnostico` and, if it concerns what
+gets drawn, the PNG from `python -m vmaxpanel --save bug.png`. Those two are almost always
+enough.
 
-Si algo se cuelga, `tests/conftest.py` mata cualquier test que pase de 60 s y escribe el
-stack de todos los hilos en `pytest-hang.txt`. Ese archivo es lo que dice qué se colgó.
+If something hangs, `tests/conftest.py` kills any test running longer than 60 s and writes every
+thread's stack to `pytest-hang.txt`. That file is what tells you what hung.

@@ -1,54 +1,54 @@
-name: Reportar un bug
-description: Algo no anda, se dibuja mal, o el panel no responde
+name: Report a bug
+description: Something does not work, draws wrong, or the panel is unresponsive
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Con el diagnóstico y, si es visual, el PNG, casi siempre alcanza para
-        entender qué pasó sin ida y vuelta.
+        The diagnostic output plus, for anything visual, the PNG, are almost
+        always enough to understand what happened without a round trip.
 
   - type: textarea
-    id: que-pasa
+    id: what-happens
     attributes:
-      label: Qué pasa
-      description: Qué esperabas y qué pasó en su lugar.
+      label: What happens
+      description: What you expected, and what happened instead.
     validations:
       required: true
 
   - type: textarea
-    id: diagnostico
+    id: diagnostic
     attributes:
-      label: Salida de --diagnostico
-      description: "`python -m vmaxpanel --diagnostico`. Dice qué falta y qué es opcional."
+      label: Output of --diagnostico
+      description: "`python -m vmaxpanel --diagnostico`. It says what is missing and what is optional."
       render: text
     validations:
       required: true
 
   - type: textarea
-    id: pasos
+    id: steps
     attributes:
-      label: Cómo reproducirlo
-      description: El comando exacto, o los pasos en el editor o la bandeja.
+      label: How to reproduce it
+      description: The exact command, or the steps in the editor or the tray.
 
   - type: textarea
-    id: captura
+    id: screenshot
     attributes:
-      label: Captura
+      label: Screenshot
       description: |
-        Si tiene que ver con lo que se dibuja: `python -m vmaxpanel --save bug.png`
-        y arrastrá el PNG acá. No toca el panel.
+        If it concerns what gets drawn: run `python -m vmaxpanel --save bug.png`
+        and drop the PNG here. It does not touch the panel.
 
   - type: input
     id: hardware
     attributes:
-      label: Placa y GPU
-      description: Los sensores dependen de esto. Sale del propio --diagnostico.
+      label: Motherboard and GPU
+      description: Sensors depend on these. Both appear in the diagnostic output.
       placeholder: B760M D3HP + RX 6800 XT
 
   - type: textarea
     id: log
     attributes:
       label: Log
-      description: "El archivo que pasaste con `--log`, si estabas usando uno."
+      description: "The file you passed to `--log`, if you were using one."
       render: text

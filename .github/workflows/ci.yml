@@ -1,13 +1,14 @@
-# Corre la suite en un Windows limpio.
+# Runs the test suite on a clean Windows machine.
 #
-# windows-latest y no ubuntu: el proyecto es Windows de punta a punta -- WMI,
-# PDH, ctypes/Win32 para la bandeja, Tkinter para el editor, y fuentes que se
-# piden por familia al sistema. En Linux no arranca ni tiene sentido que lo haga.
+# windows-latest and not ubuntu: this project is Windows end to end -- WMI, PDH,
+# ctypes/Win32 for the tray, Tkinter for the editor, and fonts requested from the
+# system by family. On Linux it would not even start, and it is not meant to.
 #
-# El runner NO tiene el panel, ni las DLL de LibreHardwareMonitor, ni una placa
-# Gigabyte con GSA1. Eso es a proposito: es exactamente la maquina de alguien que
-# recien clona el repo, y la suite tiene que pasar ahi. Si un test empieza a
-# depender del hardware de una maquina en particular, este workflow lo caza.
+# The runner has no panel, no LibreHardwareMonitor DLLs and no Gigabyte board with
+# GSA1. That is the point: it is exactly the machine of somebody who just cloned
+# the repo, and the suite has to pass there. If a test starts depending on one
+# particular machine's hardware, this workflow catches it -- which is what happened
+# on its very first run.
 name: tests
 
 on:
@@ -27,28 +28,28 @@ jobs:
           python-version: '3.13'
           cache: pip
 
-      - name: Instalar dependencias
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest
 
-      # ffmpeg es OPCIONAL para el proyecto, pero dos tests prueban el texto que
-      # ffmpeg escribe en stderr y sin el binario no tienen nada que mirar: se
-      # saltean solos. Se instala para que en CI se corran de verdad.
-      # continue-on-error a proposito: si choco falla, los tests se saltean y la
-      # corrida sigue siendo valida. Que se caiga el build por una dependencia
-      # declarada opcional seria mentir sobre lo que el proyecto necesita.
-      - name: Instalar ffmpeg (opcional)
+      # ffmpeg is OPTIONAL for the project, but two tests assert on the text ffmpeg
+      # writes to stderr and have nothing to look at without the binary, so they
+      # skip themselves. It is installed here so they actually run in CI.
+      # continue-on-error on purpose: if choco fails, those tests skip and the run
+      # is still valid. Failing the build over a dependency the project itself
+      # declares optional would misrepresent what is needed to use it.
+      - name: Install ffmpeg (optional)
         continue-on-error: true
         run: choco install ffmpeg -y --no-progress
 
-      - name: Correr la suite
+      - name: Run the suite
         run: python -m pytest -q
 
-      # conftest.py mata cualquier test que pase de 60 s y escribe el stack de
-      # todos los hilos aca. Sin esto, un cuelgue en CI es un timeout mudo.
-      - name: Subir el stack si algo se colgo
+      # conftest.py kills any test running longer than 60 s and writes every
+      # thread's stack here. Without this, a hang in CI is a silent timeout.
+      - name: Upload the stack trace if something hung
         if: failure()
         uses: actions/upload-artifact@v4
         with:

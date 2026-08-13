@@ -1,26 +1,26 @@
 <!--
-Al mandar este PR aceptás el CLA de CONTRIBUTING.md: le cedés al dueño del
-proyecto un derecho no exclusivo para usar y relicenciar tu aporte, y seguís
-siendo dueño de lo tuyo.
+By opening this pull request you accept the CLA in CONTRIBUTING.md: you grant the
+project owner a non-exclusive licence to use and relicense your contribution, and
+you keep ownership of your own work.
 -->
 
-## Qué cambia y por qué
+## What changes, and why
 
-<!-- El problema concreto, no el nombre del cambio. Si arregla un bug, cuál era
-     la causa: eso es lo que evita que vuelva. -->
+<!-- The concrete problem, not the name of the change. If it fixes a bug, say what
+     the cause was: that is what keeps it from coming back. -->
 
-## Cómo se verificó
+## How it was verified
 
-- [ ] `python -m pytest` pasa entero
-- [ ] El test del cambio **falla sin el fix** (si es un arreglo)
-- [ ] Miré el resultado, no sólo los tests: `python -m vmaxpanel --save preview.png`
+- [ ] `python -m pytest` passes in full
+- [ ] The test for this change **fails without the fix** (if it is a fix)
+- [ ] I looked at the result, not just the tests: `python -m vmaxpanel --save preview.png`
 
-<!-- Si es visual, pegá el antes y el después. Tres bugs sobrevivieron 590 tests
-     verdes en este repo hasta que alguien miró un PNG. -->
+<!-- If it is visual, paste the before and after. Four bugs survived 590 green tests
+     in this repo until someone looked at a PNG. -->
 
-## Chequeos
+## Checks
 
-- [ ] Sin dependencias nuevas de Python
-- [ ] `daemon/` sin tocar
-- [ ] Sin fuentes ni DLL de terceros committeadas
-- [ ] Si suma un fondo o algo que abre un proceso o archivo, se cierra en `close()`
+- [ ] No new Python dependencies
+- [ ] `daemon/` untouched
+- [ ] No third-party fonts or DLLs committed
+- [ ] Anything that opens a process or a file closes it in `close()`

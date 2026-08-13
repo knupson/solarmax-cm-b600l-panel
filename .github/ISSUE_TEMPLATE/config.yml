@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Cómo contribuir
+  - name: How to contribute
     url: https://github.com/knupson/solarmax-cm-b600l-panel/blob/main/CONTRIBUTING.md
-    about: Mapa del proyecto, cómo agregar un widget o una métrica, y qué no tocar.
+    about: The project map, how to add a widget or a metric, and what not to touch.
