@@ -1,17 +1,18 @@
-"""Fondo de video, decodificado por ffmpeg como proceso externo.
+"""Video background, decoded by ffmpeg as an external process.
 
-**Por que ffmpeg y no una libreria de Python.** Este proyecto se reparte a otros
-duenos del panel y el criterio es no sumar dependencias: PyAV o imageio-ffmpeg
-significan una rueda binaria por plataforma y version de Python. Un ejecutable
-suelto, en cambio, se deja al lado de la app y listo -- y muchisima gente ya lo
-tiene. El costo es que si falta, el video no anda; a cambio, funciona con todo lo
-que ffmpeg sepa abrir: mp4, webm, mkv, gif, lo que sea.
+**Why ffmpeg and not a Python library.** This project gets shared with other
+owners of the panel and the rule is to add no dependencies: PyAV or
+imageio-ffmpeg mean a binary wheel per platform and Python version. A loose
+executable, by contrast, is dropped beside the app and that is that -- and a great
+many people already have one. The cost is that if it is missing, video does not
+work; in exchange, it works with anything ffmpeg can open: mp4, webm, mkv, gif,
+whatever.
 
-**Como.** Un solo ffmpeg por fondo, escupiendo RGB crudo del tamano exacto del
-panel a stdout. Un hilo lo drena y guarda el ultimo cuadro completo. `-stream_loop
--1` hace que el video se repita sin que Python se entere, y `-re` lo hace ir al
-ritmo natural: sin eso ffmpeg decodifica lo mas rapido que puede, llena el pipe y
-quema un nucleo para nada.
+**How.** One ffmpeg per background, emitting raw RGB at the panel's exact size to
+stdout. A thread drains it and keeps the last complete frame. `-stream_loop -1`
+makes the video repeat without Python noticing, and `-re` makes it run at its
+natural pace: without that, ffmpeg decodes as fast as it can, fills the pipe and
+burns a core for nothing.
 """
 import shutil
 import subprocess
@@ -27,17 +28,17 @@ COMO_INSTALAR = ("ffmpeg is missing and video backgrounds need it: install it wi
                  "'winget install Gyan.FFmpeg', or drop ffmpeg.exe into "
                  "vmaxpanel/lib/")
 
-# Sin ventana de consola: la bandeja corre con pythonw y un ffmpeg lanzado normal
-# abriria una ventana negra en cada arranque.
+# No console window: the tray runs under pythonw, and an ffmpeg launched normally
+# would open a black window on every start.
 SIN_VENTANA = 0x08000000
 
 
 def buscar_ffmpeg():
-    """Ruta al ejecutable, o None.
+    """The path to the executable, or None.
 
-    Primero al lado de la app y despues el PATH: dejar el .exe en vmaxpanel/lib/
-    tiene que alcanzar, porque es lo que evita pedirle al usuario que toque
-    variables de entorno.
+    Beside the app first and PATH second: dropping the .exe into vmaxpanel/lib/ has
+    to be enough, because that is what avoids asking the user to touch environment
+    variables.
     """
     for nombre in NOMBRES:
         candidato = LIB / nombre
@@ -51,10 +52,10 @@ def buscar_ffmpeg():
 
 
 class VideoSource:
-    """Un ffmpeg decodificando a RGB crudo, y el ultimo cuadro completo.
+    """One ffmpeg decoding to raw RGB, and the last complete frame.
 
-    `spawn` se inyecta para los tests: el contrato de la tuberia es "bytes de
-    W*H*3 en orden", y eso se prueba con cualquier proceso, sin ffmpeg instalado.
+    `spawn` is injected for the tests: the pipe's contract is "W*H*3 bytes in
+    order", and that can be exercised with any process, without ffmpeg installed.
     """
 
     def __init__(self, ruta, size, fps=30.0, spawn=None, ffmpeg=None):
@@ -69,14 +70,14 @@ class VideoSource:
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._ultimo = None
-        # ffmpeg tarda decenas de milisegundos en escupir el primer cuadro, y
-        # --save dibuja uno solo y sale: sin esperarlo, el fondo de video sale
-        # como color plano. Se espera UNA vez y a lo sumo esto.
+        # ffmpeg takes tens of milliseconds to emit its first frame, and --save
+        # draws one and exits: without waiting for it, the video background comes
+        # out as a flat colour. It waits ONCE and at most this long.
         self.espera_primero = 2.0
         self._hubo_uno = threading.Event()
         self._ya_espere = False
 
-    # --- arranque y baja ---
+    # --- start-up and shutdown ---
 
     def _comando(self):
         exe = self._ffmpeg or buscar_ffmpeg()
@@ -85,12 +86,12 @@ class VideoSource:
         ancho, alto = self.size
         return [
             exe, "-hide_banner", "-loglevel", "error",
-            # -stream_loop antes de -i: repite la ENTRADA, asi que el loop lo hace
-            # ffmpeg y Python no tiene que reiniciar nada al terminar el video.
+            # -stream_loop before -i: it repeats the INPUT, so ffmpeg does the
+            # looping and Python has nothing to restart when the video ends.
             "-stream_loop", "-1",
-            # -re: al ritmo natural. Sin esto ffmpeg decodifica a fondo, llena el
-            # pipe y consume un nucleo entero para adelantar cuadros que nadie va
-            # a ver.
+            # -re: at the natural pace. Without it ffmpeg decodes flat out, fills
+            # the pipe and burns a whole core running ahead with frames nobody
+            # is going to see.
             "-re", "-i", self.ruta,
             "-f", "rawvideo", "-pix_fmt", "rgb24",
             "-s", f"{ancho}x{alto}", "-r", f"{self.fps:g}",
@@ -98,10 +99,10 @@ class VideoSource:
         ]
 
     def _spawn_ffmpeg(self):
-        # stderr a un pipe y no a DEVNULL: es el UNICO lugar donde ffmpeg dice por
-        # que no pudo abrir el archivo -- no existe, no es un video, falta el codec
-        # -- y sin eso el aviso al usuario es generico. Con -loglevel error son unas
-        # pocas lineas, no hay riesgo de llenar el pipe.
+        # stderr to a pipe and not to DEVNULL: it is the ONLY place ffmpeg says why
+        # it could not open the file -- it does not exist, it is not a video, the
+        # codec is missing -- and without that the warning to the user is generic.
+        # With -loglevel error it is a few lines, with no risk of filling the pipe.
         return subprocess.Popen(self._comando(), stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
                                 creationflags=SIN_VENTANA)
@@ -118,21 +119,21 @@ class VideoSource:
         try:
             self._leer_hasta_el_final()
         finally:
-            # Pase lo que pase -- ffmpeg que no esta, archivo ilegible, corte en
-            # el medio -- el que espera el primer cuadro tiene que dejar de
-            # esperar. Sin esto, un decoder que muere al instante deja a frame()
-            # pagando el timeout completo para nada.
+            # Whatever happens -- no ffmpeg, an unreadable file, a cut in the
+            # middle -- whoever is waiting for the first frame has to stop waiting.
+            # Without this, a decoder that dies instantly leaves frame() paying the
+            # full timeout for nothing.
             self._hubo_uno.set()
 
     def _leer_hasta_el_final(self):
         try:
             self._proc = self._spawn()
         except FileNotFoundError:
-            # Siempre el texto accionable, sin importar que diga la excepcion: un
-            # aviso que dice "ffmpeg" y nada mas deja al usuario en el mismo lugar
-            # que estaba. El FileNotFoundError puede venir de _comando() -- no se
-            # encontro el ejecutable -- o del propio Popen, si la ruta existia y el
-            # binario ya no; el remedio es el mismo.
+            # Always the actionable text, whatever the exception says: a warning
+            # reading "ffmpeg" and nothing else leaves the user exactly where they
+            # were. The FileNotFoundError can come from _comando() -- the executable
+            # was not found -- or from Popen itself, if the path existed and the
+            # binary no longer does; the remedy is the same.
             self._avisar(COMO_INSTALAR)
             return
         except Exception as e:
@@ -142,9 +143,9 @@ class VideoSource:
         tamano = ancho * alto * 3
         flujo = self._proc.stdout
         while not self._stop.is_set():
-            # readexactly a mano: ffmpeg escribe un stream continuo y un read()
-            # devuelve lo que haya. Dibujar eso seria media imagen con basura, asi
-            # que solo se publica un cuadro cuando estan los W*H*3 bytes.
+            # A hand-written readexactly: ffmpeg writes a continuous stream and a
+            # read() returns whatever is there. Drawing that would be half an image plus
+            # garbage, so a frame is published only once all W*H*3 bytes are in.
             datos = bytearray()
             while len(datos) < tamano and not self._stop.is_set():
                 trozo = flujo.read(tamano - len(datos))
@@ -160,15 +161,16 @@ class VideoSource:
             self._hubo_uno.set()
 
     def _explicar_el_final(self, hubo_cuadros):
-        """Distingue "no se pudo abrir" de "se corto en el medio".
+        """Tells "could not open" apart from "cut off in the middle".
 
-        Los dos llegan como un stdout vacio, y tratarlos igual mandaba al usuario a
-        mirar la duracion del video cuando el problema era la ruta. Si nunca llego un
-        cuadro, el video nunca arranco: eso es lo que hay que decir, con el motivo
-        que dio ffmpeg.
+        Both arrive as an empty stdout, and treating them alike sent the user to
+        check the video's duration when the problem was the path. If no frame ever
+        arrived, the video never started: that is what has to be said, with the
+        reason ffmpeg gave.
 
-        `-stream_loop -1` hace que un video que se abrio bien no termine nunca, asi
-        que el caso "hubo cuadros y ahora no hay" tampoco es un final normal.
+        `-stream_loop -1` means a video that opened correctly never ends, so the
+        case "there were frames and now there are none" is not a normal ending
+        either.
         """
         motivo = self._stderr()
         if not hubo_cuadros:
@@ -179,14 +181,15 @@ class VideoSource:
                      + (f": {motivo}" if motivo else ""))
 
     def _stderr(self) -> str:
-        """Lo ultimo que dijo ffmpeg, en una linea.
+        """The last thing ffmpeg said, on one line.
 
-        **Se espera a que el proceso muera antes de leer.** `read()` sobre el stderr
-        de un proceso vivo bloquea hasta que ese proceso lo cierre, y esto corre en
-        el hilo lector: un ffmpeg que cierra stdout y se queda vivo dejaria el hilo
-        colgado hasta que alguien llame a close(). Si no murio en un segundo se
-        devuelve "" y el aviso va sin motivo -- que sigue siendo mejor que un hilo
-        trabado, y mejor que una excepcion, porque nadie la veria.
+        **It waits for the process to die before reading.** `read()` on a live
+        process's stderr blocks until that process closes it, and this runs on the
+        reader thread: an ffmpeg that closes stdout and stays alive would leave the
+        thread hanging until somebody calls close(). If it has not died within a
+        second, "" is returned and the warning goes out without a reason -- which is
+        still better than a wedged thread, and better than an exception, because
+        nobody would see it.
         """
         proc = self._proc
         if proc is None or proc.stderr is None:
@@ -210,11 +213,10 @@ class VideoSource:
     def frame(self):
         """El ultimo cuadro completo, o None si todavia no llego ninguno.
 
-        La PRIMERA llamada espera hasta `espera_primero` segundos a que el
-        decoder produzca algo; las siguientes no esperan nunca. Esa asimetria es
-        el punto: el que dibuja un solo cuadro necesita el primero de verdad,
-        y el bucle del panel no puede pagar una espera por cuadro si el video
-        nunca abre.
+        The FIRST call waits up to `espera_primero` seconds for the decoder to
+        produce something; later calls never wait. That asymmetry is the point:
+        whoever draws a single frame really needs the first one, and the panel loop
+        cannot pay a wait per frame if the video never opens at all.
         """
         if not self._ya_espere:
             self._ya_espere = True
@@ -225,9 +227,9 @@ class VideoSource:
     def close(self):
         """Baja ffmpeg y espera.
 
-        Un ffmpeg huerfano sigue decodificando video para nadie: es la misma
-        clase de proceso colgado que el sidecar de sensores ya tuvo, y el mismo
-        remedio -- terminate y wait, no solo terminate.
+        An orphan ffmpeg keeps decoding video for nobody: the same class of stuck
+        process the sensor sidecar already had, and the same remedy -- terminate and
+        wait, not terminate alone.
         """
         self._stop.set()
         proc = self._proc
