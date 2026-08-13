@@ -1,11 +1,11 @@
-"""Fondo de video: mp4, webm, lo que ffmpeg sepa abrir.
+"""Video backgrounds: mp4, webm, whatever ffmpeg can open.
 
-El decoder es ffmpeg como PROCESO EXTERNO, no una dependencia de Python: el
-proyecto se reparte y sumar PyAV o imageio-ffmpeg significa una rueda binaria por
-plataforma. Aca alcanza con que el ejecutable exista.
+The decoder is ffmpeg as an EXTERNAL PROCESS, not a Python dependency: the project
+gets shared and adding PyAV or imageio-ffmpeg means a binary wheel per platform.
+Here it is enough that the executable exists.
 
-Los tests no necesitan ffmpeg instalado: se inyecta un spawner falso que emite
-frames RGB crudos del tamano exacto, que es todo el contrato de la tuberia.
+The tests do not need ffmpeg installed: a fake spawner is injected that emits raw
+RGB frames at the exact size, which is the whole contract of the pipe.
 """
 import subprocess
 import sys
@@ -22,7 +22,7 @@ BYTES_POR_FRAME = 8 * 4 * 3
 
 
 def spawner_falso(colores, repetir=True):
-    """Devuelve un spawn() que produce frames de esos colores, en orden."""
+    """Returns a spawn() producing frames of those colours, in order."""
     guion = (
         "import sys\n"
         f"colores = {colores!r}\n"
@@ -52,23 +52,23 @@ def esperar(pred, timeout=5.0):
 
 
 def test_the_first_frame_call_waits_for_the_decoder():
-    # --save y --once dibujan UN cuadro y salen. Si frame() devuelve None porque
-    # ffmpeg todavia no escupio nada, el fondo cae al color plano y la funcion
-    # entera queda invisible justo donde se la previsualiza.
+    # --save and --once draw ONE frame and exit. If frame() returns None because
+    # ffmpeg has not emitted anything yet, the background falls back to the flat
+    # colour and the whole feature is invisible right where it is previewed.
     src = VideoSource("x.mp4", TAM, fps=30, spawn=spawner_falso([(255, 0, 0)]))
     src.start()
     try:
         img = src.frame()
-        assert img is not None, "el primer frame() devolvio None"
+        assert img is not None, "the first frame() returned None"
         assert img.getpixel((0, 0)) == (255, 0, 0)
     finally:
         src.close()
 
 
 def test_frame_waits_only_once_when_no_frame_ever_arrives():
-    # La contracara: si el decoder nunca produce nada (ffmpeg que no abre el
-    # archivo), esperar en CADA llamada colgaria el bucle del panel para
-    # siempre. Se espera una vez y nunca mas.
+    # The other side: if the decoder never produces anything (an ffmpeg that does
+    # not open the file), waiting on EVERY call would hang the panel loop forever.
+    # It waits once and never again.
     def spawn_mudo():
         return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"],
                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -84,8 +84,8 @@ def test_frame_waits_only_once_when_no_frame_ever_arrives():
         for _ in range(5):
             assert src.frame() is None
         siguientes = time.time() - t1
-        assert primera >= 0.25, "la primera llamada no espero"
-        assert siguientes < 0.1, "frame() sigue esperando despues de la primera vez"
+        assert primera >= 0.25, "the first call did not wait"
+        assert siguientes < 0.1, "frame() still waits after the first time"
     finally:
         src.close()
 
@@ -119,8 +119,8 @@ def test_the_frame_is_the_requested_size():
 
 
 def test_a_partial_frame_is_never_shown():
-    """ffmpeg escribe un stream continuo: si se toma lo que hay en el pipe sin
-    esperar los W*H*3 bytes exactos, se dibuja media imagen con basura."""
+    """ffmpeg writes a continuous stream: taking whatever is in the pipe without
+    waiting for the exact W*H*3 bytes draws half an image plus garbage."""
     guion = ("import sys, time\n"
              "sys.stdout.buffer.write(b'\x11' * 40)\n"   # menos de un frame
              "sys.stdout.buffer.flush()\n"
@@ -134,10 +134,10 @@ def test_a_partial_frame_is_never_shown():
                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
     src = VideoSource("x.mp4", TAM, fps=30, spawn=spawn)
-    # Sin espera del primer cuadro: lo que se prueba aca es QUE se publica, no
-    # cuanto espera el que lo pide. Con la espera puesta, la primera llamada se
-    # quedaria hasta que el frame completo llegue y no se podria observar el
-    # estado intermedio, que es justo el que tiene que dar None.
+    # With no first-frame wait: what is tested here is WHAT gets published, not how
+    # long the caller waits. With the wait in place, the first call would sit there
+    # until the complete frame arrived and the intermediate state -- which is
+    # precisely the one that has to give None -- could not be observed.
     src.espera_primero = 0
     src.start()
     try:
@@ -150,8 +150,8 @@ def test_a_partial_frame_is_never_shown():
 
 
 def test_close_terminates_and_waits():
-    """Mismo criterio que el sidecar: un ffmpeg huerfano sigue decodificando
-    video y quemando CPU para nadie."""
+    """Same rule as the sidecar: an orphan ffmpeg keeps decoding video and burning
+    CPU for nobody."""
     src = VideoSource("x.mp4", TAM, fps=30, spawn=spawner_falso([(1, 2, 3)]))
     src.start()
     assert esperar(lambda: src.frame() is not None)
@@ -177,8 +177,8 @@ def test_a_missing_ffmpeg_reports_how_to_fix_it():
 
 
 def test_buscar_ffmpeg_prefers_the_bundled_one(tmp_path, monkeypatch):
-    """Dejar ffmpeg.exe al lado de la app tiene que alcanzar: es lo que evita
-    pedirle al usuario que toque el PATH."""
+    """Dropping ffmpeg.exe beside the app has to be enough: that is what avoids
+    asking the user to touch PATH."""
     junto = tmp_path / "ffmpeg.exe"
     junto.write_bytes(b"")
     monkeypatch.setattr("vmaxpanel.render.video.LIB", tmp_path)
@@ -191,28 +191,29 @@ def test_buscar_ffmpeg_returns_none_when_there_is_none(tmp_path, monkeypatch):
     assert buscar_ffmpeg() is None
 
 
-# Los dos tests que siguen necesitan ffmpeg DE VERDAD: lo que prueban es que el
-# motivo que ffmpeg escribe en stderr llega al aviso. Sin ffmpeg el aviso correcto
-# es otro -- "falta ffmpeg" -- y afirmar sobre el primero seria afirmar sobre una
-# maquina en particular. Los cazo el CI, que corre en un Windows sin ffmpeg.
+# The next two tests need ffmpeg FOR REAL: what they check is that the reason
+# ffmpeg writes to stderr reaches the warning. Without ffmpeg the correct warning is
+# a different one -- "ffmpeg is missing" -- and asserting on the first would be
+# asserting about one particular machine. CI caught them, running on a Windows
+# without ffmpeg.
 necesita_ffmpeg = pytest.mark.skipif(
     buscar_ffmpeg() is None,
-    reason="hace falta ffmpeg instalado: prueban el texto que ffmpeg da en stderr")
+    reason="needs ffmpeg installed: they check the text ffmpeg writes to stderr")
 
 
 @necesita_ffmpeg
 def test_a_file_ffmpeg_cannot_open_says_so_instead_of_that_it_ended(tmp_path):
-    """ffmpeg contra un archivo que no existe (o que no es video) cierra stdout de
-    entrada, y eso se leia como "el video termino". Manda al usuario a mirar la
-    duracion del video cuando el problema es la ruta o el codec. El motivo lo dice
-    ffmpeg en stderr, que hasta ahora se tiraba a la basura."""
+    """ffmpeg against a file that does not exist (or is not a video) closes stdout
+    straight away, and that read as "the video ended". It sends the user to check
+    the video's duration when the problem is the path or the codec. ffmpeg states
+    the reason on stderr, which used to be thrown away."""
     fuente = VideoSource(tmp_path / "no-existe.mp4", model.Size(8, 8), fps=30)
     fuente.start()
     limite = time.monotonic() + 10
     while time.monotonic() < limite and not fuente.warnings:
         time.sleep(0.05)
     fuente.close()
-    assert fuente.warnings, "no aviso nada"
+    assert fuente.warnings, "it warned about nothing"
     aviso = " ".join(fuente.warnings)
     assert "could not open" in aviso
     assert "no-existe.mp4" in aviso
@@ -221,8 +222,9 @@ def test_a_file_ffmpeg_cannot_open_says_so_instead_of_that_it_ended(tmp_path):
 
 @necesita_ffmpeg
 def test_the_reason_ffmpeg_gives_is_included(tmp_path):
-    """El texto de ffmpeg es lo unico que distingue "no existe" de "no es un video"
-    de "falta el codec". Sin eso el aviso es generico y no lleva a ninguna parte."""
+    """ffmpeg's text is the only thing that distinguishes "does not exist" from "not
+    a video" from "codec missing". Without it the warning is generic and leads
+    nowhere."""
     fuente = VideoSource(tmp_path / "no-existe.mp4", model.Size(8, 8), fps=30)
     fuente.start()
     limite = time.monotonic() + 10
@@ -234,16 +236,17 @@ def test_the_reason_ffmpeg_gives_is_included(tmp_path):
 
 
 def test_reading_the_reason_does_not_hang_on_a_live_process(tmp_path):
-    """`read()` sobre el stderr de un proceso VIVO bloquea hasta que ese proceso lo
-    cierre, y esto corre en el hilo lector: un ffmpeg que cierra stdout y se queda
-    vivo dejaria el hilo colgado. Se simula con un proceso que cierra stdout de
-    entrada y sigue vivo: el aviso tiene que llegar igual, sin motivo."""
+    """`read()` on a LIVE process's stderr blocks until that process closes it, and
+    this runs on the reader thread: an ffmpeg that closes stdout and stays alive
+    would leave the thread hanging. It is simulated with a process that closes
+    stdout immediately and stays alive: the warning has to arrive anyway, without a
+    reason."""
     def spawn():
         return subprocess.Popen(
             [sys.executable, "-c",
-             # os.close(1) y no sys.stdout.close(): cerrar el objeto de Python no
-             # siempre cierra el descriptor, asi que el padre no veria el EOF y el
-             # test no ejercitaria nada.
+             # os.close(1) and not sys.stdout.close(): closing the Python object does
+             # not always close the descriptor, so the parent would not see the EOF
+             # and the test would exercise nothing.
              "import os, time; os.close(1); time.sleep(30)"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -253,7 +256,7 @@ def test_reading_the_reason_does_not_hang_on_a_live_process(tmp_path):
     while time.monotonic() < limite and not fuente.warnings:
         time.sleep(0.05)
     try:
-        assert fuente.warnings, "el hilo lector quedo colgado leyendo stderr"
+        assert fuente.warnings, "the reader thread hung reading stderr"
     finally:
         fuente.close()
     assert fuente._thread is not None and not fuente._thread.is_alive()

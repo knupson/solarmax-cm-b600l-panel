@@ -1,9 +1,10 @@
-"""El archivo de estado: como se sabe desde afuera si el panel esta vivo.
+"""The status file: how you tell from outside whether the panel is alive.
 
-Hasta ahora no habia forma. La bandeja tiene el estado en su menu, pero desde una
-consola -- o desde un script, o desde otra sesion -- lo unico observable era el log
-y el CPU del proceso, y de ahi a "esta dibujando" hay un salto de fe. Este archivo
-lo cierra: el proceso publica su estado cada pocos segundos y `--estado` lo lee.
+There used to be no way. The tray has the status in its menu, but from a console
+-- or a script, or another session -- the only observable things were the log and
+the process's CPU usage, and going from there to "it is drawing" is a leap of
+faith. This file closes that: the process publishes its status every few seconds
+and `--status` reads it.
 """
 import os
 
@@ -38,8 +39,9 @@ def test_reading_a_missing_file_is_none_not_an_exception(tmp_path):
 
 
 def test_reading_a_half_written_file_is_none_not_a_crash(tmp_path):
-    """Se escribe con reemplazo atomico, asi que esto no deberia pasar -- pero un
-    archivo truncado por un apagon, o pisado a mano, no puede tumbar al lector."""
+    """It is written with an atomic replace, so this should not happen -- but a file
+    truncated by a power cut, or overwritten by hand, must not bring the reader
+    down."""
     p = tmp_path / "estado.json"
     p.write_text('{"running": tru', encoding="utf-8")
     assert status.StatusFile(p).read() is None
@@ -53,8 +55,8 @@ def test_writing_leaves_no_temporary_files(archivo):
 
 
 def test_a_write_that_fails_does_not_propagate(tmp_path):
-    """Publicar el estado es diagnostico, no funcionalidad: un disco lleno o un
-    permiso denegado no puede matar el hilo del motor ni la bandeja."""
+    """Publishing the status is diagnostics, not functionality: a full disk or a
+    denied permission must not kill the engine thread or the tray."""
     s = status.StatusFile(tmp_path / "sub" / "no" / "existe" / "e.json")
     assert s.write({"frames": 1}) is False        # no levanta
     assert s.read() is None
@@ -71,9 +73,9 @@ def test_a_fresh_state_is_reported_as_alive(archivo):
 
 
 def test_a_stale_state_says_the_process_may_be_stuck(archivo):
-    """El proceso puede estar vivo y no publicar: un motor colgado en una escritura
-    al puerto sigue existiendo. La antiguedad del archivo es la unica senal de eso,
-    y por eso se dice explicitamente en vez de mostrar los numeros viejos como si
+    """The process can be alive and not publishing: an engine wedged in a write to
+    the port still exists. The file's age is the only signal of that, which is why
+    it is stated explicitly rather than showing the old numbers as if
     fueran de ahora."""
     archivo.write({"running": True, "frames": 30, "panel": "ok"})
     archivo._clock.now += 90.0
@@ -96,16 +98,16 @@ def test_describe_without_a_file_says_it_is_not_running():
 
 def test_problems_are_listed(archivo):
     archivo.write({"running": True, "frames": 1,
-                   "problems": ["sin datos: cpu.fan", "perfil rechazado"]})
+                   "problems": ["no data: cpu.fan", "profile rejected"]})
     texto = status.describe(archivo.read(), ahora=archivo._clock(),
                             vivo=lambda p: True)
     assert "cpu.fan" in texto
-    assert "perfil rechazado" in texto
+    assert "profile rejected" in texto
 
 
 def test_a_paused_panel_is_not_reported_as_drawing(archivo):
-    """Pausado suelta el puerto, que es como se le presta el panel a LCD Control.
-    Confundirlo con detenido manda a reiniciar algo que no hace falta."""
+    """Paused releases the port, which is how the panel is lent to LCD Control.
+    Confusing it with stopped sends the user to restart something that is fine."""
     archivo.write({"running": False, "paused": True, "frames": 5})
     texto = status.describe(archivo.read(), ahora=archivo._clock(),
                             vivo=lambda p: True)
@@ -113,7 +115,7 @@ def test_a_paused_panel_is_not_reported_as_drawing(archivo):
     assert "STOPPED" not in texto
 
 
-# --- integracion con la app ---
+# --- integration with the app ---
 
 
 def test_the_app_publishes_its_state_while_it_runs(tmp_path):
@@ -124,7 +126,7 @@ def test_the_app_publishes_its_state_while_it_runs(tmp_path):
     try:
         archivo = status.StatusFile(ruta)
         assert wait_until(lambda: (archivo.read() or {}).get("frames", 0) > 0), \
-            "la app nunca publico un estado con frames"
+            "the app never published a status with frames"
         leido = archivo.read()
         assert leido["running"] is True
         assert leido["pid"] == os.getpid()
@@ -134,8 +136,8 @@ def test_the_app_publishes_its_state_while_it_runs(tmp_path):
 
 
 def test_stopping_publishes_the_final_state(tmp_path):
-    """Si el archivo se quedara con running=True despues de bajar, `--estado`
-    mentiria justo en el caso que interesa: el panel que se apago solo."""
+    """If the file were left with running=True after shutting down, `--status` would
+    lie in exactly the case that matters: the panel that switched itself off."""
     from tests.test_app import app_for
     ruta = tmp_path / "estado.json"
     app, _ = app_for(tmp_path, status_path=ruta, status_period=0.02)
@@ -147,8 +149,8 @@ def test_stopping_publishes_the_final_state(tmp_path):
 
 
 def test_the_app_without_a_status_path_writes_nothing(tmp_path):
-    """El archivo es opt-in: los tests del motor y un `--once` de una sola pasada no
-    tienen por que ensuciar el directorio."""
+    """The file is opt-in: the engine tests and a single-pass `--once` have no reason
+    to litter the directory."""
     from tests.test_app import app_for
     app, _ = app_for(tmp_path)
     app.start()
@@ -157,9 +159,9 @@ def test_the_app_without_a_status_path_writes_nothing(tmp_path):
 
 
 def test_pausing_publishes_that_it_is_paused_not_that_it_stopped(tmp_path):
-    """pause() llama a stop(), que publica con paused todavia en False. Si el estado
-    se quedara asi, `--estado` diria DETENIDO y mandaria a reiniciar algo que esta en
-    pausa a pedido del usuario."""
+    """pause() calls stop(), which publishes with paused still False. If the status
+    were left that way, `--status` would say STOPPED and send the user to restart
+    something that is paused at their own request."""
     from tests.test_app import app_for
     ruta = tmp_path / "estado.json"
     app, _ = app_for(tmp_path, status_path=ruta, status_period=0.02)
@@ -176,8 +178,8 @@ def test_the_published_state_carries_the_problems(tmp_path):
     app, _ = app_for(tmp_path, status_path=ruta, status_period=0.02)
     app.start()
     try:
-        # wait_until y no leer de una: el latido corre en su propio hilo, asi que
-        # justo despues de start() el archivo puede no existir todavia.
+        # wait_until and not an immediate read: the heartbeat runs on its own
+        # thread, so right after start() the file may not exist yet.
         archivo = status.StatusFile(ruta)
         assert wait_until(lambda: archivo.read() is not None)
         assert "problems" in archivo.read()
@@ -201,8 +203,8 @@ def test_the_cli_reports_a_running_panel_with_code_zero(tmp_path, capsys, monkey
 
 def test_the_cli_returns_one_when_the_panel_is_not_running(tmp_path, capsys,
                                                           monkeypatch):
-    """Codigo 1 y no 2: no es un error de uso, es la respuesta 'no esta corriendo'.
-    Un script tiene que poder distinguir las dos cosas."""
+    """Code 1 and not 2: this is not a usage error, it is the answer "it is not
+    running". A script has to be able to tell the two apart."""
     from vmaxpanel import cli
     monkeypatch.setattr(cli, "status_path", lambda: tmp_path / "no-existe.json")
     assert cli.main(["--estado"]) == 1
@@ -210,30 +212,30 @@ def test_the_cli_returns_one_when_the_panel_is_not_running(tmp_path, capsys,
 
 
 def test_a_status_file_that_cannot_be_written_is_reported_once(tmp_path, capsys):
-    """Si el archivo no se puede escribir -- carpeta de solo lectura, como pasaria
-    instalado en Program Files -- `--estado` diria "is not running" para un panel
-    que SI esta dibujando. Es una mentira silenciosa, y el unico lugar donde se puede
-    avisar es el log. Una sola vez: el latido corre cada 5 s, para siempre."""
+    """If the file cannot be written -- a read-only folder, as would happen installed
+    in Program Files -- `--status` would say "is not running" for a panel that IS
+    drawing. That is a silent lie, and the only place a warning can go is the log.
+    Once only: the heartbeat runs every 5 s, forever."""
     from tests.test_app import app_for, wait_until
     ruta = tmp_path / "no" / "existe" / "estado.json"
     app, _ = app_for(tmp_path, status_path=ruta, status_period=0.02)
     app.start()
     try:
-        # Se espera a que el motor haya dado varias vueltas: con periodo 0.02 s, si
-        # el aviso se repitiera habria decenas cuando lleguemos a 5 cuadros.
+        # It waits for the engine to have gone round several times: at a 0.02 s
+        # period, if the warning repeated there would be dozens by 5 frames.
         assert wait_until(lambda: app.state()["frames"] >= 5)
     finally:
         app.stop()
     salida = capsys.readouterr().err
-    assert "could not publish" in salida, "no aviso que no podia escribir"
-    assert salida.count("could not publish") == 1, "lo repitio en cada latido"
+    assert "could not publish" in salida, "it did not warn that it could not write"
+    assert salida.count("could not publish") == 1, "it repeated on every heartbeat"
 
 
 def test_the_fps_is_shown_without_a_pointless_decimal(archivo):
-    """El modelo guarda fps como float a proposito (0.5 = un cuadro cada dos
-    segundos es una cadencia valida), pero "30.0 fps" en pantalla es el tipo interno
-    asomando. Se formatea al mostrar, que es donde corresponde -- no cambiando el
-    contrato por algo cosmetico."""
+    """The model stores fps as a float on purpose (0.5 = one frame every two seconds
+    is a valid cadence), but "30.0 fps" on screen is the internal type showing
+    through. It is formatted at display time, which is where it belongs -- not by
+    changing the contract over something cosmetic."""
     archivo.write({"running": True, "profile": "Apex", "frames": 9, "fps": 30.0})
     texto = status.describe(archivo.read(), ahora=archivo._clock(),
                             vivo=lambda p: True)
@@ -242,7 +244,7 @@ def test_the_fps_is_shown_without_a_pointless_decimal(archivo):
 
 
 def test_a_fractional_fps_keeps_its_decimal(archivo):
-    """Y al revés: si de verdad son 0.5, hay que verlo."""
+    """And the other way round: if it really is 0.5, it has to show."""
     archivo.write({"running": True, "frames": 1, "fps": 0.5})
     texto = status.describe(archivo.read(), ahora=archivo._clock(),
                             vivo=lambda p: True)
