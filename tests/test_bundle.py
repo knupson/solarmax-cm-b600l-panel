@@ -1,10 +1,10 @@
-"""Exportar e importar un perfil como un solo archivo.
+"""Exporting and importing a profile as a single file.
 
-Un perfil no es solo su JSON: referencia assets (el video o la imagen del fondo,
-la carpeta de una secuencia) y nombra fuentes por familia. Copiar el .json suelto
-a otra maquina da un panel con el fondo degradado y las fuentes cambiadas, sin que
-nadie entienda por que. El bundle lleva el JSON y los assets juntos, y avisa que
-fuentes no estan en la maquina que importa.
+A profile is not just its JSON: it references assets (the background's video or
+image, a sequence's folder) and names fonts by family. Copying the bare .json to
+another machine gives a panel with a degraded background and different fonts, with
+nobody understanding why. The bundle carries the JSON and the assets together, and
+reports which fonts are absent on the importing machine.
 """
 import json
 import zipfile
@@ -22,7 +22,7 @@ def entorno(tmp_path):
     assets = tmp_path / "assets"
     perfiles.mkdir()
     assets.mkdir()
-    (assets / "fondo.mp4").write_bytes(b"no es un mp4 pero alcanza")
+    (assets / "fondo.mp4").write_bytes(b"not really an mp4 but it will do")
     raw = dict(MINIMAL)
     raw["name"] = "Mio"
     raw["background"] = {"type": "video", "src": "fondo.mp4", "fit": "cover",
@@ -55,7 +55,7 @@ def test_the_manifest_records_what_the_profile_needs(entorno, tmp_path):
         man = json.loads(z.read("bundle.json"))
     assert man["name"] == "Mio"
     assert man["designed_for"] == {"width": 320, "height": 1480}
-    assert "Consolas" in man["fonts"]        # las familias que el perfil nombra
+    assert "Consolas" in man["fonts"]        # the families the profile names
     assert man["format"] == bundle.FORMATO
 
 
@@ -68,9 +68,9 @@ def test_exporting_an_invalid_profile_refuses(tmp_path):
 
 
 def test_a_missing_asset_is_reported_but_does_not_block_the_export(entorno, tmp_path):
-    """El fondo puede faltar y el perfil sigue siendo util: el motor degrada a
-    color plano. Bloquear la exportacion por eso deja al usuario sin poder
-    compartir su layout por un archivo que quizas no le importa."""
+    """The background can be missing and the profile is still useful: the engine
+    degrades to a flat colour. Blocking the export over that leaves the user unable
+    to share their layout because of a file they may not care about."""
     perfil, _, assets = entorno
     (assets / "fondo.mp4").unlink()
     info = bundle.export_profile(perfil, tmp_path / "b.vmaxpanel", assets_dir=assets)
@@ -107,13 +107,13 @@ def test_importing_restores_the_profile_and_the_asset(entorno, tmp_path):
     destino_a.mkdir()
     info = bundle.import_bundle(zip_, destino_p, destino_a)
     assert (destino_p / "mio.json").exists()
-    assert (destino_a / "fondo.mp4").read_bytes() == b"no es un mp4 pero alcanza"
+    assert (destino_a / "fondo.mp4").read_bytes() == b"not really an mp4 but it will do"
     assert info["profile"].name == "mio.json"
 
 
 def test_importing_validates_before_writing_anything(tmp_path):
-    """Un bundle con un perfil invalido no puede dejar assets a medio copiar en la
-    carpeta del usuario: se valida primero y no se escribe nada."""
+    """A bundle with an invalid profile must not leave assets half-copied in the
+    user's folder: it is validated first and nothing is written."""
     zip_ = tmp_path / "malo.vmaxpanel"
     with zipfile.ZipFile(zip_, "w") as z:
         z.writestr("perfil.json", json.dumps({"name": "x"}))
@@ -128,10 +128,10 @@ def test_importing_validates_before_writing_anything(tmp_path):
 
 
 def test_an_entry_that_escapes_the_destination_is_refused(tmp_path):
-    """Zip-slip. Un miembro '..\\..\\algo' escribe donde quiera el que armo el zip,
-    y este proceso corre elevado (la tarea usa HighestAvailable). Es la misma clase
-    de agujero que safe_asset_path() ya cierra para el campo src, ahora en el
-    otro camino por el que entran archivos ajenos."""
+    """Zip-slip. A member '..\\..\\something' writes wherever whoever built the zip
+    likes, and this process runs elevated (the task uses HighestAvailable). It is
+    the same class of hole safe_asset_path() already closes for the src field, now
+    on the other path by which somebody else's files come in."""
     zip_ = tmp_path / "malicioso.vmaxpanel"
     with zipfile.ZipFile(zip_, "w") as z:
         z.writestr("perfil.json", json.dumps(MINIMAL))
@@ -157,8 +157,9 @@ def test_an_absolute_entry_is_refused(tmp_path):
 
 
 def test_an_oversized_member_is_refused(tmp_path, monkeypatch):
-    """Zip bomb: un miembro que se declara chico y descomprime a gigas. Se corta
-    por el tamano declarado, que es lo que se puede saber sin descomprimir."""
+    """Zip bomb: a member that declares itself small and expands to gigabytes. It is
+    cut off by the declared size, which is what can be known without
+    decompressing."""
     monkeypatch.setattr(bundle, "MAX_MIEMBRO", 100)
     zip_ = tmp_path / "bomba.vmaxpanel"
     with zipfile.ZipFile(zip_, "w", zipfile.ZIP_DEFLATED) as z:
@@ -172,8 +173,8 @@ def test_an_oversized_member_is_refused(tmp_path, monkeypatch):
 
 
 def test_importing_does_not_overwrite_by_default(entorno, tmp_path):
-    """Importar no puede pisar en silencio el perfil que el usuario tiene andando:
-    su layout es trabajo suyo, y un nombre repetido es lo normal cuando dos
+    """Importing must not silently overwrite the profile the user has running: their
+    layout is their own work, and a repeated name is the normal case when two
     personas exportan 'apex'."""
     perfil, perfiles, assets = entorno
     zip_ = tmp_path / "b.vmaxpanel"
@@ -189,7 +190,7 @@ def test_importing_can_rename_instead_of_overwriting(entorno, tmp_path):
     bundle.export_profile(perfil, zip_, assets_dir=assets)
     info = bundle.import_bundle(zip_, perfiles, assets, si_existe="renombrar")
     assert info["profile"].name == "mio-2.json"
-    assert (perfiles / "mio.json").exists()          # el original intacto
+    assert (perfiles / "mio.json").exists()          # the original intact
 
 
 def test_importing_can_overwrite_when_asked(entorno, tmp_path):
@@ -203,9 +204,10 @@ def test_importing_can_overwrite_when_asked(entorno, tmp_path):
 
 
 def test_importing_reports_the_fonts_that_are_missing_here(entorno, tmp_path):
-    """La razon numero uno de que un perfil ajeno se vea distinto. No se puede
-    arreglar -- las fuentes no se empaquetan, son de Microsoft -- pero se puede
-    decir, que es la diferencia entre "se ve raro" y "te falta esta fuente"."""
+    """The number one reason somebody else's profile looks different. It cannot be
+    fixed -- fonts are not packaged, they belong to Microsoft -- but it can be said,
+    which is the difference between "it looks wrong" and "you are missing this
+    font"."""
     perfil, perfiles, assets = entorno
     raw = json.loads(perfil.read_text(encoding="utf-8"))
     raw["fonts"] = {"m": {"family": "NoExisteEnNingunaMaquina", "size": 14}}
@@ -244,8 +246,9 @@ def test_a_file_that_is_not_a_zip_is_refused(tmp_path):
 
 
 def test_a_roundtrip_keeps_the_profile_byte_identical(entorno, tmp_path):
-    """Exportar e importar no puede reformatear el perfil: el usuario tiene que
-    poder comparar el suyo con el que le vuelve y ver que son el mismo."""
+    """Exporting and importing must not reformat the profile: the user has to be
+    able to compare theirs with the one that comes back and see they are the
+    same."""
     perfil, _, assets = entorno
     zip_ = tmp_path / "b.vmaxpanel"
     bundle.export_profile(perfil, zip_, assets_dir=assets)
@@ -291,29 +294,29 @@ def test_the_cli_import_of_a_broken_bundle_fails_loudly(tmp_path, capsys):
 
 def test_the_cli_export_refuses_to_overwrite_silently(entorno, tmp_path, capsys,
                                                      monkeypatch):
-    """Exportar dos veces al mismo nombre no puede pisar el bundle anterior sin
-    avisar: puede ser el que el usuario ya mando a alguien."""
+    """Exporting twice to the same name must not overwrite the previous bundle
+    without warning: it may be the one the user already sent to somebody."""
     perfil, _, assets = entorno
     from vmaxpanel import cli
     monkeypatch.setattr(cli, "assets_dir", lambda: assets)
     salida = tmp_path / "s.vmaxpanel"
-    # A proposito con el flag viejo `--exportar` y no con `--export`: los nombres
-    # castellanos quedaron como alias para no romper scripts ya escritos, y este
-    # es el test que lo demuestra.
+    # Deliberately with the old `--exportar` flag and not `--export`: the Spanish
+    # names were kept as aliases so already-written scripts do not break, and this
+    # is the test that proves it.
     assert cli.main(["--profile", str(perfil), "--exportar", str(salida)]) == 0
     assert cli.main(["--profile", str(perfil), "--exportar", str(salida)]) == 2
     assert "already exists" in capsys.readouterr().out
 
 
 def test_a_profile_with_crlf_survives_the_roundtrip(entorno, tmp_path):
-    """Los perfiles de este repo estan con CRLF -- los escribe loader.save_raw en
-    Windows. Leerlos como texto le hace traducir los saltos de linea a LF, asi que
-    el perfil que volvia del bundle tenia 60 bytes menos que el original y "el
-    mismo" era mentira. Se lee y se escribe en bytes.
+    """This repo's profiles carry CRLF -- loader.save_raw writes them that way on
+    Windows. Reading them as text translates the line endings to LF, so the profile
+    coming back out of the bundle was 60 bytes smaller than the original and "the
+    same" was a lie. It is read and written in bytes.
     """
     perfil, _, assets = entorno
-    # Con indent para que tenga saltos de linea de verdad: el perfil de una sola
-    # linea del fixture no ejercita nada.
+    # With indent so it really has line breaks: the single-line profile in the
+    # fixture exercises nothing.
     crudo = json.dumps(json.loads(perfil.read_text(encoding="utf-8")), indent=1)
     perfil.write_bytes(crudo.replace("\n", "\r\n").encode("utf-8"))
     zip_ = tmp_path / "b.vmaxpanel"
@@ -324,19 +327,20 @@ def test_a_profile_with_crlf_survives_the_roundtrip(entorno, tmp_path):
 
 
 def test_importing_over_a_live_profile_is_atomic(entorno, tmp_path, monkeypatch):
-    """El perfil que se pisa puede ser el que el motor esta leyendo AHORA: el
-    hot-reload lo relee por hash del contenido, asi que un write_bytes a medias se
-    puede leer truncado. `loader.save_raw` usa temporal + reemplazo por esta misma
-    razon; importar tenia que hacer lo mismo.
+    """The profile being overwritten may be the one the engine is reading RIGHT NOW:
+    the hot reload re-reads it by content hash, so a half-finished write_bytes can be
+    read truncated. `loader.save_raw` uses a temp file plus a replace for this very
+    reason; importing had to do the same.
 
-    Se prueba haciendo fallar el reemplazo: si el contenido nuevo se escribiera
-    directo sobre el destino, el perfil viejo ya estaria destruido cuando el fallo
+    It is tested by making the replace fail: if the new content were written
+    straight over the destination, the old profile would already be destroyed by the
+    time the failure
     ocurre.
     """
     perfil, perfiles, assets = entorno
     zip_ = tmp_path / "b.vmaxpanel"
     bundle.export_profile(perfil, zip_, assets_dir=assets)
-    viejo = b'{"soy": "el que estaba andando"}'
+    viejo = b'{"i am": "the one that was running"}'
     perfil.write_bytes(viejo)
 
     import os
@@ -351,17 +355,18 @@ def test_importing_over_a_live_profile_is_atomic(entorno, tmp_path, monkeypatch)
     with pytest.raises(bundle.BundleError):
         bundle.import_bundle(zip_, perfiles, assets, si_existe="pisar")
 
-    assert perfil.read_bytes() == viejo, "destruyo el perfil que estaba andando"
-    assert not list(perfiles.glob("*.tmp")), "dejo el temporal tirado"
+    assert perfil.read_bytes() == viejo, "it destroyed the profile that was running"
+    assert not list(perfiles.glob("*.tmp")), "it left the temp file behind"
 
 
 def test_an_asset_is_also_written_atomically(entorno, tmp_path, monkeypatch):
-    """Mismo motivo del otro lado: ffmpeg puede estar leyendo el video que se pisa, y
+    """The same reason from the other side: ffmpeg may be reading the video being
+    overwritten, and
     un archivo a medio escribir es un fondo roto en vez de uno nuevo."""
     perfil, perfiles, assets = entorno
     zip_ = tmp_path / "b.vmaxpanel"
     bundle.export_profile(perfil, zip_, assets_dir=assets)
-    (assets / "fondo.mp4").write_bytes(b"el video que se esta reproduciendo")
+    (assets / "fondo.mp4").write_bytes(b"the video that is playing")
 
     import os
     real = os.replace
@@ -374,5 +379,5 @@ def test_an_asset_is_also_written_atomically(entorno, tmp_path, monkeypatch):
     monkeypatch.setattr(os, "replace", replace_que_falla)
     with pytest.raises(bundle.BundleError):
         bundle.import_bundle(zip_, perfiles, assets, si_existe="pisar")
-    assert (assets / "fondo.mp4").read_bytes() == b"el video que se esta reproduciendo"
+    assert (assets / "fondo.mp4").read_bytes() == b"the video that is playing"
     assert not list(assets.glob("*.tmp"))
