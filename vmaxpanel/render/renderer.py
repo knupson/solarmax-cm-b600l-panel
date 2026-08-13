@@ -1,16 +1,15 @@
-"""Compone el frame del panel: fondo + widgets.
+"""Composes the panel frame: background + widgets.
 
-Un solo renderer para el servicio y para el editor. Si hubiera dos
-implementaciones divergirian y el preview del editor terminaria mintiendo.
+One single renderer for the engine and for the editor. With two implementations
+they would diverge and the editor preview would end up lying.
 
-La escala es uniforme (min de los dos ejes) y se aplica tambien al tamano de
-fuente: escalar los ejes por separado deformaria el texto. Cuando la relacion
-de aspecto del panel real difiere de `designed_for`, el contenido escalado
-(los widgets) queda mas chico que el lienzo destino en un eje; ese sobrante
-se reparte mitad y mitad para centrar en vez de amontonar todo contra una
-esquina -- asi lo dice el doc de diseno y asi lo prueba
-test_scale_uses_the_smaller_axis_and_centers, aunque el codigo original de
-esta tarea nunca calculaba el offset.
+The scale is uniform (the smaller of the two axes) and applies to font size as
+well: scaling the axes independently would distort the text. When the real
+panel's aspect ratio differs from `designed_for`, the scaled content (the
+widgets) ends up smaller than the target canvas on one axis; that slack is split
+in half to centre it rather than piling everything into a corner -- which is
+what the design doc says and what test_scale_uses_the_smaller_axis_and_centers
+checks.
 """
 import io
 import math
@@ -35,12 +34,11 @@ ROTATIONS = {
 
 
 def _finite_number(v):
-    """Numero utilizable para el historial. Mismo criterio que
-    widgets._num(): rechaza bool (isinstance(True, int) es True) y NaN/Inf.
-    Un sensor fallado que empuja nan no puede quedar en el ring buffer como
-    si fuera un dato real -- un widget de graph futuro que promediara la
-    serie en vez de puntearla, como hace hoy widgets._draw_graph, terminaria
-    contaminado por un solo nan.
+    """A number usable for the history. Same rule as widgets._num(): it rejects
+    bool (isinstance(True, int) is True) and NaN/Inf. A failed sensor pushing a
+    nan must not sit in the ring buffer as if it were real data -- a future graph
+    widget averaging the series instead of plotting it point by point, as
+    widgets._draw_graph does today, would be poisoned by a single nan.
     """
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         return False
@@ -48,12 +46,12 @@ def _finite_number(v):
 
 
 def _aviso_fuente(font, resolver) -> str:
-    """El aviso de una familia ausente, diciendo con QUE se dibujo si hubo reemplazo.
+    """The warning for a missing family, saying WHAT it was drawn with instead.
 
-    "falta X" obliga al usuario a adivinar que esta mirando; "falta X, se uso Y" le
-    dice exactamente lo que ve. Y si la cadena del perfil tampoco alcanzo, el aviso lo
-    dice, porque entonces lo que se ve es la fuente por defecto de PIL y no se parece
-    a nada de lo pedido.
+    "X is missing" makes the user guess what they are looking at; "X is missing,
+    Y was used" tells them exactly what they see. And if the profile's fallback
+    chain did not help either, the warning says so, because then what is on screen
+    is PIL's default font and it looks nothing like what was asked for.
     """
     usada = resolver.substitutions().get(font.family)
     if usada:
@@ -65,7 +63,7 @@ def _aviso_fuente(font, resolver) -> str:
 
 
 class History:
-    """Ventana deslizante por metrica, para los widgets de tipo graph."""
+    """A sliding window per metric, for graph widgets."""
 
     def __init__(self, maxlen: int = 320):
         self.maxlen = maxlen
@@ -81,16 +79,14 @@ class History:
 
 
 class Renderer:
-    """El unico renderer del proyecto: lo usa el servicio y, en fase 3, el
-    editor para su preview en vivo. Ambos tienen que ver exactamente lo
-    mismo, asi que esta clase no puede tener una segunda implementacion en
-    otro lado.
+    """The project's only renderer: the engine uses it, and so does the editor
+    for its live preview. Both have to see exactly the same thing, so this class
+    cannot have a second implementation anywhere else.
 
-    `set_panel_size(panel_size)` cambia solo el tamano real del panel sin
-    tocar el layout activo (recalcula todo delegando en set_layout()); no
-    aparece en la lista de interfaces del brief de esta tarea, pero es API
-    publica igual -- pensada para un editor que deja el layout fijo y
-    prueba distintos tamanos de panel.
+    `set_panel_size(panel_size)` changes only the real panel size without touching
+    the active layout (it recalculates everything by delegating to set_layout()).
+    It is public API, meant for an editor that keeps the layout fixed and tries
+    different panel sizes.
     """
 
     def __init__(self, layout, panel_size: Size | None = None, assets_dir=DEFAULT_ASSETS):
@@ -100,73 +96,70 @@ class Renderer:
         self.set_layout(layout)
 
     def set_layout(self, layout) -> None:
-        """Reemplaza el layout activo. Total a proposito: recalcula escala,
-        offset de centrado y reconstruye el fondo cacheado, para que no
-        quede ningun estado del layout anterior mezclado con el nuevo (el
-        propio BackgroundSource no se entera de cambios solo -- el
-        comentario en background.py dice explicitamente que el dueno es
-        quien tiene que descartarlo y crear uno nuevo).
+        """Replaces the active layout. Wholesale on purpose: it recalculates the
+        scale and the centring offset, and rebuilds the cached background, so no
+        state from the previous layout stays mixed in with the new one
+        (BackgroundSource does not notice changes on its own -- the comment in
+        background.py says explicitly that the owner is the one who has to discard
+        it and build a new one).
         """
         self.layout = layout
         d = layout.designed_for
         target = self._panel_size or d
         self.scale = min(target.width / d.width, target.height / d.height)
 
-        # self.size es el tamano real del lienzo que el panel espera (nunca
-        # depende de redondeos de escala): si target ya viene de un entero,
-        # size tiene que coincidir con ese entero exacto, no con
-        # round(d.width * scale) que podria quedar 1px corto o largo por
-        # arrastre de punto flotante (scale = min(...) no siempre reproduce
-        # target/d de forma exacta al multiplicar de vuelta).
+        # self.size is the real size of the canvas the panel expects (it never
+        # depends on scale rounding): if target already comes from an integer, size
+        # has to match that exact integer, not round(d.width * scale), which could
+        # end up 1 px short or long from floating-point drift (scale = min(...)
+        # does not always reproduce target/d exactly when multiplied back).
         self.size = Size(int(target.width), int(target.height))
 
-        # Contenido escalado (los widgets) dentro de ese lienzo. round(), no
-        # int(): la misma razon que _fit() en background.py usa round() para
-        # cover -- un scale que no cae exacto puede dar 199.9999999999997 y
-        # truncar deja un borde de 1px sin cubrir. Se clampea al tamano del
-        # lienzo por si el redondeo empuja 1px de mas.
+        # The scaled content (the widgets) inside that canvas. round(), not int():
+        # the same reason _fit() in background.py uses round() for cover -- a scale
+        # that does not land exactly can give 199.9999999999997, and truncating
+        # leaves a 1 px edge uncovered. It is clamped to the canvas size in case
+        # rounding pushes 1 px too far.
         cw = min(self.size.width, max(1, round(d.width * self.scale)))
         ch = min(self.size.height, max(1, round(d.height * self.scale)))
         self._content_size = (cw, ch)
         self._offset = ((self.size.width - cw) // 2, (self.size.height - ch) // 2)
-        # Atajo real: cuando el contenido llena el lienzo entero (el caso
-        # comun -- panel_size None o con la misma relacion de aspecto que
-        # designed_for) no hace falta la capa RGBA intermedia para centrar.
+        # A real shortcut: when the content fills the whole canvas (the common
+        # case -- panel_size None, or with the same aspect ratio as designed_for)
+        # the intermediate RGBA layer for centring is not needed.
         self._exact_fit = self._content_size == (self.size.width, self.size.height)
 
-        # El fondo anterior se cierra ANTES de crear el nuevo: un fondo de video
-        # tiene un ffmpeg atras, y set_layout() es el camino de la recarga en
-        # caliente, o sea que sin esto cada edicion del perfil sumaria un proceso
-        # decodificando para nadie.
+        # The previous background is closed BEFORE creating the new one: a video
+        # background has an ffmpeg behind it, and set_layout() is the hot-reload
+        # path, so without this every profile edit would add a process decoding
+        # for nobody.
         self._cerrar_fondo()
         self._bg = BackgroundSource(layout.background, self.size, self.assets_dir)
-        # Fuerza el build del fondo ahora, no en el primer frame(): _build()
-        # es quien agrega los warnings de fondo degradado (asset faltante,
-        # tipo de fase 2, etc), y BackgroundSource los cachea para siempre
-        # despues del primer frame() (ver su docstring). Sin esto,
-        # warnings() llamado antes de cualquier frame() veria una lista de
-        # fondo vacia aunque el fondo SI tenga un problema real. El costo es
-        # un build + una copia de mas por cambio de layout, no por cuadro.
+        # Forces the background build now, not on the first frame(): _build() is
+        # what adds the degraded-background warnings (missing asset, and so on),
+        # and BackgroundSource caches them forever after the first frame() (see its
+        # docstring). Without this, warnings() called before any frame() would see
+        # an empty background list even though the background DOES have a real
+        # problem. The cost is one extra build plus one copy per layout change, not
+        # per frame.
         self._bg.frame()
 
-        # Precalienta el resolver con las fuentes que este layout va a usar,
-        # en la escala que este renderer tiene fija. warnings() ya no
-        # depende de este precalentamiento (ver mas abajo por que), asi que
-        # esto es puramente una optimizacion: evita pagar la carga de la
-        # fuente -- abrir el archivo, parsear el TTF -- dentro del primer
-        # frame() en vez de aca, donde a 1-10 fps no se nota tanto como
-        # adentro del loop de render.
+        # Warms the resolver with the fonts this layout is going to use, at the
+        # scale this renderer has fixed. warnings() no longer depends on this
+        # warm-up (see below for why), so this is purely an optimisation: it avoids
+        # paying the font load -- opening the file, parsing the TTF -- inside the
+        # first frame() instead of here, where at 1-10 fps it is far less
+        # noticeable than inside the render loop.
         for font in layout.fonts.values():
             self._fonts.resolve(font, self.scale)
 
     def _cerrar_fondo(self) -> None:
-        """Cierra el fondo activo si hay uno.
+        """Closes the active background if there is one.
 
-        getattr y no self._bg directo: __init__ llama a set_layout(), asi que la
-        primera vuelta pasa por aca antes de que el atributo exista. Y se traga
-        las excepciones porque esto corre en el camino de la recarga en caliente:
-        un fondo que no se deja cerrar no puede impedir que entre el layout
-        nuevo.
+        getattr rather than self._bg directly: __init__ calls set_layout(), so the
+        first pass comes through here before the attribute exists. And it swallows
+        exceptions because this runs on the hot-reload path: a background that
+        refuses to close must not stop the new layout from coming in.
         """
         bg = getattr(self, "_bg", None)
         if bg is None:
@@ -177,11 +170,12 @@ class Renderer:
             pass
 
     def close(self) -> None:
-        """Suelta los recursos del fondo. El renderer no dibuja mas, pero
-        warnings() sigue contestando: es lo que la bandeja pinta al abrir el menu,
-        desde OTRO hilo que el que baja el motor. "El motor se cerro justo cuando
-        abriste el menu" no puede ser una excepcion, y los avisos del fondo que se
-        cerro son justo el motivo por el que quedo asi.
+        """Releases the background's resources. The renderer does not draw any more,
+        but warnings() keeps answering: it is what the tray paints when the menu
+        opens, from a DIFFERENT thread than the one bringing the engine down. "The
+        engine closed exactly when you opened the menu" cannot be an exception, and
+        the warnings from the background that was closed are precisely why it ended
+        up this way.
         """
         bg = getattr(self, "_bg", None)
         if bg is not None:
@@ -194,36 +188,28 @@ class Renderer:
         self.set_layout(self.layout)
 
     def warnings(self) -> list[str]:
-        """Fondo degradado, fuentes ausentes y directorios de fuentes
-        ilegibles. Los dos primeros ya estaban en el brief; el tercero
-        (`unreadable_dirs()`) lo expone FontResolver desde la tarea 7 pero
-        el brief nunca lo miraba -- es la misma clase de degradacion
-        silenciosa que missing() reporta (una familia no aparece porque su
-        carpeta no se pudo leer, no porque no exista) y por eso se agrega
-        aca tambien.
+        """Degraded background, missing fonts and unreadable font directories.
 
-        Las fuentes ausentes se recalculan DERIVANDOLAS de
-        `self.layout.fonts` en cada llamada, en vez de leer un
-        `FontResolver.missing()` acumulado. missing() solo anota lo que un
-        resolve() anterior efectivamente vio faltar -- y `resolve()`
-        devuelve directo desde la cache en un hit, sin volver a pasar por
-        ahi -- asi que un FontResolver de larga vida (el de este Renderer,
-        reusado a traves de sucesivos set_layout()) puede tener una familia
-        cacheada de una vuelta anterior y quedarse mudo sobre ella la
-        proxima vez, aunque siga faltando y el layout activo siga
-        nombrandola. is_available() no tiene ese problema: es una consulta
-        pura contra el indice de fuentes, no un historial de llamadas a
-        resolve(), asi que da la misma respuesta la primera vez que se
-        pregunta o la enesima. Con esto no hace falta ningun estado propio
-        de "que layout pidio que" ni resetearlo entre llamadas a
-        set_layout() -- ese estado fue, en dos vueltas de revision
-        distintas, la fuente de un warning que sobrevivia de mas y de uno
-        que desaparecia de menos.
+        The missing fonts are recalculated by DERIVING them from
+        `self.layout.fonts` on every call, rather than reading an accumulated
+        `FontResolver.missing()`. missing() only records what an earlier resolve()
+        actually saw missing -- and `resolve()` returns straight from the cache on
+        a hit, without passing through there again -- so a long-lived FontResolver
+        (this Renderer's, reused across successive set_layout() calls) can have a
+        family cached from an earlier round and stay silent about it the next time,
+        even though it is still missing and the active layout still names it.
+        is_available() does not have that problem: it is a pure query against the
+        font index, not a history of resolve() calls, so it gives the same answer
+        the first time it is asked or the hundredth. With this, no state of its own
+        about "which layout asked for what" is needed, and none has to be reset
+        between set_layout() calls -- that state was, in two separate review
+        rounds, the source of one warning that outlived its cause and one that
+        disappeared too early.
         """
-        # Deduplicado por casing: dos alias que piden la misma familia escrita
-        # distinto ("Arial" y "ARIAL") daban dos lineas identicas para el
-        # usuario. Se conserva la primera forma vista, que es la que el layout
-        # escribio, para que el aviso coincida con lo que el usuario tipeo.
+        # Deduplicated by casing: two aliases asking for the same family written
+        # differently ("Arial" and "ARIAL") produced two identical lines for the
+        # user. The first form seen is kept -- the one the layout wrote -- so the
+        # warning matches what the user typed.
         missing = {}
         for f in self.layout.fonts.values():
             if not self._fonts.is_available(f.family):
@@ -233,7 +219,7 @@ class Renderer:
         return (avisos_fondo
                 + [_aviso_fuente(f, self._fonts)
                    for f in sorted(missing.values(), key=lambda x: x.family.lower())]
-                + [f"directorio de fuentes ilegible: {d}"
+                + [f"unreadable font directory: {d}"
                    for d in sorted(self._fonts.unreadable_dirs())])
 
     def frame(self, sample: dict, history: dict | None = None) -> Image.Image:
@@ -242,11 +228,11 @@ class Renderer:
                         assets_dir=self.assets_dir, history=history or {})
 
         if self._exact_fit:
-            # Caso comun: el contenido ya llena el lienzo, se dibuja directo
-            # sobre la copia del fondo y no hay que pagar una capa RGBA
-            # extra por frame. A 1 fps no se nota; a los ~10 fps que fase 2
-            # quiere para el mismo Renderer, evitar una asignacion e
-            # composicion de mas por cuadro cuando no hace falta si importa.
+            # Common case: the content already fills the canvas, so it is drawn
+            # straight onto the copy of the background and there is no extra RGBA
+            # layer to pay for per frame. At 1 fps it does not show; at the ~10 fps
+            # animated backgrounds want from this same Renderer, avoiding a
+            # needless allocation and composite per frame does matter.
             target = img
         else:
             target = Image.new("RGBA", self._content_size, (0, 0, 0, 0))
@@ -262,18 +248,18 @@ class Renderer:
 
 
 def to_jpeg(img: Image.Image, rotate: int = 0, quality: int = 82) -> bytes:
-    """JPEG baseline 4:2:0 crudo: es exactamente lo que el panel espera --
-    arranca en FFD8FF y termina en FFD9, sin ningun contenedor alrededor.
+    """A raw baseline 4:2:0 JPEG: exactly what the panel expects -- it starts at
+    FFD8FF and ends at FFD9, with no container around it.
 
-    El panel de esta maquina esta montado al revez, de ahi el rotate=180 del
-    perfil. En otro gabinete puede ser 0: la rotacion es un parametro, nunca
-    una asuncion de este modulo.
+    The panel this was written against is mounted upside down, hence the
+    rotate=180 in the profile. In another case it may be 0: the rotation is a
+    parameter, never an assumption of this module.
 
-    subsampling=2 es 4:2:0 en la convencion de Pillow (0=4:4:4, 1=4:2:2,
-    2=4:2:0). progressive=False se pasa explicito -- es el default de
-    Pillow, pero decirlo a mano documenta que el formato tiene que quedar
-    baseline (progresivo tiene un orden de bytes distinto y el panel no lo
-    entiende) en vez de depender en silencio de que el default nunca cambie.
+    subsampling=2 is 4:2:0 in Pillow's convention (0=4:4:4, 1=4:2:2, 2=4:2:0).
+    progressive=False is passed explicitly -- it is Pillow's default, but saying
+    it by hand documents that the format has to stay baseline (progressive has a
+    different byte order and the panel does not understand it) rather than
+    silently depending on that default never changing.
     """
     if rotate not in ROTATIONS:
         raise ValueError(f"invalid rotate {rotate!r}, expected one of "
