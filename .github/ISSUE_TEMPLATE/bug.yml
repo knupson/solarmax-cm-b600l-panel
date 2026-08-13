@@ -1,0 +1,54 @@
+name: Reportar un bug
+description: Algo no anda, se dibuja mal, o el panel no responde
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Con el diagnóstico y, si es visual, el PNG, casi siempre alcanza para
+        entender qué pasó sin ida y vuelta.
+
+  - type: textarea
+    id: que-pasa
+    attributes:
+      label: Qué pasa
+      description: Qué esperabas y qué pasó en su lugar.
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostico
+    attributes:
+      label: Salida de --diagnostico
+      description: "`python -m vmaxpanel --diagnostico`. Dice qué falta y qué es opcional."
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Cómo reproducirlo
+      description: El comando exacto, o los pasos en el editor o la bandeja.
+
+  - type: textarea
+    id: captura
+    attributes:
+      label: Captura
+      description: |
+        Si tiene que ver con lo que se dibuja: `python -m vmaxpanel --save bug.png`
+        y arrastrá el PNG acá. No toca el panel.
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Placa y GPU
+      description: Los sensores dependen de esto. Sale del propio --diagnostico.
+      placeholder: B760M D3HP + RX 6800 XT
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: "El archivo que pasaste con `--log`, si estabas usando uno."
+      render: text

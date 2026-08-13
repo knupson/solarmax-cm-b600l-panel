@@ -1,0 +1,47 @@
+# Corre la suite en un Windows limpio.
+#
+# windows-latest y no ubuntu: el proyecto es Windows de punta a punta -- WMI,
+# PDH, ctypes/Win32 para la bandeja, Tkinter para el editor, y fuentes que se
+# piden por familia al sistema. En Linux no arranca ni tiene sentido que lo haga.
+#
+# El runner NO tiene el panel, ni las DLL de LibreHardwareMonitor, ni una placa
+# Gigabyte con GSA1. Eso es a proposito: es exactamente la maquina de alguien que
+# recien clona el repo, y la suite tiene que pasar ahi. Si un test empieza a
+# depender del hardware de una maquina en particular, este workflow lo caza.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Correr la suite
+        run: python -m pytest -q
+
+      # conftest.py mata cualquier test que pase de 60 s y escribe el stack de
+      # todos los hilos aca. Sin esto, un cuelgue en CI es un timeout mudo.
+      - name: Subir el stack si algo se colgo
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-hang
+          path: pytest-hang.txt
+          if-no-files-found: ignore

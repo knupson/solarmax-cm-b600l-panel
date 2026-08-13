@@ -1,10 +1,28 @@
-# Solarmax Display — driver propio del panel del gabinete
+# VMax Panel — driver propio del panel del gabinete
 
 Reemplazo de **LCD Control** (software vendor) para el panel **Solarmax CM-B600L**,
-320x1480, `HL-VMAX-USB-Device` (VID_33C3 / PID_F101) en **COM3**.
-SN del panel: `VMAXA170320*1480S261001155`.
+320x1480, `HL-VMAX-USB-Device` (VID_33C3 / PID_F101). El puerto COM y la geometría se
+autodetectan: no hay nada del panel hardcodeado.
 
 Escrito el 2026-08-11 porque la app vendor mostraba **CPU 100%** con carga real de 65%.
+
+<p align="center">
+  <img src="docs/img/apex.png"   alt="Perfil Apex"   width="215">
+  <img src="docs/img/embers.png" alt="Perfil Embers" width="215">
+  <img src="docs/img/vitals.png" alt="Perfil Vitals" width="215">
+</p>
+<p align="center">
+  <em>Apex, Embers y Vitals — los tres perfiles que vienen con el repo, tal como salen de
+  <code>--save</code>. Ninguno tiene un solo valor escrito a mano: todo se lee de la máquina.</em>
+</p>
+
+El layout es **datos, no código**: un JSON por perfil que se recarga en caliente, con editor
+gráfico y app de bandeja. Sensores por WMI, PDH y LibreHardwareMonitor, sin ningún driver
+ring0.
+
+**Licencia [PolyForm Noncommercial 1.0.0](LICENSE)**: usalo, modificalo y compartilo para
+cualquier fin no comercial. Venderlo, no. Para contribuir, mirá
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Empezar de cero
 
@@ -355,6 +373,23 @@ pestaña Fondo lo dice, junto con si ffmpeg está o no.
 
 ## Dependencias
 
-Python 3.13 + `psutil`, `pyserial`, `pillow`. `ffmpeg` es opcional y solo para fondos de video. Los 3 DLL (`LibreHardwareMonitorLib`,
-`HidSharp`, `HidLibrary`) están en `daemon/` — LHM necesita HidSharp al lado o `Open()`
-falla. `frida-tools` se usó solo para reversear el protocolo; el daemon no la necesita.
+Python 3.13 + `psutil`, `pyserial`, `pillow`. `ffmpeg` es opcional y solo para fondos de
+video. Los 3 DLL (`LibreHardwareMonitorLib`, `HidSharp`, `HidLibrary`) van en
+`vmaxpanel/lib/` — LHM necesita HidSharp al lado o `Open()` falla. **No están en el repo**:
+son de terceros y no se redistribuyen; `python -m vmaxpanel --diagnostico` dice de dónde
+bajarlas y qué se pierde sin ellas. `frida-tools` se usó solo para reversear el protocolo;
+el driver no la necesita.
+
+## Licencia
+
+[PolyForm Noncommercial 1.0.0](LICENSE) — cualquier uso no comercial está permitido,
+incluido modificarlo y compartirlo. El uso comercial no.
+
+Lo que **no** cubre esa licencia, porque no es mío:
+
+| | |
+|---|---|
+| `LibreHardwareMonitorLib.dll`, `HidSharp.dll`, `HidLibrary.dll` | MPL-2.0 y MIT, de terceros. No están en el repo |
+| Consolas, Bahnschrift, Franklin Gothic | Fuentes de Microsoft. Se piden por familia, no se empaquetan |
+| `daemon/assets/back.png` | Arte del tema Vitals de LCD Control. No está en el repo |
+| ffmpeg | Externo y opcional, con su propia licencia |
