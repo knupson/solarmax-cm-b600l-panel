@@ -1,14 +1,14 @@
-"""El motor manejado como una app de la sesion del usuario.
+"""The engine run as an app inside the user's session.
 
-Toda la logica que la bandeja necesita vive aca, sin una sola llamada a
-Win32: `tray.py` es solo el menu que invoca estos metodos. Asi el
+All the logic the tray needs lives here, without a single Win32 call: `tray.py`
+is only the menu that invokes these methods. That way the
 comportamiento -- arrancar, pausar, reanudar, salir, reportar estado -- se
-prueba entero sin ventanas y sin el panel enchufado.
+is tested in full without windows and without the panel plugged in.
 
-Un servicio de Windows habria sido el lugar "canonico" para esto, pero corre
-en la sesion 0: desde ahi no se puede mostrar un icono en la bandeja ni abrir
-un editor, que es justamente lo que el usuario queria. La tarea programada al
-logon hace de autostart y esta clase hace de servicio dentro de la sesion.
+A Windows service would have been the "canonical" place for this, but it runs in
+session 0: from there it cannot show a tray icon or open an editor, which is
+exactly what was wanted. The scheduled task at logon acts as the autostart and
+this class acts as the service inside the session.
 """
 import json
 import sys
@@ -25,11 +25,11 @@ from .transport.panel_link import PanelLink
 
 
 class _InterruptibleClock:
-    """Reloj cuyo sleep se corta cuando alguien pide la baja.
+    """A clock whose sleep is cut short when somebody asks to shut down.
 
-    El engine duerme hasta 10 s entre reintentos de conexion. Con
-    `time.sleep` eso significa que "Salir" en la bandeja tarda hasta 10 s en
-    hacer efecto, con el menu ya cerrado y el usuario pensando que se colgo.
+    The engine sleeps up to 10 s between connection retries. With `time.sleep`
+    that means "Exit" in the tray takes up to 10 s to take effect, with the menu
+    already closed and the user thinking it hung.
     """
 
     def __init__(self):
@@ -50,10 +50,11 @@ class _InterruptibleClock:
 
 
 class PanelApp:
-    """Un motor corriendo en su propio thread, con arranque/pausa/baja.
+    """An engine running on its own thread, with start/pause/stop.
 
-    `pause()` no es "dejar de dibujar": baja el motor y suelta el puerto, que
-    es como el usuario le presta el panel a LCD Control sin cerrar esto.
+    `pause()` is not "stop drawing": it brings the engine down and releases the
+    port, which is how the user lends the panel to LCD Control without closing
+    this.
     `resume()` lo vuelve a levantar.
     """
 
@@ -70,8 +71,8 @@ class PanelApp:
         self._client = None
         self._paused = False
         self._last_state = {}
-        # El archivo de estado es opt-in: los tests del motor y un --once de una
-        # sola pasada no tienen por que ensuciar el directorio.
+        # The status file is opt-in: the engine tests and a single-pass --once have
+        # no reason to litter the directory.
         self._status = StatusFile(status_path) if status_path else None
         self._status_period = status_period or status_PERIODO
         self._status_stop = threading.Event()
@@ -96,8 +97,8 @@ class PanelApp:
             self._paused = False
             self._clock.reset()
             store = loader.ProfileStore(self.profile_path)
-            store.load_now()          # un perfil roto no impide arrancar: el
-                                      # engine reintenta y lo relee solo
+            store.load_now()          # a broken profile does not stop start-up:
+                                      # the engine retries and re-reads it itself
             self._registry, self._client = self._registry_factory()
             self._engine = Engine(store, self._registry,
                                   EngineConfig(profile_path=self.profile_path),
@@ -112,10 +113,9 @@ class PanelApp:
         try:
             self._engine.run()
         finally:
-            # El estado se congela ANTES de soltar los recursos: despues de
-            # cerrar el registry, unavailable()/resolution() ya no describen
-            # la corrida que acabo de terminar, y la bandeja sigue queriendo
-            # mostrar por que quedo asi.
+            # The state is frozen BEFORE releasing the resources: once the registry
+            # is closed, unavailable()/resolution() no longer describe the run that
+            # just ended, and the tray still wants to show why it ended that way.
             self._last_state = self._snapshot()
             self._release()
 
@@ -130,8 +130,8 @@ class PanelApp:
         self._registry = self._client = None
 
     def stop(self):
-        """Pide la baja y espera. El sleep del engine es interrumpible, asi
-        que esto vuelve enseguida incluso en medio del backoff."""
+        """Asks for shutdown and waits. The engine's sleep is interruptible, so this
+        returns immediately even in the middle of the backoff."""
         with self._lock:
             eng, thread = self._engine, self._thread
         if eng is not None:
@@ -143,9 +143,9 @@ class PanelApp:
         with self._lock:
             self._engine = None
             self._thread = None
-        # Se publica DESPUES de bajar: si el archivo quedara con running=True,
-        # `--estado` mentiria justo en el caso que mas importa -- el panel que se
-        # apago solo y hay que averiguar por que.
+        # Published AFTER shutting down: if the file were left with running=True,
+        # `--status` would lie in exactly the case that matters most -- the panel
+        # that switched itself off and somebody has to find out why.
         self.publicar_estado()
 
     def pause(self):
@@ -153,9 +153,9 @@ class PanelApp:
             return
         self.stop()
         self._paused = True
-        # Otra vez despues, y no dentro de stop(): stop() publica con paused todavia
-        # en False, y "detenido" manda a reiniciar algo que en realidad esta en
-        # pausa a pedido del usuario.
+        # Again afterwards, and not inside stop(): stop() publishes with paused
+        # still False, and "stopped" sends the user to restart something that is
+        # actually paused at their own request.
         self.publicar_estado()
 
     def resume(self):
@@ -170,7 +170,7 @@ class PanelApp:
     # --- perfiles ---
 
     def profiles(self) -> list:
-        """Los .json que hay al lado del perfil actual, ordenados."""
+        """The .json files sitting beside the current profile, sorted."""
         try:
             carpeta = Path(self.profile_path).parent
             return sorted(p for p in carpeta.glob("*.json"))
@@ -178,15 +178,15 @@ class PanelApp:
             return [Path(self.profile_path)]
 
     def set_profile(self, path) -> list:
-        """Cambia de perfil y reinicia el motor. Devuelve los errores.
+        """Switches profile and restarts the engine. Returns the errors.
 
-        Se valida ANTES de tocar el motor que esta andando: cambiar a un perfil
-        invalido dejaria el panel sin nada que dibujar, y el usuario habria
-        perdido el que funcionaba por elegir mal de una lista.
+        Validated BEFORE touching the running engine: switching to an invalid
+        profile would leave the panel with nothing to draw, and the user would have
+        lost the one that worked by picking wrongly from a list.
 
-        Reiniciar y no recargar en caliente porque el Registry se arma al
-        arrancar: un perfil que usa metricas de un provider distinto necesita el
-        registry nuevo, y el hot-reload solo cambia el layout.
+        A restart and not a hot reload because the Registry is built at start-up: a
+        profile using metrics from a different provider needs the new registry, and
+        the hot reload only changes the layout.
         """
         nuevo = Path(path)
         if nuevo == Path(self.profile_path):
@@ -207,25 +207,25 @@ class PanelApp:
 
     # --- estado publicado a un archivo ---
     #
-    # Ver status.py para el por que. En una frase: la bandeja muestra el estado en
-    # su menu, pero desde una consola no habia nada, y verificar que el panel andaba
-    # midiendo el CPU de un pythonw es adivinar.
+    # See status.py for the why. In one sentence: the tray shows the status in its
+    # menu, but from a console there was nothing, and verifying the panel worked by
+    # watching a pythonw process's CPU is guessing.
 
     def publicar_estado(self) -> bool:
-        """Escribe el estado actual al archivo, si hay uno configurado."""
+        """Writes the current state to the file, if one is configured."""
         if self._status is None:
             return False
         st = dict(self.state())
-        # problems() ya junta last_error + warnings + metricas sin datos y
-        # deduplica: el lector no tiene que saber que estaban en tres campos.
+        # problems() already merges last_error + warnings + metrics with no data and
+        # deduplicates: the reader does not have to know they were in three fields.
         st["problems"] = self.problems()
         ok = self._status.write(st)
         if not ok and not self._aviso_estado:
-            # Una sola vez: el latido corre cada 5 s, para siempre. Y al log, que es
-            # el unico lugar donde se puede avisar -- si el archivo no se escribe,
-            # `--estado` va a decir "no esta corriendo" para un panel que SI esta
-            # dibujando, y esa mentira no se detecta desde afuera de ninguna otra
-            # forma. Pasa de verdad con la app instalada en una carpeta de solo
+            # Once only: the heartbeat runs every 5 s, forever. And to the log, which
+            # is the only place a warning can go -- if the file is not written,
+            # `--status` will say "it is not running" for a panel that IS drawing,
+            # and that lie cannot be detected from outside in any other way. It
+            # really happens with the app installed in a read-only
             # lectura.
             self._aviso_estado = True
             print(f"could not publish the status to {self._status.path}: "
@@ -242,10 +242,10 @@ class PanelApp:
         self._status_thread.start()
 
     def _latido(self):
-        """Publica cada `status_period` hasta que le pidan parar.
+        """Publishes every `status_period` until asked to stop.
 
-        Event.wait y no sleep: bajar el motor no puede esperar hasta un periodo
-        entero para que este hilo se entere.
+        Event.wait and not sleep: bringing the engine down cannot wait a whole
+        period for this thread to notice.
         """
         self.publicar_estado()
         while not self._status_stop.wait(self._status_period):
@@ -261,30 +261,30 @@ class PanelApp:
     # --- exportar ---
 
     def export_profile(self, carpeta=None, assets_dir=None, fecha=None) -> tuple:
-        """Guarda el perfil y sus assets en un bundle. -> (ruta | None, mensaje).
+        """Saves the profile and its assets into a bundle. -> (path | None, message).
 
-        Sin dialogo de archivo: la bandeja es ctypes puro y abrir un
-        GetSaveFileName desde el bombeo de mensajes es mas cirugia que valor. Va a
-        una carpeta fija con la fecha en el nombre, y el mensaje dice donde quedo.
-        Para elegir el destino esta el editor, que tiene Tkinter.
+        No file dialog: the tray is pure ctypes and opening a GetSaveFileName from
+        the message pump is more surgery than it is worth. It goes to a fixed folder
+        with the date in the name, and the message says where it landed. For picking
+        the destination there is the editor, which has Tkinter.
 
-        Nunca levanta: quien llama a esto es el bombeo de mensajes de Win32, donde
-        una excepcion no la ve nadie -- pythonw no tiene consola -- y deja la
+        It never raises: what calls this is the Win32 message pump, where an
+        exception is seen by nobody -- pythonw has no console -- and leaves the
         bandeja muda.
         """
         from . import bundle
         from .cli import HERE, assets_dir as assets_por_defecto
-        # La carpeta se deriva de donde esta INSTALADO el paquete, no del perfil: un
-        # perfil abierto desde el Escritorio hacia que "tres niveles arriba" cayera
-        # en C:\Users, y el bundle aparecia en un lugar que nadie iba a mirar.
+        # The folder is derived from where the package is INSTALLED, not from the
+        # profile: a profile opened from the Desktop made "three levels up" land in
+        # C:\Users, and the bundle appeared somewhere nobody was going to look.
         carpeta = Path(carpeta) if carpeta else HERE.parent / "perfiles-exportados"
         assets = Path(assets_dir) if assets_dir else assets_por_defecto()
         if fecha is None:
             fecha = time.strftime("%Y-%m-%d")
         base = f"{Path(self.profile_path).stem}-{fecha}"
         destino = carpeta / f"{base}{bundle.EXT}"
-        # Exportar dos veces el mismo dia no puede pisar el bundle anterior: puede
-        # ser el que el usuario ya compartio.
+        # Exporting twice on the same day must not overwrite the previous bundle: it
+        # may be the one the user already shared.
         i = 2
         while destino.exists():
             destino = carpeta / f"{base}-{i}{bundle.EXT}"
@@ -299,39 +299,39 @@ class PanelApp:
 
     # --- fps ---
     #
-    # El costo de cada cadencia esta medido contra el panel real (i5-12400F, 12
-    # hilos): CPU del proceso sostenida sobre 5 s. Se muestra al lado de cada
-    # opcion porque elegir 60 fps sin saber que son 37% de un nucleo -- continuo,
-    # mientras el panel este prendido -- no es elegir.
+    # The cost of each cadence is measured against the real panel (i5-12400F, 12
+    # threads): the process's CPU sustained over 5 s. It is shown beside each option
+    # because choosing 60 fps without knowing it is 37% of one core -- continuously,
+    # for as long as the panel is on -- is not choosing.
     FPS_OPCIONES = ((1, 0.6), (10, 5.9), (30, 17.2), (60, 37.2))
 
     def fps_options(self) -> list:
-        """[(fps, etiqueta)] para el menu."""
+        """[(fps, label)] for the menu."""
         return [(v, f"{v} fps · {c:.0f}% of one core") for v, c in self.FPS_OPCIONES]
 
     def fps(self):
-        """El fps que dice el perfil en disco, o None si no se puede leer."""
+        """The fps the profile on disk states, or None if it cannot be read."""
         return self._campo_panel("fps")
 
     def set_fps(self, valor) -> list:
-        """Escribe el fps en el perfil. Devuelve los errores que lo impidieron.
+        """Writes the fps into the profile. Returns whatever errors prevented it.
 
-        El fps vive en el perfil, asi que cambiarlo es editarlo: el motor lo
-        recarga en caliente y no hace falta reiniciar. Se valida ANTES de
-        escribir -- un perfil invalido en disco lo rechazaria el motor y se
-        quedaria con el anterior, o sea que el usuario habria "cambiado" algo
-        que el panel ignora.
+        The fps lives in the profile, so changing it means editing the profile: the
+        engine hot-reloads it and nothing needs restarting. It is validated BEFORE
+        writing -- an invalid profile on disk would be rejected by the engine, which
+        would keep the previous one, meaning the user would have "changed" something
+        the panel ignores.
 
-        Si el perfil no se puede leer no se escribe nada: pisarlo con un fps
-        nuevo destruiria lo que haya quedado ahi.
+        If the profile cannot be read, nothing is written: overwriting it with a new
+        fps would destroy whatever was left in there.
         """
         return self._escribir_panel("fps", valor)
 
     # --- brillo ---
     #
-    # Vive en el perfil, y el motor lo reaplica en cada recarga en caliente
-    # (_refresh_layout llama a link.set_brightness), asi que cambiarlo NO
-    # necesita reiniciar nada. Es el ajuste mas barato de exponer.
+    # It lives in the profile, and the engine reapplies it on every hot reload
+    # (_refresh_layout calls link.set_brightness), so changing it needs NO restart.
+    # It is the cheapest setting to expose.
     BRILLOS = (25, 50, 75, 100)
 
     def brightness_options(self) -> list:
@@ -351,12 +351,12 @@ class PanelApp:
             return None
 
     def _escribir_panel(self, clave, valor) -> list:
-        """Escribe un campo de `panel` en el perfil, validando antes.
+        """Writes one `panel` field into the profile, validating first.
 
-        Mismo criterio que set_fps: un perfil invalido en disco lo rechaza el
-        motor y se queda con el anterior, o sea que el usuario habria "cambiado"
-        algo que el panel ignora. Y si el perfil no se puede leer no se escribe
-        nada, porque pisarlo destruiria lo que haya quedado ahi.
+        Same rule as set_fps: an invalid profile on disk is rejected by the engine,
+        which keeps the previous one, meaning the user would have "changed"
+        something the panel ignores. And if the profile cannot be read nothing is
+        written, because overwriting it would destroy whatever was left in there.
         """
         ruta = Path(self.profile_path)
         try:
@@ -370,16 +370,15 @@ class PanelApp:
         loader.save_raw(crudo, ruta)
         return []
 
-    # --- problemas, en una sola lista ---
+    # --- problems, in a single list ---
 
     def problems(self) -> list:
-        """Todo lo que anda mal ahora, junto y en lenguaje llano.
+        """Everything that is wrong right now, together and in plain language.
 
-        El estado los tenia repartidos en tres campos -- warnings, unavailable y
-        last_error -- y el menu miraba solo dos, asi que un perfil rechazado no
-        aparecia en ninguna parte de la interfaz: quedaba en el log y nada mas.
-        Un problema que el usuario no puede ver es un problema que no existe
-        hasta que lo confunde.
+        The state had them spread across three fields -- warnings, unavailable and
+        last_error -- and the menu looked at only two, so a rejected profile appeared
+        nowhere in the interface: it stayed in the log and nowhere else. A problem
+        the user cannot see is a problem that does not exist until it confuses them.
         """
         st = self.state()
         fuera = []
@@ -389,8 +388,8 @@ class PanelApp:
         faltan = st.get("unavailable") or {}
         if faltan:
             fuera.append(f"no data: {', '.join(sorted(faltan))}")
-        # Se deduplica conservando el orden: el mismo aviso puede venir del
-        # renderer y del store.
+        # Deduplicated while preserving order: the same warning can come from both
+        # the renderer and the store.
         vistos, unicos = set(), []
         for p in fuera:
             if p not in vistos:
@@ -398,16 +397,16 @@ class PanelApp:
                 unicos.append(p)
         return unicos
 
-    # --- estado para la bandeja ---
+    # --- state for the tray ---
 
     def state(self) -> dict:
-        """Nunca levanta: la bandeja pinta esto en cada apertura del menu."""
+        """It never raises: the tray paints this every time the menu opens."""
         if self.running():
             return self._snapshot()
-        # Motor bajado: se devuelve la ultima foto viva, con running/paused
-        # actualizados. Reconstruirlo desde un engine ya cerrado daria
-        # "disconnected" y cero metricas, borrando el motivo por el que se
-        # cayo justo cuando el usuario lo va a leer.
+        # Engine down: the last live snapshot is returned, with running/paused
+        # updated. Rebuilding it from an already-closed engine would give
+        # "disconnected" and zero metrics, erasing the reason it fell over at
+        # exactly the moment the user is about to read it.
         return {**self._last_state, "running": False, "paused": self._paused}
 
     def _snapshot(self) -> dict:
