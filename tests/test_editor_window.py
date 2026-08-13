@@ -1,10 +1,9 @@
-"""Tests de la ventana del editor.
+"""Tests for the editor window.
 
-La UI es pegamento, pero el pegamento tambien se rompe: seleccionar un widget
-en la lista no actualizaba el panel de propiedades porque el metodo del
-callback no existia, y Tkinter se come la AttributeError del callback e
-imprime a stderr -- que bajo pythonw no va a ninguna parte. Estos tests
-construyen la ventana de verdad y ejercitan los callbacks.
+The UI is glue, but glue breaks too: selecting a widget in the list did not update
+the properties panel because the callback's method did not exist, and Tkinter
+swallows the callback AttributeError and prints to stderr -- which under pythonw
+goes nowhere. These tests build the real window and exercise the callbacks.
 """
 import json
 
@@ -20,14 +19,14 @@ ORIGINAL = open(PROFILE, encoding="utf-8").read()
 
 @pytest.fixture(scope="module")
 def _ventana(tmp_path_factory):
-    """UNA sola raiz de Tk para todo el modulo.
+    """ONE single Tk root for the whole module.
 
-    Crear y destruir un Tk() por test hacia fallar dos de siete con "Tcl
-    wasn't installed properly" -- que es lo que Tkinter dice cuando se abusa
-    de las raices, no un problema de instalacion. Peor todavia: con el skip
-    defensivo, los tests que fallaban se SALTEABAN, o sea que la cobertura se
-    perdia en silencio. Una raiz sola y el estado restaurado entre tests da
-    aislamiento sin tocar como se construye la ventana en produccion.
+    Creating and destroying a Tk() per test made two of seven fail with "Tcl wasn't
+    installed properly" -- which is what Tkinter says when roots are abused, not an
+    installation problem. Worse still: with the defensive skip, the failing tests
+    were SKIPPED, so the coverage was lost silently. One root plus state restored
+    between tests gives isolation without changing how the window is built in
+    production.
     """
     pytest.importorskip("tkinter")
     from vmaxpanel.editor import EditorWindow
@@ -35,17 +34,17 @@ def _ventana(tmp_path_factory):
     path = tmp_path_factory.mktemp("editor") / "editando.json"
     path.write_text(ORIGINAL, encoding="utf-8")
     w = EditorWindow(EditorState(path))
-    # INVISIBLE, pero mapeada. Correr la suite en una maquina que alguien esta
-    # usando le tapaba la pantalla con la ventana del editor, una vez por corrida.
-    # `withdraw()` no sirve: desmapea la ventana y winfo_width()/geometry() pasan a
-    # devolver 1, que es justo lo que miden varios de estos tests. Alpha 0 la deja
-    # mapeada -- las medidas siguen siendo reales -- y no se ve nada. `-topmost`
-    # explicito en False por si algun gestor de ventanas la promueve.
+    # INVISIBLE, but mapped. Running the suite on a machine somebody is using
+    # covered their screen with the editor window, once per run. `withdraw()` is no
+    # good: it unmaps the window and winfo_width()/geometry() start returning 1,
+    # which is exactly what several of these tests measure. Alpha 0 leaves it mapped
+    # -- the measurements stay real -- and nothing is visible. `-topmost` explicitly
+    # False in case some window manager promotes it.
     try:
         w.root.wm_attributes("-alpha", 0.0)
         w.root.wm_attributes("-topmost", False)
     except Exception:
-        pass                      # en un Tk sin soporte de alpha, se ve; no es fatal
+        pass                      # on a Tk without alpha support it shows; not fatal
     w.root.update()
     yield w
     try:
@@ -56,14 +55,14 @@ def _ventana(tmp_path_factory):
 
 @pytest.fixture
 def ventana(_ventana):
-    """Devuelve la ventana con el perfil como recien abierto.
+    """Returns the window with the profile as freshly opened.
 
-    Ademas del perfil se resetean las dos cosas de la VENTANA que un test puede
-    dejar cambiadas y otro leer: el tamano y donde esta el foco. Compartir una sola
-    raiz de Tk es necesario (ver _ventana) pero convierte cualquier estado global en
-    una dependencia de orden -- con pytest-randomly, en fallas que aparecen y
-    desaparecen segun la semilla. Resetear aca es mas barato que perseguirlas de a
-    una.
+    Besides the profile, the two things about the WINDOW that one test can leave
+    changed and another can read are reset: its size and where the focus is. Sharing
+    a single Tk root is necessary (see _ventana) but it turns any global state into
+    an ordering dependency -- with pytest-randomly, into failures that appear and
+    disappear depending on the seed. Resetting here is cheaper than chasing them one
+    by one.
     """
     _ventana.state.path.write_text(ORIGINAL, encoding="utf-8")
     _ventana._discard()
@@ -74,10 +73,10 @@ def ventana(_ventana):
 
 
 def metrica_mostrada(w):
-    """El id de metrica que el selector esta mostrando ahora.
+    """The metric id the selector is showing right now.
 
-    El combo muestra la etiqueta amigable, no el id: el mapeo inverso es lo
-    que la ventana usa para escribir en el estado."""
+    The combo shows the friendly label, not the id: the reverse mapping is what the
+    window uses to write into the state."""
     combo = w._pickers.get("metric")
     if combo is None:
         return None
@@ -104,7 +103,7 @@ def test_switching_selection_replaces_the_properties(ventana):
     assert metrica_mostrada(ventana) == "clock.time"
     seleccionar(ventana, "cpu-bar")
     assert metrica_mostrada(ventana) == "cpu.load"
-    assert "format" not in ventana._fields          # una barra no tiene format
+    assert "format" not in ventana._fields          # a bar has no format
     assert ventana._fields["w"].get() == "272"
 
 
@@ -124,9 +123,8 @@ def test_moving_with_the_buttons_moves_the_selected_widget(ventana):
 
 
 def test_a_broken_callback_is_reported_instead_of_swallowed(ventana):
-    """Tkinter imprime las excepciones de callback a stderr y sigue. Bajo
-    pythonw eso es un fallo invisible: la ventana queda sin responder y nada
-    lo dice."""
+    """Tkinter prints callback exceptions to stderr and carries on. Under pythonw
+    that is an invisible failure: the window stops responding and nothing says so."""
     ventana.root.report_callback_exception(ValueError, ValueError("boom"), None)
     assert "boom" in ventana.estado.cget("text")
 
@@ -148,14 +146,13 @@ def test_saving_from_the_window_persists(ventana):
 
 
 def test_a_real_mouse_click_on_the_list_selects_that_widget(ventana):
-    """El camino del usuario, con un clic de verdad en vez de un
+    """The user's path, with a real click instead of a
     <<ListboxSelect>> sintetico.
 
-    Importa la diferencia: event_generate de un evento virtual NO se despacha
-    si la ventana todavia no esta mapeada, asi que un test que solo usa el
-    evento sintetico pasa o no segun cuando se llamo a update() -- y una
-    verificacion a mano con ese metodo me hizo creer que el fix no andaba
-    cuando en realidad andaba.
+    The difference matters: event_generate of a virtual event is NOT dispatched if
+    the window is not mapped yet, so a test using only the synthetic event passes or
+    not depending on when update() was called -- and a manual check with that method
+    made it look as though the fix did not work when it did.
     """
     ventana.lista.selection_clear(0, "end")
     ventana.lista.see(0)
@@ -165,7 +162,7 @@ def test_a_real_mouse_click_on_the_list_selects_that_widget(ventana):
     ventana.lista.see(fila)
     ventana.root.update()
     caja = ventana.lista.bbox(fila)
-    assert caja is not None, "la fila no esta visible; see() no alcanzo"
+    assert caja is not None, "the row is not visible; see() was not enough"
     x, y = caja[0] + 5, caja[1] + 2
     ventana.lista.event_generate("<Button-1>", x=x, y=y)
     ventana.lista.event_generate("<ButtonRelease-1>", x=x, y=y)
@@ -176,11 +173,10 @@ def test_a_real_mouse_click_on_the_list_selects_that_widget(ventana):
 
 
 def test_arrows_move_the_widget_only_when_not_editing_a_field(ventana):
-    """Las flechas estan bindeadas a la ventana para poder empujar un widget
-    de a 1 px. Pero con el foco en un campo de texto tienen que mover el
-    cursor y NADA MAS: escribir "182" en x y que la flecha izquierda
-    desplace el widget mientras corriges un digito es corrupcion silenciosa
-    del layout."""
+    """The arrows are bound to the window so a widget can be nudged 1 px at a time.
+    But with the focus in a text field they have to move the cursor and NOTHING
+    ELSE: typing "182" into x and having the left arrow shift the widget while you
+    correct a digit is silent layout corruption."""
     seleccionar(ventana, "cpu-load")
     x0 = ventana.state.widget("cpu-load")["x"]
 
@@ -188,20 +184,20 @@ def test_arrows_move_the_widget_only_when_not_editing_a_field(ventana):
               if c.winfo_class() in ("TEntry", "Entry")]
     campos[0].focus_set()
     ventana.root.update()
-    # `_flechas` decide con root.focus_get(), y eso depende del foco DEL SISTEMA:
-    # si la ventana no lo tiene -- otra aplicacion adelante, una sesion remota,
-    # un runner sin escritorio -- focus_set() no surte efecto y focus_get() no
-    # devuelve lo que se acaba de pedir. El test entonces no esta midiendo el
-    # filtro sino el humor del gestor de ventanas: fallaba en la suite completa y
-    # pasaba corriendolo solo. Se dice por que se saltea en vez de forzar el foco,
-    # que le robaria la pantalla a quien este usando la maquina.
+    # `_flechas` decides with root.focus_get(), and that depends on SYSTEM focus: if
+    # the window does not have it -- another application in front, a remote session,
+    # a runner with no desktop -- focus_set() has no effect and focus_get() does not
+    # return what was just asked for. The test would then be measuring the window
+    # manager's mood rather than the filter: it failed in the full suite and passed
+    # when run alone. It says why it skips instead of forcing the focus, which would
+    # steal the screen from whoever is using the machine.
     if ventana.root.focus_get() is not campos[0]:
-        pytest.skip("la ventana no tiene el foco del sistema: el filtro por foco "
-                    "no se puede observar")
+        pytest.skip("the window does not have system focus: the focus filter "
+                    "cannot be observed")
     campos[0].event_generate("<Left>")
     ventana.root.update()
     assert ventana.state.widget("cpu-load")["x"] == x0, \
-        "la flecha movio el widget mientras se editaba un campo"
+        "the arrow moved the widget while a field was being edited"
 
     ventana.lista.focus_set()
     ventana.root.update()
@@ -211,8 +207,8 @@ def test_arrows_move_the_widget_only_when_not_editing_a_field(ventana):
 
 
 def test_the_preview_grows_with_the_window(ventana):
-    """Una escala fija desperdicia una ventana maximizada: el panel es
-    320x1480 y en 0.36 se ve en miniatura. La vista previa tiene que usar el
+    """A fixed scale wastes a maximised window: the panel is 320x1480 and at 0.36 it
+    looks like a thumbnail. The preview has to use the
     alto disponible."""
     ventana.root.geometry("900x600")
     ventana.root.update()
@@ -235,8 +231,8 @@ def test_the_preview_keeps_the_panel_aspect_ratio(ventana):
 
 
 def test_resizing_does_not_loop_forever(ventana):
-    """Cambiar la imagen cambia el tamano del Label, que dispara otro
-    <Configure>: sin una guarda eso es un bucle de redibujo infinito."""
+    """Changing the image changes the Label size, which fires another <Configure>:
+    without a guard that is an infinite redraw loop."""
     ventana._redibujos = 0
     original = ventana._draw_preview
 
@@ -252,19 +248,19 @@ def test_resizing_does_not_loop_forever(ventana):
 
 
 def test_the_metric_field_is_a_picker_with_friendly_labels(ventana):
-    """El campo `metric` era texto libre: habia que saber de memoria que
-    existe "vol.D.free". Ahora es una lista con nombres amigables agrupados
+    """The `metric` field used to be free text: you had to remember that
+    "vol.D.free" exists. Now it is a list with friendly names grouped
     por dispositivo."""
     seleccionar(ventana, "cpu-load")
     combo = ventana._pickers.get("metric")
     assert combo is not None, "metric sigue siendo un campo de texto"
     valores = list(combo.cget("values"))
-    assert valores, "el selector salio vacio"
-    # el valor mostrado es la etiqueta amigable, no el id
+    assert valores, "the selector came out empty"
+    # the value shown is the friendly label, not the id
     assert combo.get() != "cpu.load"
     assert "CPU" in combo.get() or "carga" in combo.get().lower()
-    # y los grupos aparecen como encabezados no seleccionables
-    assert any(v.startswith("——") for v in valores), "no hay encabezados de grupo"
+    # and the groups appear as non-selectable headings
+    assert any(v.startswith("——") for v in valores), "there are no group headings"
 
 
 def test_choosing_from_the_picker_sets_the_metric_id(ventana):
@@ -279,7 +275,7 @@ def test_choosing_from_the_picker_sets_the_metric_id(ventana):
 
 
 def test_a_group_header_is_not_selectable_as_a_metric(ventana):
-    """Elegir un encabezado no puede escribir "—— CPU ——" como metrica."""
+    """Picking a heading must not write "—— CPU ——" as the metric."""
     seleccionar(ventana, "cpu-load")
     antes = ventana.state.widget("cpu-load")["metric"]
     combo = ventana._pickers["metric"]
@@ -290,8 +286,9 @@ def test_a_group_header_is_not_selectable_as_a_metric(ventana):
 
 
 def test_the_window_has_tabs_for_widgets_background_and_panel(ventana):
-    """El fondo, las fuentes y el panel no son widgets: meterlos en la misma
-    columna obligaria a elegir entre ver la lista o ver el fondo."""
+    """The background, the fonts and the panel are not widgets: putting them in the
+    same column would force a choice between seeing the list and seeing the
+    background."""
     pestanas = [ventana.tabs.tab(i, "text") for i in range(len(ventana.tabs.tabs()))]
     assert pestanas == ["Widgets", "Background", "Fonts", "Panel"]
 
@@ -341,8 +338,8 @@ def test_the_panel_tab_edits_fps(ventana):
 
 
 def test_an_animated_background_shows_a_hint_about_the_preview(ventana):
-    """La vista previa es un cuadro fijo: si el fondo se mueve, el usuario
-    tiene que saber que lo que ve no es una animacion detenida por un bug."""
+    """The preview is a single fixed frame: if the background moves, the user has to
+    know that what they see is not an animation stopped by a bug."""
     ventana._bg_type.set("procedural")
     ventana._on_pick_bg_type()
     ventana.root.update()
@@ -350,8 +347,8 @@ def test_an_animated_background_shows_a_hint_about_the_preview(ventana):
 
 
 def test_clicking_the_preview_selects_that_widget(ventana):
-    """Hacer clic sobre el panel dibujado es la forma natural de elegir: la
-    lista de 47 nombres obliga a saber de memoria como se llama cada cosa."""
+    """Clicking on the drawn panel is the natural way to select: a list of 47 names
+    requires remembering what everything is called."""
     ventana.root.geometry("1200x900")
     ventana.root.update()
     barra = ventana.state.widget("cpu-bar")
@@ -378,8 +375,8 @@ def test_dragging_on_the_preview_moves_the_widget(ventana):
 
 
 def test_clicking_empty_space_keeps_the_selection(ventana):
-    """Un clic al vacio no puede deseleccionar: el panel de propiedades se
-    vaciaria y el usuario perderia lo que estaba editando."""
+    """A click on empty space must not deselect: the properties panel would empty
+    out and the user would lose what they were editing."""
     seleccionar(ventana, "cpu-load")
     ventana.root.geometry("1200x900")
     ventana.root.update()
@@ -432,7 +429,7 @@ def test_the_family_picker_offers_installed_families(ventana):
     ventana.root.update()
     combo = ventana._font_rows["hero"]["family_combo"]
     valores = list(combo.cget("values"))
-    assert len(valores) > 5, "el combo de familias salio casi vacio"
+    assert len(valores) > 5, "the families combo came out nearly empty"
     assert any("consol" in v.lower() for v in valores)
 
 
@@ -441,12 +438,12 @@ def test_control_z_undoes_from_the_window(ventana):
     x0 = ventana.state.widget("cpu-load")["x"]
     ventana._move(20, 0)
     assert ventana.state.widget("cpu-load")["x"] == x0 + 20
-    # focus_force antes del event_generate: una tecla va al widget con foco, y en
-    # una ventana sin foco Tk la descarta sin avisar. Sin esto el test pasaba o
-    # fallaba segun que tenia el foco la maquina en ese instante -- y cuando
-    # fallaba, el diff era "no deshizo", que apunta al codigo en vez de al test.
-    # Es el mismo agujero que ya me hizo concluir mal una vez, con
-    # <<ListboxSelect>> sobre una ventana no mapeada.
+    # focus_force before the event_generate: a key goes to the focused widget, and in
+    # an unfocused window Tk discards it without warning. Without this the test
+    # passed or failed depending on what had focus at that instant -- and when it
+    # failed, the diff read "it did not undo", which points at the code instead of at
+    # the test. It is the same hole that already led to a wrong conclusion once, with
+    # <<ListboxSelect>> on an unmapped window.
     ventana.root.focus_force()
     ventana.root.update()
     ventana.root.event_generate("<Control-z>", when="now")
@@ -455,8 +452,8 @@ def test_control_z_undoes_from_the_window(ventana):
 
 
 def test_undo_refreshes_the_fields_and_the_preview(ventana):
-    """Deshacer sin repintar deja los campos mostrando el valor deshecho: el
-    usuario ve un numero que ya no es el del layout."""
+    """Undoing without repainting leaves the fields showing the undone value: the
+    user sees a number that is no longer the layout's."""
     seleccionar(ventana, "cpu-load")
     ventana._fields["x"].set("222")
     ventana._apply("x")
@@ -472,10 +469,10 @@ def test_undo_with_empty_history_says_so_in_the_status(ventana):
 
 
 def test_the_rules_editor_appears_only_for_text_widgets(ventana):
-    """Solo los widgets de texto tienen reglas de color en este motor: mostrar
-    la seccion en una barra prometeria algo que no existe."""
+    """Only text widgets have colour rules in this engine: showing the section on a
+    bar would promise something that does not exist."""
     seleccionar(ventana, "cpu-load")
-    assert ventana._rule_rows, "un text con reglas no mostro el editor"
+    assert ventana._rule_rows, "a text with rules did not show the editor"
     seleccionar(ventana, "cpu-bar")
     assert ventana._rule_rows == []
 
@@ -507,7 +504,7 @@ def test_a_rule_that_would_break_the_layout_is_reported(ventana):
     assert ventana.estado.cget("text")           # y lo dijo
 
 
-# --- exportar e importar desde el editor ---
+# --- exporting and importing from the editor ---
 
 
 def test_exporting_from_the_editor_writes_a_bundle(ventana, tmp_path):
@@ -518,29 +515,30 @@ def test_exporting_from_the_editor_writes_a_bundle(ventana, tmp_path):
 
 
 def test_exporting_with_unsaved_changes_refuses_and_says_why(ventana, tmp_path):
-    """Exportar lee el archivo del disco. Con cambios sin guardar, el bundle
-    llevaria la version vieja y el usuario compartiria algo que no es lo que ve en
-    pantalla -- el peor tipo de error, porque no se nota hasta que alguien mas lo
+    """Exporting reads the file from disk. With unsaved changes the bundle would
+    carry the old version and the user would share something that is not what they
+    see on screen -- the worst kind of error, because it is not noticed until
+    somebody else
     abre."""
     seleccionar(ventana, "cpu-load")
     ventana._move(5, 0)
-    destino = tmp_path / "no-deberia.vmaxpanel"
+    destino = tmp_path / "should-not.vmaxpanel"
     ventana._exportar_a(destino)
     assert not destino.exists()
     assert "unsaved" in ventana.estado.cget("text").lower()
 
 
 def test_exporting_over_an_existing_file_refuses(ventana, tmp_path):
-    destino = tmp_path / "ya-esta.vmaxpanel"
-    destino.write_bytes(b"algo")
+    destino = tmp_path / "already-here.vmaxpanel"
+    destino.write_bytes(b"something")
     ventana._exportar_a(destino)
-    assert destino.read_bytes() == b"algo"
+    assert destino.read_bytes() == b"something"
     assert "already exists" in ventana.estado.cget("text")
 
 
 def test_importing_from_the_editor_loads_the_imported_profile(ventana, tmp_path):
-    """Importar y no abrir el perfil importado dejaria al usuario adivinando si
-    funciono. Se importa y se pasa a editarlo."""
+    """Importing and not opening the imported profile would leave the user guessing
+    whether it worked. It imports and switches to editing it."""
     from vmaxpanel import bundle
     zip_ = tmp_path / "b.vmaxpanel"
     bundle.export_profile(ventana.state.path, zip_,
@@ -561,37 +559,38 @@ def test_a_bad_bundle_reports_in_the_status_bar_and_keeps_editing(ventana, tmp_p
     assert "not a readable bundle" in ventana.estado.cget("text")
 
 
-# --- la barra de acciones tiene que estar en todas las pestañas ---
+# --- the action bar has to be on every tab ---
 
 
 def test_the_save_button_is_not_trapped_inside_the_widgets_tab(ventana):
-    """Estaba dentro de la pestaña Widgets, así que editando el fondo no había
-    ningún botón de guardar ni barra de estado: el usuario cambiaba el fondo, no
-    encontraba dónde aplicarlo, reiniciaba el motor y el cambio se perdía. Reportado
-    tal cual: "no hay boton de aplicar ni guarda"."""
+    """It used to be inside the Widgets tab, so while editing the background there
+    was no save button and no status bar: the user changed the background, could not
+    find where to apply it, restarted the engine and the change was lost. Reported
+    verbatim: "there is no apply button and it does not save"."""
     assert not str(ventana._acciones).startswith(str(ventana.tabs) + ".")
     assert not str(ventana.estado).startswith(str(ventana.tabs) + ".")
 
 
 def tipear(ventana, padre, var, valor):
-    """Simula escribir en un campo: el texto queda en el control y NO se aplica --
-    ese es el punto, aplicar es lo que el usuario nunca hizo. El editor lo detecta
-    con un trace sobre la variable, asi que cambiarla es exactamente lo que pasa al
+    """Simulates typing into a field: the text stays in the control and is NOT
+    applied -- that is the point, applying is what the user never did. The editor
+    detects it with a trace on the variable, so changing it is exactly what happens
+    when
     teclear."""
     entradas = [c for c in padre.winfo_children()
                 if c.winfo_class() in ("TEntry", "Entry")]
-    assert entradas, "ese panel no tiene campos de texto"
+    assert entradas, "that panel has no text fields"
     var.set(valor)
     ventana.root.update()
 
 
 def test_changing_the_background_and_saving_persists_it(ventana):
-    """El camino que falló: escribir en un campo del fondo y darle a Guardar, SIN
-    pasar por Enter. Los Entry sólo aplican con <Return> o <FocusOut>, así que el
-    valor recién tipeado no llegaba al estado y se guardaba el viejo."""
-    ventana.tabs.select(1)                       # pestaña Fondo
+    """The path that failed: typing into a background field and hitting Save,
+    WITHOUT going through Enter. Entries only apply on <Return> or <FocusOut>, so
+    the value just typed never reached the state and the old one was saved."""
+    ventana.tabs.select(1)                       # the Background tab
     ventana._bg_type.set("solid")
-    ventana._on_pick_bg_type()                   # el camino del combo, con su poda
+    ventana._on_pick_bg_type()                   # the combo path, with its pruning
     ventana.root.update()
 
     tipear(ventana, ventana._bg_campos, ventana._bg_fields["color"], "#123456")
@@ -611,8 +610,8 @@ def test_a_pending_widget_field_is_committed_on_save(ventana):
 
 
 def test_discarding_also_drops_what_was_typed_but_not_applied(ventana):
-    """Si lo tipeado quedara pendiente, reaparecería en el próximo guardado — o sea
-    que "Descartar cambios" no descartaría nada."""
+    """If what was typed stayed pending, it would reappear on the next save -- which
+    is to say "Discard changes" would discard nothing."""
     seleccionar(ventana, "cpu-load")
     x0 = ventana.state.widget("cpu-load")["x"]
     tipear(ventana, ventana.props, ventana._fields["x"], "999")
@@ -624,8 +623,9 @@ def test_discarding_also_drops_what_was_typed_but_not_applied(ventana):
 
 
 def test_unsaved_changes_are_visible_in_the_title(ventana):
-    """Sin señal de "hay cambios sin guardar", reiniciar el motor desde la bandeja
-    parece ignorar la edición -- y en realidad la edición nunca llegó al disco."""
+    """With no "there are unsaved changes" signal, restarting the engine from the
+    tray looks like it is ignoring the edit -- when in fact the edit never reached
+    the disk."""
     assert "unsaved" not in ventana.root.title()
     seleccionar(ventana, "cpu-load")
     ventana._move(3, 0)
@@ -634,14 +634,14 @@ def test_unsaved_changes_are_visible_in_the_title(ventana):
     assert "unsaved" not in ventana.root.title()
 
 
-# --- elegir el archivo del fondo ---
+# --- choosing the background file ---
 
 
 def test_choosing_an_asset_outside_the_project_copies_it_in(ventana, tmp_path):
-    """`safe_asset_path` rechaza cualquier cosa fuera de vmaxpanel/assets, así que
-    elegir un video del Escritorio sólo puede funcionar copiándolo adentro. Sin esto
-    el usuario elige un archivo, el editor guarda una ruta que el motor rechaza, y el
-    fondo queda en color plano sin explicación."""
+    """`safe_asset_path` rejects anything outside vmaxpanel/assets, so choosing a
+    video from the Desktop can only work by copying it in. Without this the user
+    picks a file, the editor saves a path the engine rejects, and the background sits
+    at a flat colour with no explanation."""
     origen = tmp_path / "mi video.mp4"
     origen.write_bytes(b"contenido")
     assets = tmp_path / "assets"
@@ -657,36 +657,36 @@ def test_choosing_an_asset_outside_the_project_copies_it_in(ventana, tmp_path):
 def test_choosing_an_asset_already_inside_does_not_duplicate_it(ventana, tmp_path):
     assets = tmp_path / "assets"
     (assets / "fondos").mkdir(parents=True)
-    dentro = assets / "fondos" / "ya-esta.mp4"
+    dentro = assets / "fondos" / "already-here.mp4"
     dentro.write_bytes(b"x")
 
     nombre = ventana._usar_asset(dentro, assets_dir=assets)
 
-    assert nombre == "fondos/ya-esta.mp4"          # relativo, con / para el JSON
+    assert nombre == "fondos/already-here.mp4"     # relative, with / for the JSON
     assert list((assets / "fondos").iterdir()) == [dentro]
 
 
 def test_a_name_collision_with_other_content_does_not_overwrite(ventana, tmp_path):
-    """Copiar encima del asset de otro perfil es destruir trabajo ajeno por un
+    """Copying over another profile's asset destroys somebody else's work over a
     nombre repetido."""
     assets = tmp_path / "assets"
     assets.mkdir()
-    (assets / "fondo.mp4").write_bytes(b"el que ya estaba")
-    otro = tmp_path / "otra carpeta" / "fondo.mp4"
+    (assets / "fondo.mp4").write_bytes(b"the one already there")
+    otro = tmp_path / "another folder" / "fondo.mp4"
     otro.parent.mkdir()
-    otro.write_bytes(b"el nuevo")
+    otro.write_bytes(b"the new one")
 
     nombre = ventana._usar_asset(otro, assets_dir=assets)
 
     assert nombre == "fondo-2.mp4"
-    assert (assets / "fondo.mp4").read_bytes() == b"el que ya estaba"
-    assert (assets / "fondo-2.mp4").read_bytes() == b"el nuevo"
+    assert (assets / "fondo.mp4").read_bytes() == b"the one already there"
+    assert (assets / "fondo-2.mp4").read_bytes() == b"the new one"
 
 
 def test_choosing_the_same_file_twice_reuses_the_copy(ventana, tmp_path):
-    """Mismo contenido y mismo nombre: es el mismo archivo, no hace falta otra
-    copia. Sin esto, tocar el botón dos veces deja fondo.mp4 y fondo-2.mp4
-    idénticos."""
+    """Same content and same name: it is the same file, another copy is not needed.
+    Without this, pressing the button twice leaves fondo.mp4 and fondo-2.mp4
+    identical."""
     assets = tmp_path / "assets"
     assets.mkdir()
     origen = tmp_path / "v.mp4"
@@ -723,8 +723,8 @@ def test_a_missing_asset_is_reported_and_changes_nothing(ventana, tmp_path):
 
 
 def test_the_choose_button_appears_only_for_backgrounds_with_a_file(ventana):
-    """Un `solid` no tiene archivo que elegir; un `video` sí. El botón sigue al
-    campo `src`, así que aparece exactamente cuando ese campo existe."""
+    """A `solid` has no file to choose; a `video` does. The button follows the `src`
+    field, so it appears exactly when that field exists."""
     def hay_boton():
         return any("Choose" in str(c.cget("text"))
                    for c in ventana._bg_campos.winfo_children()
@@ -742,25 +742,25 @@ def test_the_choose_button_appears_only_for_backgrounds_with_a_file(ventana):
 
 
 def test_the_window_opens_big_enough_to_see_the_preview(ventana):
-    """Al abrir, la ventana venia con el tamano que Tkinter le diera: la lista de
-    widgets y las propiedades se comian el ancho y la vista previa quedaba en una
-    tirita de ~60 px para un panel de 320x1480. El usuario ya se habia quejado de ver
-    todo en miniatura y lo arregle para cuando MAXIMIZAS -- pero recien abierta seguia
-    mal, que es el 100% de las veces que se abre."""
+    """On opening, the window came up at whatever size Tkinter gave it: the widget
+    list and the properties ate the width and the preview was left a ~60 px strip for
+    a 320x1480 panel. The complaint about everything looking like a thumbnail was
+    fixed for the MAXIMISED case -- but freshly opened it was still wrong, which is
+    100% of the times it is opened."""
     ventana.root.update()
     alto_pantalla = ventana.root.winfo_screenheight()
     pedido = ventana._geometria_inicial(1920, alto_pantalla)
     ancho, alto = (int(v) for v in pedido.split("+")[0].split("x"))
     assert alto >= min(900, int(alto_pantalla * 0.8)), pedido
     assert ancho >= 1000, pedido
-    # y no mas grande que la pantalla, que dejaria los botones del pie fuera de vista
+    # and no larger than the screen, which would put the footer's buttons out of sight
     assert alto <= alto_pantalla
     assert ancho <= 1920
 
 
 def test_the_initial_size_fits_a_small_screen(ventana):
-    """En una pantalla de notebook 1366x768 no puede pedir 950 de alto: la barra de
-    acciones quedaria abajo del borde y no habria como guardar."""
+    """On a 1366x768 laptop screen it cannot ask for 950 of height: the action bar
+    would end up below the edge and there would be no way to save."""
     pedido = ventana._geometria_inicial(1366, 768)
     ancho, alto = (int(v) for v in pedido.split("+")[0].split("x"))
     assert ancho <= 1366 and alto <= 768
