@@ -52,7 +52,7 @@ def test_build_returns_typed_model():
 
 def test_future_version_is_rejected_clearly():
     errs = schema.validate(broken(version=schema.SUPPORTED_VERSION + 1))
-    assert any("version" in e and "soportada" in e for e in errs)
+    assert any("version" in e and "supported" in e for e in errs)
 
 
 def test_unknown_metric_is_named_in_the_error():
@@ -72,7 +72,7 @@ def test_unknown_font_alias_is_named():
 def test_duplicate_widget_ids_are_rejected():
     raw = copy.deepcopy(MINIMAL)
     raw["widgets"][1]["id"] = "hdr"
-    assert any("hdr" in e and "repetido" in e for e in schema.validate(raw))
+    assert any("hdr" in e and "duplicate" in e for e in schema.validate(raw))
 
 
 def test_bad_colors_are_rejected():
@@ -267,12 +267,12 @@ def test_rect_without_fill_or_stroke_is_rejected():
 
 def test_rect_rejects_an_invalid_stroke_color():
     errs = schema.validate(rect(stroke="rojo"))
-    assert any("color invalido" in e for e in errs)
+    assert any("invalid color" in e for e in errs)
 
 
 def test_rect_rejects_a_null_fill():
     errs = schema.validate(rect(fill=None, stroke="#FFFFFF"))
-    assert any("color invalido" in e for e in errs)
+    assert any("invalid color" in e for e in errs)
 
 
 def test_rect_rejects_a_non_integer_stroke_width():
@@ -282,7 +282,7 @@ def test_rect_rejects_a_non_integer_stroke_width():
 
 def test_rect_rejects_an_unknown_key():
     errs = schema.validate(rect(metric="cpu.load"))
-    assert any("desconocida" in e and "metric" in e for e in errs)
+    assert any("unknown" in e and "metric" in e for e in errs)
 
 
 def test_rect_rejects_a_stroke_width_below_one():
@@ -458,9 +458,9 @@ def test_an_unknown_widget_type_still_reports_its_bad_coordinates():
     que un widget con las dos cosas mal solo reportaba una."""
     errs = schema.validate(with_widget({"id": "raro", "type": "inventado",
                                         "x": "aca", "y": None}))
-    assert any("tipo desconocido" in e for e in errs)
-    assert any("x debe ser entero" in e for e in errs)
-    assert any("y debe ser entero" in e for e in errs)
+    assert any("unknown type" in e for e in errs)
+    assert any("x must be an integer" in e for e in errs)
+    assert any("y must be an integer" in e for e in errs)
 
 
 def test_a_missing_required_field_is_named_precisely():
@@ -468,8 +468,8 @@ def test_a_missing_required_field_is_named_precisely():
     matchea cualquier palabra que la contenga."""
     b = {"id": "b", "type": "bar", "metric": "cpu.load", "x": 1, "y": 1, "h": 4}
     errs = schema.validate(with_widget(b))
-    assert any("falta el campo obligatorio 'w'" in e for e in errs)
-    assert not any("falta el campo obligatorio 'h'" in e for e in errs)
+    assert any("required field 'w' is missing" in e for e in errs)
+    assert not any("required field 'h' is missing" in e for e in errs)
 
 
 

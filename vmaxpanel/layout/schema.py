@@ -147,27 +147,26 @@ def _check_fallbacks(errs, alias, v):
     if v is None:
         return
     if not isinstance(v, list):
-        errs.append(f"fonts.{alias}.fallbacks: se espera una lista de familias")
+        errs.append(f"fonts.{alias}.fallbacks: expected a list of family names")
         return
     for i, fam in enumerate(v):
         if not isinstance(fam, str) or not fam.strip():
-            errs.append(f"fonts.{alias}.fallbacks[{i}]: {fam!r} no es un nombre "
-                        f"de familia")
+            errs.append(f"fonts.{alias}.fallbacks[{i}]: {fam!r} is not a family name")
 
 
 def _check_color(errs, where, v):
     if not isinstance(v, str) or not _COLOR_RE.match(v):
-        errs.append(f"{where}: color invalido {v!r}, se espera #RRGGBB")
+        errs.append(f"{where}: invalid color {v!r}, expected #RRGGBB")
 
 
 def _check_format(errs, where, v):
     if not isinstance(v, str):
-        errs.append(f"{where}: format debe ser texto")
+        errs.append(f"{where}: format must be text")
         return
     try:
         parsed = list(Formatter().parse(v))
     except ValueError as e:
-        errs.append(f"{where}: format {v!r} invalido: {e}")
+        errs.append(f"{where}: invalid format {v!r}: {e}")
         return
     fields = [f for _, f, _, _ in parsed if f is not None]
     # Formatter().parse() solo reporta el campo de nivel superior: un campo
@@ -176,14 +175,14 @@ def _check_format(errs, where, v):
     # argumento posicional que .format(valor) no tiene y que revienta en
     # render, no en validate().
     if any(spec and "{" in spec for _, _, spec, _ in parsed):
-        errs.append(f"{where}: format {v!r} no puede anidar otro campo de "
-                    f"reemplazo en el format_spec")
+        errs.append(f"{where}: format {v!r} cannot nest another replacement "
+                    f"field inside the format_spec")
     if len(fields) != 1:
-        errs.append(f"{where}: format {v!r} debe tener exactamente un campo, "
-                    f"tiene {len(fields)}")
+        errs.append(f"{where}: format {v!r} must have exactly one field, it has "
+                    f"{len(fields)}")
     elif fields[0] not in ("", "0"):
-        errs.append(f"{where}: format {v!r} no puede nombrar el campo "
-                    f"({fields[0]!r}); use {{}} o {{0}}")
+        errs.append(f"{where}: format {v!r} cannot name the field "
+                    f"({fields[0]!r}); use {{}} or {{0}}")
 
 
 def _parse_rule(raw):
@@ -201,9 +200,9 @@ def _errores_de_stops(stops) -> list[str]:
     errs = []
     for i, s in enumerate(stops):
         if not isinstance(s, dict) or not _is_num(s.get("at")):
-            errs.append(f"background.stops[{i}]: falta at numerico")
+            errs.append(f"background.stops[{i}]: missing numeric at")
         elif not 0.0 <= s["at"] <= 1.0:
-            errs.append(f"background.stops[{i}]: at fuera de 0..1")
+            errs.append(f"background.stops[{i}]: at out of 0..1")
         _check_color(errs, f"background.stops[{i}]", s.get("color")
                      if isinstance(s, dict) else None)
     return errs
@@ -212,39 +211,39 @@ def _errores_de_stops(stops) -> list[str]:
 def validate(raw) -> list[str]:
     errs: list[str] = []
     if not isinstance(raw, dict):
-        return ["el layout debe ser un objeto JSON"]
+        return ["the layout must be a JSON object"]
 
     v = raw.get("version")
     if not _is_int(v):
-        errs.append("version: falta o no es entero")
+        errs.append("version: missing or not an integer")
     elif v > SUPPORTED_VERSION:
-        errs.append(f"version {v} es mayor que la soportada ({SUPPORTED_VERSION}); "
-                    f"actualiza VMax Panel")
+        errs.append(f"version {v} is newer than the supported one ({SUPPORTED_VERSION}); "
+                    f"update VMax Panel")
     elif v < 1:
-        errs.append(f"version {v} invalida")
+        errs.append(f"invalid version {v}")
 
     if not isinstance(raw.get("name"), str) or not raw.get("name"):
-        errs.append("name: falta o esta vacio")
+        errs.append("name: missing or empty")
 
     df = raw.get("designed_for")
     if not isinstance(df, dict) or not _is_int(df.get("width")) or not _is_int(df.get("height")):
-        errs.append("designed_for: se esperan width y height enteros")
+        errs.append("designed_for: expected integer width and height")
     elif df["width"] <= 0 or df["height"] <= 0:
-        errs.append("designed_for: width y height deben ser positivos")
+        errs.append("designed_for: width and height must be positive")
 
     p = raw.get("panel")
     if not isinstance(p, dict):
-        errs.append("panel: falta")
+        errs.append("panel: missing")
     else:
         for k in p:
             if k not in PANEL_KEYS:
-                errs.append(f"panel: clave desconocida {k!r}")
+                errs.append(f"panel: unknown key {k!r}")
         if p.get("rotate", 0) not in ROTATIONS:
-            errs.append(f"panel.rotate: {p.get('rotate')!r} invalido, "
-                        f"se espera 0, 90, 180 o 270")
+            errs.append(f"panel.rotate: {p.get('rotate')!r} is invalid, "
+                        f"expected 0, 90, 180 or 270")
         b = p.get("brightness", 100)
         if not _is_int(b) or not 0 <= b <= 100:
-            errs.append(f"panel.brightness: {b!r} fuera de 0..100")
+            errs.append(f"panel.brightness: {b!r} out of 0..100")
         f = p.get("fps", 1.0)
         # 60 es el refresco del panel. Por encima, el panel descarta los
         # frames -- no aplica contrapresion, acepta 227 fps de escritura
@@ -256,40 +255,39 @@ def validate(raw) -> list[str]:
         # bandeja solo ofrece 1/10/30/60, pero el perfil no tiene por que limitarse
         # al menu.
         if not _is_num(f) or not 0.1 <= f <= MAX_FPS:
-            errs.append(f"panel.fps: {f!r} fuera de 0.1..{MAX_FPS} "
-                        f"(el panel refresca a {MAX_FPS} Hz)")
+            errs.append(f"panel.fps: {f!r} out of 0.1..{MAX_FPS} "
+                        f"(the panel refreshes at {MAX_FPS} Hz)")
         q = p.get("jpeg_quality", 82)
         if not _is_int(q) or not 30 <= q <= 95:
-            errs.append(f"panel.jpeg_quality: {q!r} fuera de 30..95")
+            errs.append(f"panel.jpeg_quality: {q!r} out of 30..95")
 
     fonts = raw.get("fonts")
     if not isinstance(fonts, dict) or not fonts:
-        errs.append("fonts: falta la tabla de alias de fuente")
+        errs.append("fonts: the font alias table is missing")
         fonts = {}
     else:
         for alias, spec in fonts.items():
             if not isinstance(spec, dict) or not isinstance(spec.get("family"), str):
-                errs.append(f"fonts.{alias}: falta family")
+                errs.append(f"fonts.{alias}: family is missing")
             elif not _is_int(spec.get("size")) or spec["size"] <= 0:
-                errs.append(f"fonts.{alias}: size debe ser entero positivo")
+                errs.append(f"fonts.{alias}: size must be a positive integer")
             if isinstance(spec, dict):
                 for k in spec:
                     if k not in FONT_KEYS:
-                        errs.append(f"fonts.{alias}: clave desconocida {k!r}")
+                        errs.append(f"fonts.{alias}: unknown key {k!r}")
                 _check_fallbacks(errs, alias, spec.get("fallbacks"))
 
     bg = raw.get("background")
     if not isinstance(bg, dict) or bg.get("type") not in BACKGROUND_TYPES:
         errs.append(f"background.type: {bg.get('type') if isinstance(bg, dict) else bg!r} "
-                    f"invalido, se espera uno de {sorted(BACKGROUND_TYPES)}")
+                    f"is invalid, expected one of {sorted(BACKGROUND_TYPES)}")
     else:
         t = bg["type"]
         allowed_bg_keys = BACKGROUND_KEYS.get(t)
         if allowed_bg_keys is not None:
             for k in bg:
                 if k not in allowed_bg_keys:
-                    errs.append(f"background: clave desconocida {k!r} para "
-                                f"type={t!r}")
+                    errs.append(f"background: unknown key {k!r} for type={t!r}")
         # `color` se valida en CUALQUIER tipo que la admita, no solo en solid.
         # En gradient/image/sequence es el relleno de letterbox y antes se
         # aceptaba sin chequear: un valor roto ahi no fallaba, parse_hex lo
@@ -303,19 +301,19 @@ def validate(raw) -> list[str]:
         elif t == "gradient":
             stops = bg.get("stops")
             if not isinstance(stops, list) or len(stops) < 2:
-                errs.append("background.stops: se esperan al menos dos paradas")
+                errs.append("background.stops: at least two stops are expected")
             else:
                 errs.extend(_errores_de_stops(stops))
         elif t == "procedural":
             if bg.get("name", "scroll") not in PROCEDURALES:
-                errs.append(f"background.name: {bg.get('name')!r} no es un "
-                            f"generador conocido, se espera uno de "
+                errs.append(f"background.name: {bg.get('name')!r} is not a known "
+                            f"generator, expected one of "
                             f"{sorted(PROCEDURALES)}")
             # Los dos generadores parten del gradiente: sin paradas no hay nada
             # que animar y quedaria un color plano en silencio.
             stops = bg.get("stops")
             if not isinstance(stops, list) or len(stops) < 2:
-                errs.append("background.stops: se esperan al menos dos paradas")
+                errs.append("background.stops: at least two stops are expected")
             else:
                 errs.extend(_errores_de_stops(stops))
             for clave in ("speed", "period"):
@@ -326,22 +324,22 @@ def validate(raw) -> list[str]:
                 # una division por cero en la fase.
                 minimo = 0 if clave == "speed" else None
                 if not _is_num(v) or v < 0 or (minimo is None and v <= 0):
-                    errs.append(f"background.{clave}: {v!r} invalido, se espera "
-                                f"un numero {'>= 0' if minimo == 0 else '> 0'}")
+                    errs.append(f"background.{clave}: {v!r} is invalid, expected a number "
+                                f"{'>= 0' if minimo == 0 else '> 0'}")
         elif t in ("image", "sequence", "video"):
             if safe_asset_path(bg.get("src")) is None:
-                errs.append(f"background.src: ruta invalida o fuera del directorio "
-                            f"de assets: {bg.get('src')!r}")
+                errs.append(f"background.src: invalid path, or outside the assets "
+                            f"directory: {bg.get('src')!r}")
             if bg.get("fit", "cover") not in FITS:
-                errs.append(f"background.fit: {bg.get('fit')!r} invalido")
+                errs.append(f"background.fit: invalid {bg.get('fit')!r}")
             f = bg.get("fps", 10.0)
             if not _is_num(f) or not 0.1 <= f <= MAX_FPS:
-                errs.append(f"background.fps: {f!r} fuera de 0.1..{MAX_FPS} "
-                            f"(el panel refresca a {MAX_FPS} Hz)")
+                errs.append(f"background.fps: {f!r} out of 0.1..{MAX_FPS} "
+                            f"(the panel refreshes at {MAX_FPS} Hz)")
 
     widgets = raw.get("widgets")
     if not isinstance(widgets, list):
-        errs.append("widgets: se espera una lista")
+        errs.append("widgets: a list is expected")
         return errs
 
     seen = set()
@@ -353,14 +351,14 @@ def validate(raw) -> list[str]:
 def _validate_widget(w, i, fonts, seen) -> list[str]:
     errs = []
     if not isinstance(w, dict):
-        return [f"widgets[{i}]: se espera un objeto"]
+        return [f"widgets[{i}]: an object is expected"]
 
     wid = w.get("id")
     where = f"widget {wid!r}" if isinstance(wid, str) and wid else f"widgets[{i}]"
     if not isinstance(wid, str) or not wid:
-        errs.append(f"widgets[{i}]: falta id")
+        errs.append(f"widgets[{i}]: id is missing")
     elif wid in seen:
-        errs.append(f"{where}: id repetido")
+        errs.append(f"{where}: duplicate id")
     else:
         seen.add(wid)
 
@@ -369,82 +367,81 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
     # cosas, y el editor muestra todos los errores juntos.
     for k in ("x", "y"):
         if not _is_int(w.get(k)):
-            errs.append(f"{where}: {k} debe ser entero")
+            errs.append(f"{where}: {k} must be an integer")
 
     t = w.get("type")
     if t not in WIDGET_TYPES:
-        return errs + [f"{where}: tipo desconocido {t!r}, se espera uno de "
+        return errs + [f"{where}: unknown type {t!r}, expected one of "
                        f"{sorted(WIDGET_TYPES)}"]
 
     cls = WIDGET_TYPES[t]
     allowed_keys = set(cls.__dataclass_fields__)
     for k in w:
         if k not in allowed_keys:
-            errs.append(f"{where}: clave desconocida {k!r}")
+            errs.append(f"{where}: unknown key {k!r}")
 
     for k in REQUIRED[t]:
         if k not in w:
-            errs.append(f"{where}: falta el campo obligatorio {k!r}")
+            errs.append(f"{where}: required field {k!r} is missing")
 
     if "metric" in REQUIRED[t] and "metric" in w and not is_metric(w["metric"]):
-        errs.append(f"{where}: metrica desconocida {w['metric']!r}")
+        errs.append(f"{where}: unknown metric {w['metric']!r}")
 
     if "font" in REQUIRED[t] and "font" in w:
         # El isinstance() original salteaba el chequeo cuando el alias no era
         # texto, asi que un {"font": 3} pasaba entero y recien reventaba en
         # ctx.layout.fonts[w.font] dentro del render.
         if not isinstance(w["font"], str):
-            errs.append(f"{where}: font debe ser el nombre de un alias de la "
-                        f"tabla fonts, es {w['font']!r}")
+            errs.append(f"{where}: font must be the name of an alias in the fonts "
+                        f"table, it is {w['font']!r}")
         elif w["font"] not in fonts:
-            errs.append(f"{where}: alias de fuente desconocido {w['font']!r}")
+            errs.append(f"{where}: unknown font alias {w['font']!r}")
 
     if t == "label" and "text" in w and not isinstance(w["text"], str):
-        errs.append(f"{where}: text debe ser texto, es {w['text']!r}")
+        errs.append(f"{where}: text must be a string, it is {w['text']!r}")
 
     for k in ("color", "fill", "track", "stroke"):
         if k in w:
             _check_color(errs, where, w[k])
 
     if w.get("align", "left") not in ALIGNS:
-        errs.append(f"{where}: align {w.get('align')!r} invalido")
+        errs.append(f"{where}: invalid align {w.get('align')!r}")
 
     if t == "text":
         humanize_mode = w.get("humanize", "none")
         if humanize_mode not in HUMANIZE_MODES:
-            errs.append(f"{where}: humanize {humanize_mode!r} invalido, "
-                        f"se espera uno de {sorted(HUMANIZE_MODES)}")
+            errs.append(f"{where}: invalid humanize {humanize_mode!r}, "
+                        f"expected one of {sorted(HUMANIZE_MODES)}")
         elif (humanize_mode != "none" and isinstance(w.get("format"), str)
               and w["format"] not in ("{}", "{0}")):
             # format_value() aplica el humanizador y ni siquiera mira
             # w.format en ese caso: un sufijo como "{} Mbps" quedaria
             # escrito en el layout pero nunca se ve en el panel, sin ningun
             # aviso de por que. Se rechaza en vez de ignorarlo en silencio.
-            errs.append(f"{where}: format {w['format']!r} no tiene efecto "
-                        f"con humanize={humanize_mode!r}; usa '{{}}' o "
-                        f"quita humanize")
+            errs.append(f"{where}: format {w['format']!r} has no effect with "
+                        f"humanize={humanize_mode!r}; use '{{}}' or "
+                        f"drop humanize")
         if "format" in w:
             _check_format(errs, where, w["format"])
         for j, r in enumerate(w.get("rules") or []):
             if _parse_rule(r) is None:
-                errs.append(f"{where}: rules[{j}].when invalido "
+                errs.append(f"{where}: invalid rules[{j}].when "
                             f"{r.get('when') if isinstance(r, dict) else r!r}; "
-                            f"se espera un comparador como '> 85'")
+                            f"expected a comparison like '> 85'")
             elif isinstance(r, dict):
                 _check_color(errs, f"{where} rules[{j}]", r.get("color"))
 
     if t == "rect":
         if w.get("fill") is None and w.get("stroke") is None:
-            errs.append(f"{where}: un rect necesita 'fill', 'stroke' o los dos; "
-                        f"sin ninguno no dibuja nada")
+            errs.append(f"{where}: a rect needs 'fill', 'stroke' or both; with "
+                        f"neither it draws nothing")
         sw = w.get("stroke_width", 1)
         if not _is_int(sw) or sw < 1:
-            errs.append(f"{where}: stroke_width debe ser entero >= 1, "
-                        f"es {sw!r}")
+            errs.append(f"{where}: stroke_width must be an integer >= 1, it is {sw!r}")
 
     for k in ("w", "h", "r", "thickness", "radius", "samples"):
         if k in w and not _is_int(w[k]):
-            errs.append(f"{where}: {k} debe ser entero")
+            errs.append(f"{where}: {k} must be an integer")
 
     # Todo lo que sigue eran claves permitidas sin ningun chequeo de tipo: el
     # layout validaba limpio y el TypeError aparecia adentro de
@@ -457,23 +454,23 @@ def _validate_widget(w, i, fonts, seen) -> list[str]:
     # render y revienta en w.start_angle + w.sweep.
     for k in ("min", "max"):
         if k in w and w[k] is not None and not _is_num(w[k]):
-            errs.append(f"{where}: {k} debe ser un numero, es {w[k]!r}")
+            errs.append(f"{where}: {k} must be a number, it is {w[k]!r}")
     for k in ("start_angle", "sweep"):
         if k in w and not _is_num(w[k]):
-            errs.append(f"{where}: {k} debe ser un numero, es {w[k]!r}")
+            errs.append(f"{where}: {k} must be a number, it is {w[k]!r}")
 
     lo, hi = w.get("min"), w.get("max")
     if _is_num(lo) and _is_num(hi) and hi <= lo:
-        errs.append(f"{where}: max ({hi}) tiene que ser mayor que min ({lo}); "
+        errs.append(f"{where}: max ({hi}) has to be greater than min ({lo}); "
                     f"si no, el widget queda vacio para cualquier valor")
 
     if "samples" in w and _is_int(w["samples"]) and w["samples"] < 1:
         # series[-0:] es series[0:]: un 0 grafica TODO el historial en vez de
         # nada, y un negativo corta por el frente de la serie.
-        errs.append(f"{where}: samples debe ser >= 1, es {w['samples']}")
+        errs.append(f"{where}: samples must be >= 1, it is {w['samples']}")
 
     if t == "image" and "src" in w and safe_asset_path(w["src"]) is None:
-        errs.append(f"{where}: src invalido o fuera del directorio de assets: "
+        errs.append(f"{where}: src is invalid or outside the assets directory: "
                     f"{w['src']!r}")
 
     return errs
