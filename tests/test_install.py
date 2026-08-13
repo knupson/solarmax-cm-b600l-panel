@@ -1,8 +1,8 @@
 """El instalador de primera vez: diagnostico y tarea programada.
 
-Todo lo que toca el sistema pasa por `runner`, que se inyecta: los tests
-verifican QUE comando se manda, sin registrar nada de verdad en la maquina que
-corre la suite.
+Everything touching the system goes through `runner`, which is injected: the
+tests verify WHICH command is sent, without registering anything for real on the
+machine running the suite.
 """
 import json
 import xml.etree.ElementTree as ET
@@ -16,7 +16,7 @@ from tests.test_schema import MINIMAL
 
 
 class FakeRunner:
-    """Junta los comandos y devuelve el codigo que le digan."""
+    """Collects the commands and returns whatever code it is told to."""
 
     def __init__(self, code=0, salida=""):
         self.calls = []
@@ -39,9 +39,9 @@ def perfil(tmp_path):
 
 
 def test_a_missing_ffmpeg_is_a_warning_not_a_failure(perfil, monkeypatch):
-    """ffmpeg solo hace falta para los fondos de video. Marcarlo como falla
-    dejaria al instalador negandose a instalar por algo que la enorme mayoria de
-    los perfiles no usa."""
+    """ffmpeg is only needed for video backgrounds. Marking it a failure would leave
+    the installer refusing to install over something the vast majority of profiles
+    do not use."""
     from vmaxpanel.render import video
     monkeypatch.setattr(video, "buscar_ffmpeg", lambda: None)
     ch = {c.nombre: c for c in install.diagnosticar(perfil)}
@@ -59,11 +59,11 @@ def test_an_invalid_profile_blocks_the_install(tmp_path):
 
 
 def test_a_panel_that_is_not_plugged_in_does_not_block(perfil, monkeypatch):
-    """El panel puede estar desenchufado en el momento de instalar: la tarea
-    corre al logon y el motor reintenta la conexion solo. Bloquear por esto
-    obligaria a instalar en un orden particular por nada."""
+    """The panel can be unplugged at install time: the task runs at logon and the
+    engine retries the connection on its own. Blocking over this would force a
+    particular installation order for no reason."""
     def sin_panel(port=None):
-        raise install.PanelNotFound("no hay panel")
+        raise install.PanelNotFound("no panel")
     monkeypatch.setattr(install, "_detectar_panel", sin_panel)
     checks = install.diagnosticar(perfil)
     panel = next(c for c in checks if c.nombre == "panel")
@@ -78,7 +78,7 @@ def test_the_diagnosis_reports_the_dependencies_it_found(perfil):
         assert esperado in nombres
 
 
-# --- XML de la tarea ---
+# --- the task XML ---
 
 
 def test_the_task_xml_runs_the_tray_with_the_profile(perfil):
@@ -94,9 +94,9 @@ def test_the_task_xml_runs_the_tray_with_the_profile(perfil):
 
 
 def test_the_task_survives_running_on_battery(perfil):
-    """Los defaults de schtasks no arrancan la tarea con la maquina a bateria y
-    la matan si se desenchufa. En una notebook eso es el panel apagandose solo
-    justo cuando el usuario la desconecta."""
+    """The schtasks defaults refuse to start the task on battery and kill it when
+    the machine is unplugged. On a laptop that is the panel switching itself off
+    exactly when the user unplugs it."""
     xml = install.xml_tarea(perfil, log=None, python=Path("C:/py/pythonw.exe"),
                             usuario="DOM\\u")
     root = ET.fromstring(xml)
@@ -106,8 +106,8 @@ def test_the_task_survives_running_on_battery(perfil):
 
 
 def test_the_task_has_no_time_limit(perfil):
-    """Sin esto Windows mata la tarea a las 72 horas: el panel se apagaria solo
-    a los tres dias de encendida la maquina."""
+    """Without this Windows kills the task after 72 hours: the panel would switch
+    itself off three days after the machine was turned on."""
     xml = install.xml_tarea(perfil, log=None, python=Path("C:/py/pythonw.exe"),
                             usuario="DOM\\u")
     ns = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
@@ -115,8 +115,8 @@ def test_the_task_has_no_time_limit(perfil):
 
 
 def test_paths_with_ampersands_do_not_break_the_xml(tmp_path):
-    """Una ruta con & rompe un XML armado con format(). Es raro pero un
-    'C:\\Juegos & Cosas\\panel' no tiene por que dejar de andar."""
+    """A path with & breaks an XML built with format(). It is unusual, but a
+    'C:\\Games & Things\\panel' has no reason to stop working."""
     raro = tmp_path / "a & b.json"
     raro.write_text(json.dumps(MINIMAL), encoding="utf-8")
     xml = install.xml_tarea(raro, log=None, python=Path("C:/py/pythonw.exe"),
@@ -142,8 +142,8 @@ def test_installing_registers_the_task_by_xml(perfil, tmp_path):
 
 
 def test_the_xml_file_is_utf16_and_gets_cleaned_up(perfil, tmp_path):
-    """schtasks /XML solo lee Unicode: un archivo UTF-8 lo rechaza con
-    'The task XML is malformed'. Y el temporal no queda tirado."""
+    """schtasks /XML only reads Unicode: it rejects a UTF-8 file with 'The task XML
+    is malformed'. And the temp file is not left behind."""
     vistos = {}
 
     def runner(argv):
@@ -155,7 +155,7 @@ def test_the_xml_file_is_utf16_and_gets_cleaned_up(perfil, tmp_path):
     install.instalar(perfil, runner=runner, log=tmp_path / "l.log")
     assert vistos["bytes"][:2] in (b"\xff\xfe", b"\xfe\xff")   # BOM UTF-16
     assert "vmaxpanel.tray" in vistos["bytes"].decode("utf-16")
-    assert not vistos["ruta"].exists()          # el temporal no queda tirado
+    assert not vistos["ruta"].exists()          # the temp file is not left behind
 
 
 def test_installing_stops_before_touching_the_system_if_a_check_blocks(tmp_path):
@@ -164,7 +164,7 @@ def test_installing_stops_before_touching_the_system_if_a_check_blocks(tmp_path)
     r = FakeRunner()
     code, lineas = install.instalar(roto, runner=r)
     assert code == 2
-    assert r.calls == []                      # no se registro nada
+    assert r.calls == []                      # nothing was registered
     assert any("profile" in l for l in lineas)
 
 
@@ -183,8 +183,8 @@ def test_uninstalling_deletes_the_task(perfil):
 
 
 def test_uninstalling_a_task_that_is_not_there_is_not_an_error():
-    """Desinstalar dos veces, o desinstalar sin haber instalado, no es una falla:
-    el estado final es el que el usuario pidio."""
+    """Uninstalling twice, or uninstalling without having installed, is not a
+    failure: the final state is the one the user asked for."""
     r = FakeRunner(code=1, salida="ERROR: The system cannot find the file specified.")
     code, lineas = install.desinstalar(runner=r)
     assert code == 0
@@ -195,8 +195,9 @@ def test_uninstalling_a_task_that_is_not_there_is_not_an_error():
 
 
 def test_the_cli_diagnoses_without_touching_anything(perfil, capsys, monkeypatch):
-    """--diagnostico solo mira: no registra la tarea ni arranca el motor. Es lo
-    que se le pide correr a alguien que dice "lo instale y no anda"."""
+    """--diagnose only looks: it neither registers the task nor starts the engine.
+    It is what you ask somebody to run when they say "I installed it and it does not
+    work"."""
     from vmaxpanel import cli
     llamadas = []
     monkeypatch.setattr(install, "_correr", lambda argv: llamadas.append(argv) or (0, ""))
@@ -230,10 +231,10 @@ def test_the_cli_uninstall_flag_reaches_the_installer(capsys, monkeypatch):
 
 
 def test_a_port_already_in_use_says_who_probably_has_it(perfil, monkeypatch):
-    """Con la bandeja ya corriendo, el puerto esta tomado y pyserial contesta
-    "Acceso denegado" -- que se lee como un problema de permisos y manda al
-    usuario a buscar el UAC. El caso real es que el panel ya lo esta usando otra
-    cosa, y eso hay que decirlo."""
+    """With the tray already running, the port is taken and pyserial answers "Access
+    denied" -- which reads as a permissions problem and sends the user looking for
+    UAC. The real case is that something else is already using the panel, and that
+    is what has to be said."""
     def tomado(port=None):
         raise PermissionError(13, "Acceso denegado.")
     monkeypatch.setattr(install, "_detectar_panel", tomado)
@@ -245,9 +246,9 @@ def test_a_port_already_in_use_says_who_probably_has_it(perfil, monkeypatch):
 
 def test_a_serial_exception_wrapping_the_permission_error_is_recognized(perfil,
                                                                        monkeypatch):
-    """El caso real de esta maquina: pyserial no propaga PermissionError, lo
-    envuelve en SerialException -- un OSError cualquiera -- con el original
-    metido en el texto. Por tipo no se distingue de "no hay panel"."""
+    """The real case: pyserial does not propagate PermissionError, it wraps it in a
+    SerialException -- just an OSError -- with the original tucked into the text. By
+    type it is indistinguishable from "no panel"."""
     def tomado(port=None):
         raise OSError("could not open port 'COM3': PermissionError(13, "
                       "'Acceso denegado.', None, 5)")
@@ -257,9 +258,9 @@ def test_a_serial_exception_wrapping_the_permission_error_is_recognized(perfil,
 
 
 def test_the_task_runs_elevated(perfil):
-    """GSA1 (temperaturas, voltajes, RPM) y el SMART de los SSD piden elevación:
-    sin esto el panel arranca pero le faltan justo los sensores que no se pueden
-    sacar de ningún otro lado. Es lo que tenía la tarea registrada a mano."""
+    """GSA1 (temperatures, voltages, RPM) and the SSDs' SMART data need elevation:
+    without this the panel starts but is missing exactly the sensors that cannot be
+    got from anywhere else."""
     xml = install.xml_tarea(perfil, log=None, python=Path("C:/py/pythonw.exe"),
                             usuario="DOM\\u")
     ns = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
@@ -267,22 +268,22 @@ def test_the_task_runs_elevated(perfil):
 
 
 def test_a_denied_registration_says_it_needs_admin(perfil):
-    """Registrar una tarea elevada necesita una consola elevada. El mensaje de
-    schtasks solo dice "Access is denied", que no dice qué hacer."""
+    """Registering an elevated task needs an elevated console. The schtasks message
+    only says "Access is denied", which does not say what to do."""
     r = FakeRunner(code=1, salida="ERROR: Access is denied.")
     code, lineas = install.instalar(perfil, runner=r)
     assert code == 1
     assert any("administrator" in l.lower() for l in lineas)
 
 
-# --- bajar el panel ---
+# --- bringing the panel down ---
 
 
 def test_stopping_stops_the_task_and_kills_the_processes():
-    """`daemon/stop.ps1` no conoce al motor nuevo y no se puede tocar (es la vuelta
-    atras byte-identica de toda la fase), y ademas la tarea vuelve a levantar la
-    bandeja en el siguiente logon. Bajar el panel de verdad son tres cosas: parar la
-    tarea, matar el proceso y matar el sidecar que se queda con el DLL tomado."""
+    """`daemon/stop.ps1` does not know the new engine and cannot be touched (it is
+    the byte-identical rollback path), and on top of that the task starts the tray
+    again at the next logon. Really bringing the panel down is three things: stop the
+    task, kill the process, and kill the sidecar that holds the DLL."""
     r = FakeRunner()
     matados = []
     code, lineas = install.parar(runner=r, matar=lambda p: matados.append(p) or True,
@@ -292,12 +293,13 @@ def test_stopping_stops_the_task_and_kills_the_processes():
     assert code == 0
     argv = r.calls[0]
     assert "/End" in argv and install.TAREA in argv
-    assert matados == [111, 222], "mato lo que no era, o dejo el sidecar vivo"
+    assert matados == [111, 222], "it killed the wrong thing, or left the sidecar alive"
     assert any("111" in l for l in lineas)
 
 
 def test_stopping_when_nothing_is_running_is_not_an_error():
-    """Bajar algo que ya esta bajado no es una falla: el estado final es el pedido."""
+    """Bringing down something already down is not a failure: the final state is the
+    one asked for."""
     r = FakeRunner(code=1, salida="ERROR: The system cannot find the task specified.")
     code, lineas = install.parar(runner=r, matar=lambda p: True, listar=lambda: [])
     assert code == 0
@@ -306,9 +308,9 @@ def test_stopping_when_nothing_is_running_is_not_an_error():
 
 
 def test_stopping_does_not_touch_an_unrelated_python():
-    """Un `python.exe` que no es el panel -- un script del usuario, un pytest -- no se
-    puede matar por venir en la misma lista. Ya hubo un susto con eso: 14 GB de RAM de
-    un proceso que era del usuario, no mio."""
+    """A `python.exe` that is not the panel -- one of the user's scripts, a pytest --
+    must not be killed just for appearing in the same list. There was already a scare
+    over that: 14 GB of RAM belonging to a process that was the user's."""
     r = FakeRunner()
     matados = []
     install.parar(runner=r, matar=lambda p: matados.append(p) or True,
@@ -326,11 +328,11 @@ def test_the_cli_has_a_stop_flag(monkeypatch, capsys):
 
 
 def test_a_process_it_cannot_inspect_is_reported_not_ignored():
-    """La bandeja corre ELEVADA (RunLevel HighestAvailable). Desde una consola sin
-    elevar, psutil no puede leer su linea de comandos ni matarla -- y saltearla en
-    silencio hacia que --parar dijera "no habia procesos" con el panel andando. Es la
-    misma mentira de status que este proyecto persigue: mejor decir "hay algo que no
-    puedo ver, corrleo como administrador"."""
+    """The tray runs ELEVATED (RunLevel HighestAvailable). From an unelevated
+    console, psutil can neither read its command line nor kill it -- and skipping it
+    silently made --stop say "there were no processes" with the panel running. It is
+    the same lying status this project chases: better to say "there is something I
+    cannot see, run this as administrator"."""
     r = FakeRunner()
     code, lineas = install.parar(runner=r, matar=lambda p: True,
                                  listar=lambda: [(999, None)])
@@ -350,30 +352,31 @@ def test_a_process_it_cannot_kill_is_reported(monkeypatch):
 
 
 def test_missing_sensors_dll_limits_but_does_not_block(perfil, monkeypatch):
-    """Verificado en un clon limpio del repo (los DLL estan gitignoreados, asi que es
-    exactamente lo que recibe otro dueno del panel): SIN el DLL el panel dibuja igual
-    -- reloj, carga de CPU, temp y VCORE por GSA1, RAM, discos, procesos -- y solo se
+    """Verified on a clean clone of the repo (the DLLs are gitignored, so it is
+    exactly what another owner of the panel receives): WITHOUT the DLL the panel
+    draws anyway -- clock, CPU load, temperature and VCORE via GSA1, RAM, disks,
+    processes -- and all that is
     pierden GPU, por-nucleo, temperaturas de disco y RPM.
 
-    Marcarlo FALTA hacia que `--instalar` se negara a instalar, o sea que el que
-    recibia el repo no podia arrancar NADA por unos sensores opcionales."""
+    Marking it MISSING made `--install` refuse to install, which meant whoever
+    received the repo could not start ANYTHING because of some optional sensors."""
     monkeypatch.setattr(install, "DLL_SENSORES", Path("no-existe/LibreHardwareMonitorLib.dll"))
     checks = install.diagnosticar(perfil)
     sensores = next(c for c in checks if c.nombre == "sensors")
-    assert sensores.ok is None, "bloquea la instalacion por algo opcional"
+    assert sensores.ok is None, "it blocks the install over something optional"
     assert not install.bloquea(checks)
 
 
 def test_the_sensors_check_says_where_to_get_the_dll(perfil, monkeypatch):
-    """Decir "falta X" sin decir de donde se saca deja al que recibe el repo en el
-    mismo lugar que estaba. Es el unico paso de la instalacion que no se puede
-    automatizar (son DLL de terceros que no redistribuimos)."""
+    """Saying "X is missing" without saying where to get it leaves whoever received
+    the repo exactly where they were. It is the one installation step that cannot be
+    automated (they are third-party DLLs that are not redistributed here)."""
     monkeypatch.setattr(install, "DLL_SENSORES", Path("no-existe/LibreHardwareMonitorLib.dll"))
     detalle = next(c for c in install.diagnosticar(perfil)
                    if c.nombre == "sensors").detalle
     assert "LibreHardwareMonitor" in detalle
     assert "github" in detalle.lower()
-    assert "HidSharp" in detalle, "sin HidSharp al lado, LHM.Open() falla"
+    assert "HidSharp" in detalle, "without HidSharp beside it, LHM.Open() fails"
 
 
 def test_the_sensors_check_lists_what_is_lost_without_it(perfil, monkeypatch):
@@ -385,12 +388,12 @@ def test_the_sensors_check_lists_what_is_lost_without_it(perfil, monkeypatch):
 
 
 def test_the_task_gets_an_absolute_profile_path(tmp_path, monkeypatch):
-    r"""La tarea guardaba la ruta tal cual la escribio el usuario. Con
-    `--instalar --profile vmaxpanel\profiles\apex.json` eso queda RELATIVO en el XML, y
-    funciona solo porque el WorkingDirectory de la tarea coincide de casualidad. Al
-    logon, Windows la resuelve contra ese directorio: instalar desde otra carpeta -- o
-    mover el repo -- deja la tarea apuntando a un perfil que no es. Un recien llegado
-    cae en esto sin hacer nada raro."""
+    r"""The task used to store the path exactly as the user typed it. With
+    `--install --profile vmaxpanel\profiles\apex.json` that stays RELATIVE in the
+    XML, and works only because the task's WorkingDirectory happens to match. At
+    logon, Windows resolves it against that directory: installing from another folder
+    -- or moving the repo -- leaves the task pointing at a profile that is not the
+    right one. A newcomer hits this without doing anything odd."""
     monkeypatch.chdir(tmp_path)
     (tmp_path / "perfiles").mkdir()
     relativo = Path("perfiles") / "mio.json"

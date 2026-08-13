@@ -29,7 +29,7 @@ class FakeCpu(Provider):
 
 
 class FakeClock:
-    """Reloj virtual: el loop avanza sin dormir de verdad."""
+    """A virtual clock: the loop advances without really sleeping."""
 
     def __init__(self):
         self.now = 1000.0
@@ -83,11 +83,11 @@ def test_run_handshakes_and_sets_brightness_once(tmp_path):
 
 
 def test_state_reports_the_panel_and_the_profile(tmp_path):
-    # El estado "ok" solo tiene sentido MIENTRAS el link esta abierto: run()
-    # cierra y descarta el link al volver (por cualquier motivo, ver
-    # test_clean_exit_closes_the_link), asi que state() consultado despues
-    # de run() siempre da "disconnected". Para probar el estado "conectado"
-    # de verdad hay que mirarlo desde adentro del loop, no despues.
+    # The "ok" state only makes sense WHILE the link is open: run() closes and
+    # discards the link on returning (for any reason, see
+    # test_clean_exit_closes_the_link), so state() asked after run() always gives
+    # "disconnected". To really test the "connected" state it has to be observed
+    # from inside the loop, not afterwards.
     eng, _, _ = engine(tmp_path, iterations=1)
     captured = {}
     original = eng._render_once
@@ -169,7 +169,7 @@ def test_broken_layout_on_reload_keeps_rendering_the_previous_one(tmp_path):
     eng._render_once = patched
     eng.run()
     st = eng.state()
-    assert st["profile"] == "Test"           # sigue el bueno
+    assert st["profile"] == "Test"           # the good one is still there
     assert st["frames"] == 4                 # y no dejo de dibujar
     assert any("JSON" in w for w in st["warnings"])
 
@@ -181,34 +181,33 @@ def test_serial_failure_reconnects_with_backoff(tmp_path):
     start = clock.now
     eng.run()
     assert len(made) == 2
-    assert clock.now > start                  # durmio el backoff
-    # el transporte cuyo handshake fallo tiene que quedar cerrado: si
-    # nada lo cierra, el handle recien abierto queda filtrado en cada
-    # intento de reconexion en vez de liberarse antes del siguiente intento.
+    assert clock.now > start                  # it slept the backoff
+    # The transport whose handshake failed has to be left closed: if nothing closes
+    # it, the freshly opened handle leaks on every reconnection attempt instead of
+    # being released before the next one.
     assert dead.closed is True
     # "disconnected", no "ok": run() ya termino (se agoto max_iterations
-    # DESPUES de reconectar con exito), asi que nada esta escribiendo en el
-    # panel en este instante. Es el contrato, no un descuido -- el campo es
+    # AFTER a successful reconnection), so nothing is writing to the panel at this
+    # instant. It is the contract, not an oversight -- the field is
     # binario ("ok" | "disconnected") y no existe un tercer estado de
-    # "estuvo conectado pero ya no". Que no se revierta a "ok" creyendo que
-    # es "se conecto bien" cuando en realidad describe el estado ACTUAL.
+    # "was connected but is not any more". Do not revert this to "ok" believing it
+    # means "it connected fine" when it actually describes the CURRENT state.
     assert eng.state()["panel"] == "disconnected"
 
 
 def test_clean_exit_closes_the_link(tmp_path):
     eng, made, _ = engine(tmp_path, iterations=2)
     eng.run()
-    # run() termino sin excepcion (se agoto max_iterations): el transporte
-    # que quedo abierto tiene que cerrarse igual, no solo cuando hay una
+    # run() finished without an exception (max_iterations ran out): the transport
+    # left open has to be closed anyway, not only when there is an
     # reconexion de por medio.
     assert made[0].closed is True
-    # "disconnected", no "ok": el mismo contrato binario que documenta el
-    # test de arriba. Un link cerrado reportando "ok" seria la misma clase
-    # de status mintiendo que este proyecto entero existe para evitar (LCD
-    # Control mostrando una carga de CPU que no era la real) -- aca aplicado
-    # al campo de conexion en vez de a una metrica. No revertir esto a "ok"
-    # pensando que "el ultimo intento salio bien": state() describe el
-    # presente, no el historial.
+    # "disconnected", not "ok": the same binary contract the test above documents. A
+    # closed link reporting "ok" would be the same class of lying status this whole
+    # project exists to avoid (LCD Control showing a CPU load that was not the real
+    # one) -- here applied to the connection field instead of to a metric. Do not
+    # revert this to "ok" thinking "the last attempt went fine": state() describes
+    # the present, not the history.
     assert eng.state()["panel"] == "disconnected"
 
 
@@ -240,14 +239,14 @@ def test_jpeg_quality_comes_from_the_profile(tmp_path):
 
 
 def test_rotation_comes_from_the_profile(tmp_path):
-    """Esto se probaba con rotate 90, afirmando que el frame saliera
-    1480x320. Es justo el frame deformado que un panel 320x1480 no puede
-    mostrar y que la revision final marco como defecto: el engine ahora se
+    """This used to be tested with rotate 90, asserting the frame came out
+    1480x320. That is exactly the misshapen frame a 320x1480 panel cannot show and
+    that the final review flagged as a defect: the engine now
     niega a mandarlo (ver test_a_rotation_that_does_not_fit_the_panel...).
-    La intencion original -- que el rotate salga del perfil y no de una
-    constante -- se prueba igual con 180, la rotacion real de este gabinete,
-    comparando CONTENIDO en vez de tamano: 0 y 180 dan los dos 320x1480, asi
-    que el tamano no distinguia nada de todos modos.
+    The original intent -- that the rotate comes from the profile and not from a
+    constant -- is tested just as well with 180, the real rotation of this case, by
+    comparing CONTENT rather than size: 0 and 180 both give 320x1480, so the size
+    distinguished nothing anyway.
     """
     import io
     from PIL import Image, ImageChops
@@ -260,29 +259,29 @@ def test_rotation_comes_from_the_profile(tmp_path):
     assert derecho.size == cabeza.size == (320, 1480)
     assert ImageChops.difference(derecho, cabeza).getbbox() is not None
 
-    # Con tolerancia, no exacto: el JPEG es con perdida, asi que rotar
-    # despues de decodificar no reproduce byte a byte lo que salio de
-    # codificar la imagen ya rotada. Mismo criterio que el test del golden.
+    # With tolerance, not exact: JPEG is lossy, so rotating after decoding does not
+    # reproduce byte for byte what came out of encoding the already-rotated image.
+    # Same rule as the golden test.
     girado = cabeza.transpose(Image.Transpose.ROTATE_180)
     diff = ImageChops.difference(derecho, girado)
     peor = max(max(band.getextrema()) for band in diff.split())
-    assert peor <= 40, f"180 no es la misma imagen dada vuelta (delta {peor})"
+    assert peor <= 40, f"180 is not the same image turned around (delta {peor})"
 
 
 def test_an_invalid_profile_at_startup_is_picked_up_once_the_user_fixes_it(tmp_path):
-    """_connect() tira OSError cuando no hay layout, y reload_if_changed()
-    solo se llamaba desde _serve(), o sea despues de conectar: un engine
-    arrancado con un perfil roto giraba en el backoff para siempre y nunca
-    levantaba el archivo corregido. En fase 3 el servicio arranca antes de
-    que el perfil exista, asi que ese es el caso normal, no el raro.
+    """_connect() raises OSError when there is no layout, and reload_if_changed()
+    was only called from _serve(), which is to say after connecting: an engine
+    started with a broken profile spun in the backoff forever and never picked up
+    the corrected file. The tray starts before the profile is guaranteed, so that is
+    the normal case, not the rare one.
 
-    El contador de sleeps acota la corrida: sin el arreglo esto es un loop
-    infinito con reloj virtual, y un test que cuelga no reporta nada.
+    The sleep counter bounds the run: without the fix this is an infinite loop on a
+    virtual clock, and a test that hangs reports nothing.
     """
     path = tmp_path / "vitals.json"
     path.write_text("{roto", encoding="utf-8")
     store = loader.ProfileStore(path)
-    assert store.load_now()                      # arranca sin layout valido
+    assert store.load_now()                      # it starts with no valid layout
     assert store.current is None
 
     made = []
@@ -303,7 +302,7 @@ def test_an_invalid_profile_at_startup_is_picked_up_once_the_user_fixes_it(tmp_p
     def sleep(s):
         sleeps.append(s)
         if len(sleeps) == 1:
-            # El usuario corrige el archivo mientras el engine espera.
+            # The user fixes the file while the engine waits.
             path.write_text(json.dumps(MINIMAL), encoding="utf-8")
         if len(sleeps) > 5:
             eng.stop()                           # cortamos: no se recupero
@@ -312,23 +311,23 @@ def test_an_invalid_profile_at_startup_is_picked_up_once_the_user_fixes_it(tmp_p
     clock.sleep = sleep
     eng.run()
 
-    assert eng.stats["frames"] == 1, f"nunca releyo el perfil ({len(sleeps)} esperas)"
+    assert eng.stats["frames"] == 1, f"it never re-read the profile ({len(sleeps)} waits)"
     assert store.current is not None
     assert [w for w in made[0].writes if w[:3] == b"\xff\xd8\xff"]
 
 
 def test_a_rotation_that_does_not_fit_the_panel_is_refused_instead_of_sent(tmp_path):
-    """rotate 90 sobre un panel 320x1480 produce un frame 1480x320 que el
-    panel escribe sin chistar: basura en pantalla y cero errores en ningun
-    lado. El validador de layouts no puede atajarlo -- no conoce la
-    geometria del panel, y un layout disenado 1480x320 con rotate 90 SI es
-    valido para este panel -- asi que se chequea aca, donde se conocen las
+    """rotate 90 on a 320x1480 panel produces a 1480x320 frame that the panel writes
+    without complaint: garbage on screen and no errors anywhere. The layout validator
+    cannot catch it -- it does not know the panel geometry, and a layout designed
+    1480x320 with rotate 90 IS valid for this panel -- so it is checked here, where
+    both
     dos cosas.
     """
     path = profile(tmp_path, panel={"rotate": 90, "brightness": 100, "fps": 1,
                                     "jpeg_quality": 82})
     store = loader.ProfileStore(path)
-    assert store.load_now() == []            # el layout es valido; la rotacion no encaja
+    assert store.load_now() == []            # the layout is valid; the rotation does not fit
 
     made = []
 
@@ -360,11 +359,11 @@ def test_a_rotation_that_does_not_fit_the_panel_is_refused_instead_of_sent(tmp_p
 
 
 def test_a_rejected_hot_reload_is_reported_instead_of_silent(tmp_path, capsys):
-    """El invariante "un JSON roto no apaga el panel" hacia que un perfil
-    rechazado fuera COMPLETAMENTE silencioso: el motor seguia dibujando el
-    layout viejo y nada avisaba. Paso dos veces con el usuario mirando el panel
-    y preguntando por que no cambiaba nada, y las dos veces la causa fue la
-    misma -- una metrica nueva que el proceso vivo no conoce.
+    """The invariant "a broken JSON does not blank the panel" made a rejected
+    profile COMPLETELY silent: the engine kept drawing the old layout and nothing
+    warned. It happened twice with the user watching the panel and asking why nothing
+    changed, and both times the cause was the same -- a new metric the live process
+    does not know about.
     """
     eng, made, _ = engine(tmp_path, iterations=4)
     path = tmp_path / "vitals.json"
@@ -382,18 +381,18 @@ def test_a_rejected_hot_reload_is_reported_instead_of_silent(tmp_path, capsys):
     eng._render_once = patched
     eng.run()
 
-    # Una sola llamada: readouterr() DRENA el buffer, asi que una segunda
-    # devuelve vacio y concatenar las dos pierde justo el stream que importa.
+    # A single call: readouterr() DRAINS the buffer, so a second one returns empty
+    # and concatenating the two loses precisely the stream that matters.
     capturado = capsys.readouterr()
     salida = capturado.out + capturado.err
     assert "rejected" in salida.lower(), salida
     assert "no.existe" in salida
-    assert eng.state()["profile"] == "Test"      # sigue con el bueno
-    assert eng.stats["frames"] == 4              # y sin dejar de dibujar
+    assert eng.state()["profile"] == "Test"      # still on the good one
+    assert eng.stats["frames"] == 4              # and without stopping drawing
 
 
 def test_the_rejection_is_not_logged_once_per_frame(tmp_path, capsys):
-    """A 30 fps, un aviso por cuadro son 1800 lineas por minuto en el log."""
+    """At 30 fps, one warning per frame is 1800 lines a minute in the log."""
     eng, made, _ = engine(tmp_path, iterations=6)
     path = tmp_path / "vitals.json"
     path.write_text("{roto", encoding="utf-8")
@@ -405,10 +404,10 @@ def test_the_rejection_is_not_logged_once_per_frame(tmp_path, capsys):
 
 
 def test_dropping_the_link_closes_the_renderer(tmp_path):
-    """El renderer es el dueno del fondo, y un fondo de video tiene un ffmpeg
-    atras. El engine descarta el renderer cada vez que se cae el link (y al
-    terminar run()), asi que si no lo cierra, cada reconexion deja un decoder
-    huerfano -- el mismo patron que este proyecto ya tuvo con el sidecar."""
+    """The renderer owns the background, and a video background has an ffmpeg behind
+    it. The engine discards the renderer every time the link drops (and when run()
+    ends), so if it does not close it, each reconnection leaves an orphan decoder --
+    the same pattern this project already had with the sidecar."""
     eng, made, _ = engine(tmp_path, iterations=1)
     eng.run()
     assert made[0].closed
@@ -420,11 +419,11 @@ def test_dropping_the_link_closes_the_renderer(tmp_path):
 
 
 def test_state_reports_a_metric_the_layout_uses_and_nobody_serves(tmp_path):
-    """El caso que quedaba silencioso: una metrica de FAMILIA (fan.9.rpm,
-    core.12.temp, vol.Z.free) que el perfil usa y ningun provider sirve. Las familias
-    no se pueden enumerar, asi que el Registry no puede listarlas por su cuenta -- el
-    unico que sabe cuales se usan de verdad es el motor, que tiene el layout adelante.
-    Sin esto el panel dibuja guiones y el estado dice "sin datos: {}"."""
+    """The case that stayed silent: a FAMILY metric (fan.9.rpm, core.12.temp,
+    vol.Z.free) that the profile uses and no provider serves. Families cannot be
+    enumerated, so the Registry cannot list them on its own -- the only thing that
+    knows which are really in use is the engine, with the layout in front of it.
+    Without this the panel draws dashes and the status says "no data: {}"."""
     raw = dict(MINIMAL)
     raw["widgets"] = MINIMAL["widgets"] + [
         {"id": "fantasma", "type": "text", "metric": "fan.9.rpm", "x": 10, "y": 10,
