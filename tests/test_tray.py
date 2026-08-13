@@ -20,11 +20,11 @@ def _tip_with(app):
 
 
 def test_tooltip_says_paused():
-    assert "pausa" in _tip_with(FakeApp(paused=True, running=False))
+    assert "paused" in _tip_with(FakeApp(paused=True, running=False))
 
 
 def test_tooltip_says_stopped():
-    assert "detenido" in _tip_with(FakeApp(paused=False, running=False)).lower()
+    assert "stopped" in _tip_with(FakeApp(paused=False, running=False)).lower()
 
 
 def test_tooltip_shows_the_profile_and_the_frame_count():
@@ -287,14 +287,14 @@ def test_a_failed_export_does_not_open_anything(monkeypatch, capsys):
 
     class AppQueFalla(FakeApp):
         def export_profile(self):
-            return None, "no se pudo exportar: el perfil no es valido"
+            return None, "could not export: the profile is not valid"
 
     monkeypatch.setattr(tray, "_open_with_shell", abiertos.append)
     t = tray.Tray.__new__(tray.Tray)
     t.app = AppQueFalla(paused=False, running=True)
     t._exportar()
     assert abiertos == []
-    assert "no se pudo" in capsys.readouterr().out
+    assert "could not" in capsys.readouterr().out
 
 
 # --- el icono tiene que existir de verdad ---
@@ -337,7 +337,7 @@ def test_a_rejected_icon_is_retried_and_reported(monkeypatch, capsys):
     t._add_icon()
     assert shell.adds >= 3, "no reintento"
     assert t._icono_puesto is True
-    assert "bandeja" in capsys.readouterr().out.lower()
+    assert "tray" in capsys.readouterr().out.lower()
 
 
 def test_an_icon_that_never_gets_accepted_says_so(monkeypatch, capsys):
@@ -347,7 +347,7 @@ def test_an_icon_that_never_gets_accepted_says_so(monkeypatch, capsys):
     assert t._icono_puesto is False
     # A stderr, no a stdout: es una falla, y el log de la bandeja junta los dos.
     salida = capsys.readouterr().err.lower()
-    assert "no se pudo" in salida
+    assert "could not" in salida
     assert "python -m vmaxpanel.editor" in salida, "sin icono, hay que decir el plan B"
 
 

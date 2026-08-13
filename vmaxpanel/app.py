@@ -196,7 +196,7 @@ class PanelApp:
         except loader.LayoutError as e:
             return e.errors
         except OSError as e:
-            return [f"no se pudo leer {nuevo.name}: {e}"]
+            return [f"could not read {nuevo.name}: {e}"]
         corria = self.running()
         if corria:
             self.stop()
@@ -228,8 +228,8 @@ class PanelApp:
             # forma. Pasa de verdad con la app instalada en una carpeta de solo
             # lectura.
             self._aviso_estado = True
-            print(f"no se pudo publicar el estado en {self._status.path}: "
-                  f"'--estado' no va a poder contestar", file=sys.stderr)
+            print(f"could not publish the status to {self._status.path}: "
+                  f"'--status' will not be able to answer", file=sys.stderr)
         return ok
 
     def _arrancar_latido(self):
@@ -292,10 +292,10 @@ class PanelApp:
         try:
             info = bundle.export_profile(self.profile_path, destino, assets)
         except Exception as e:
-            return None, f"no se pudo exportar: {e}"
+            return None, f"could not export: {e}"
         cuantos = len(info["assets"])
-        return destino, (f"exportado a {destino.name}"
-                         + (f" con {cuantos} asset(s)" if cuantos else ""))
+        return destino, (f"exported to {destino.name}"
+                         + (f" with {cuantos} asset(s)" if cuantos else ""))
 
     # --- fps ---
     #
@@ -307,7 +307,7 @@ class PanelApp:
 
     def fps_options(self) -> list:
         """[(fps, etiqueta)] para el menu."""
-        return [(v, f"{v} fps · {c:.0f}% de un núcleo") for v, c in self.FPS_OPCIONES]
+        return [(v, f"{v} fps · {c:.0f}% of one core") for v, c in self.FPS_OPCIONES]
 
     def fps(self):
         """El fps que dice el perfil en disco, o None si no se puede leer."""
@@ -362,7 +362,7 @@ class PanelApp:
         try:
             crudo = json.loads(ruta.read_text(encoding="utf-8"))
         except Exception as e:
-            return [f"no se pudo leer el perfil: {e}"]
+            return [f"could not read the profile: {e}"]
         crudo.setdefault("panel", {})[clave] = valor
         errores = schema.validate(crudo)
         if errores:
@@ -388,7 +388,7 @@ class PanelApp:
         fuera.extend(st.get("warnings") or [])
         faltan = st.get("unavailable") or {}
         if faltan:
-            fuera.append(f"sin datos: {', '.join(sorted(faltan))}")
+            fuera.append(f"no data: {', '.join(sorted(faltan))}")
         # Se deduplica conservando el orden: el mismo aviso puede venir del
         # renderer y del store.
         vistos, unicos = set(), []

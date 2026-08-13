@@ -86,10 +86,10 @@ def export_profile(profile_path, destino, assets_dir) -> dict:
         crudo = profile_path.read_bytes()
         raw = json.loads(crudo)
     except (OSError, ValueError) as e:
-        raise BundleError(f"no se pudo leer el perfil {profile_path.name}: {e}") from e
+        raise BundleError(f"could not read the profile {profile_path.name}: {e}") from e
     errores = schema.validate(raw)
     if errores:
-        raise BundleError("el perfil no es valido, no se exporta: "
+        raise BundleError("the profile is not valid, not exporting: "
                           + "; ".join(errores))
 
     incluidos, faltantes = [], []
@@ -148,7 +148,7 @@ def _revisar_nombre(nombre):
     limpio = nombre.replace("\\", "/")
     pp = PurePosixPath(limpio)
     if pp.is_absolute() or ".." in pp.parts or (len(limpio) > 1 and limpio[1] == ":"):
-        raise BundleError(f"el bundle trae una ruta que escapa del destino: {nombre!r}")
+        raise BundleError(f"the bundle carries a path that escapes the destination: {nombre!r}")
     return pp
 
 
@@ -162,7 +162,7 @@ def _destino_seguro(nombre, raiz) -> Path:
     pp = _revisar_nombre(nombre)
     final = (raiz / Path(*pp.parts)).resolve()
     if final != raiz.resolve() and raiz.resolve() not in final.parents:
-        raise BundleError(f"el bundle trae una ruta que escapa del destino: {nombre!r}")
+        raise BundleError(f"the bundle carries a path that escapes the destination: {nombre!r}")
     return final
 
 
@@ -184,7 +184,7 @@ def _escribir_atomico(destino, datos):
             tmp.unlink()
         except OSError:
             pass
-        raise BundleError(f"no se pudo escribir {destino.name}: {e}") from e
+        raise BundleError(f"could not write {destino.name}: {e}") from e
 
 
 def _revisar_tamanos(z):
@@ -192,12 +192,11 @@ def _revisar_tamanos(z):
     for info in z.infolist():
         if info.file_size > MAX_MIEMBRO:
             raise BundleError(
-                f"{info.filename!r} es demasiado grande "
-                f"({info.file_size / 1e6:.0f} MB): no se importa")
+                f"{info.filename!r} is too large "
+                f"({info.file_size / 1e6:.0f} MB): not importing")
         total += info.file_size
     if total > MAX_TOTAL:
-        raise BundleError(f"el bundle descomprimido son {total / 1e9:.1f} GB: "
-                          f"no se importa")
+        raise BundleError(f"the bundle expands to {total / 1e9:.1f} GB: not importing")
 
 
 def _nombre_libre(carpeta, nombre) -> Path:
@@ -206,7 +205,7 @@ def _nombre_libre(carpeta, nombre) -> Path:
         candidato = carpeta / f"{base}-{i}{ext}"
         if not candidato.exists():
             return candidato
-    raise BundleError(f"no encontre un nombre libre para {nombre}")
+    raise BundleError(f"could not find a free name for {nombre}")
 
 
 def import_bundle(origen, profiles_dir, assets_dir, si_existe="fallar") -> dict:
@@ -220,29 +219,28 @@ def import_bundle(origen, profiles_dir, assets_dir, si_existe="fallar") -> dict:
     profiles_dir = Path(profiles_dir)
     assets_dir = Path(assets_dir)
     if si_existe not in ("fallar", "renombrar", "pisar"):
-        raise BundleError(f"si_existe invalido: {si_existe!r}")
+        raise BundleError(f"invalid si_existe: {si_existe!r}")
 
     try:
         z = zipfile.ZipFile(origen)
     except (OSError, zipfile.BadZipFile) as e:
-        raise BundleError(f"{origen.name} no es un bundle legible: {e}") from e
+        raise BundleError(f"{origen.name} is not a readable bundle: {e}") from e
 
     with z:
         _revisar_tamanos(z)
         nombres = set(z.namelist())
         if PERFIL not in nombres:
-            raise BundleError(f"{origen.name} no tiene {PERFIL}: no es un bundle "
-                              f"de vmaxpanel")
+            raise BundleError(f"{origen.name} has no {PERFIL}: it is not a vmaxpanel bundle")
         crudo = z.read(PERFIL)
         try:
             raw = json.loads(crudo)
         except ValueError as e:
-            raise BundleError(f"el perfil del bundle no es JSON valido: {e}") from e
+            raise BundleError(f"the bundle's profile is not valid JSON: {e}") from e
         # Se valida ANTES de escribir: un bundle con un perfil roto no puede dejar
         # assets a medio copiar en la carpeta del usuario.
         errores = schema.validate(raw)
         if errores:
-            raise BundleError("el perfil del bundle no es valido: "
+            raise BundleError("the bundle's profile is not valid: "
                               + "; ".join(errores))
 
         try:
@@ -276,9 +274,9 @@ def import_bundle(origen, profiles_dir, assets_dir, si_existe="fallar") -> dict:
 
         if destino_perfil.exists():
             if si_existe == "fallar":
-                raise BundleError(f"{destino_perfil.name} ya existe en "
-                                  f"{profiles_dir}: importa con 'renombrar' o "
-                                  f"'pisar' si es lo que queres")
+                raise BundleError(f"{destino_perfil.name} already exists in "
+                                  f"{profiles_dir}: import with 'rename' or "
+                                  f"'overwrite' if that is what you want")
             if si_existe == "renombrar":
                 destino_perfil = _nombre_libre(profiles_dir, destino_perfil.name)
 
@@ -315,7 +313,7 @@ def describe_bundle(origen) -> dict:
         with zipfile.ZipFile(origen) as z:
             _revisar_tamanos(z)
             if MANIFIESTO not in z.namelist():
-                raise BundleError(f"{origen.name} no tiene {MANIFIESTO}")
+                raise BundleError(f"{origen.name} has no {MANIFIESTO}")
             return json.loads(z.read(MANIFIESTO))
     except (OSError, zipfile.BadZipFile, ValueError) as e:
-        raise BundleError(f"{origen.name} no es un bundle legible: {e}") from e
+        raise BundleError(f"{origen.name} is not a readable bundle: {e}") from e

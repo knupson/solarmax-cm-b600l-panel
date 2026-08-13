@@ -386,7 +386,7 @@ def test_a_rejected_hot_reload_is_reported_instead_of_silent(tmp_path, capsys):
     # devuelve vacio y concatenar las dos pierde justo el stream que importa.
     capturado = capsys.readouterr()
     salida = capturado.out + capturado.err
-    assert "rechaz" in salida.lower(), salida
+    assert "rejected" in salida.lower(), salida
     assert "no.existe" in salida
     assert eng.state()["profile"] == "Test"      # sigue con el bueno
     assert eng.stats["frames"] == 4              # y sin dejar de dibujar
@@ -401,7 +401,7 @@ def test_the_rejection_is_not_logged_once_per_frame(tmp_path, capsys):
     eng.run()
     capturado = capsys.readouterr()
     salida = capturado.out + capturado.err
-    assert salida.lower().count("rechaz") <= 1, salida
+    assert salida.lower().count("rejected") <= 1, salida
 
 
 def test_dropping_the_link_closes_the_renderer(tmp_path):

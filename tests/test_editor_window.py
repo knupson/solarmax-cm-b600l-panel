@@ -537,7 +537,7 @@ def test_a_bad_bundle_reports_in_the_status_bar_and_keeps_editing(ventana, tmp_p
     antes = ventana.state.path
     ventana._importar_de(falso, profiles_dir=tmp_path / "p", assets_dir=tmp_path / "a")
     assert ventana.state.path == antes
-    assert "no es un bundle" in ventana.estado.cget("text")
+    assert "not a readable bundle" in ventana.estado.cget("text")
 
 
 # --- la barra de acciones tiene que estar en todas las pestañas ---

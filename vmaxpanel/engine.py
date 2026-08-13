@@ -87,8 +87,8 @@ class Engine:
         for w in layout.widgets:
             mid = getattr(w, "metric", None)
             if mid and mid not in servidas:
-                faltan.setdefault(mid, "el perfil la usa y ningun provider de esta "
-                                       "maquina la sirve")
+                faltan.setdefault(mid, "the profile uses it and no provider on this "
+                                       "machine serves it")
         return faltan
 
     def run(self):
@@ -161,7 +161,7 @@ class Engine:
             self.store.reload_if_changed()
             layout = self.store.current
         if layout is None:
-            errs = "; ".join(self.store.errors) or "no hay un layout valido cargado"
+            errs = "; ".join(self.store.errors) or "no valid layout is loaded"
             raise OSError(errs)
         link = self._link_factory()
         try:
@@ -259,8 +259,8 @@ class Engine:
         g = self._link.geometry
         if g.width == g.height:
             return None
-        return (f"panel.rotate {rotate} gira el frame a {g.height}x{g.width}, "
-                f"pero el panel es {g.width}x{g.height}: usa 0 o 180")
+        return (f"panel.rotate {rotate} turns the frame into {g.height}x{g.width}, "
+                f"but the panel is {g.width}x{g.height}: use 0 or 180")
 
     def _refresh_layout(self):
         changed, errors = self.store.reload_if_changed()
@@ -292,10 +292,10 @@ class Engine:
         if firma == getattr(self, "_rechazo_avisado", None):
             return
         self._rechazo_avisado = firma
-        print(f"perfil rechazado, se mantiene el anterior: {'; '.join(errors)}",
+        print(f"profile rejected, keeping the previous one: {'; '.join(errors)}",
               file=sys.stderr)
-        print("  si acabas de agregar una metrica, este proceso arranco antes y "
-              "no la conoce: hay que reiniciar la bandeja.", file=sys.stderr)
+        print("  if you just added a metric, this process started earlier and does "
+              "not know it: the tray has to be restarted.", file=sys.stderr)
 
     def _refresh_sample(self):
         now = self._clock.time()

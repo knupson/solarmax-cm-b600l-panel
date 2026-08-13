@@ -64,7 +64,7 @@ def test_exporting_an_invalid_profile_refuses(tmp_path):
     roto.write_text("{ no", encoding="utf-8")
     with pytest.raises(bundle.BundleError) as e:
         bundle.export_profile(roto, tmp_path / "b.vmaxpanel", assets_dir=tmp_path)
-    assert "perfil" in str(e.value).lower()
+    assert "profile" in str(e.value).lower()
 
 
 def test_a_missing_asset_is_reported_but_does_not_block_the_export(entorno, tmp_path):
@@ -141,7 +141,7 @@ def test_an_entry_that_escapes_the_destination_is_refused(tmp_path):
     destino_a.mkdir()
     with pytest.raises(bundle.BundleError) as e:
         bundle.import_bundle(zip_, destino_p, destino_a)
-    assert "escapa" in str(e.value)
+    assert "escapes" in str(e.value)
     assert not (tmp_path / "escapado.txt").exists()
 
 
@@ -168,7 +168,7 @@ def test_an_oversized_member_is_refused(tmp_path, monkeypatch):
     (tmp_path / "a").mkdir()
     with pytest.raises(bundle.BundleError) as e:
         bundle.import_bundle(zip_, tmp_path / "p", tmp_path / "a")
-    assert "grande" in str(e.value)
+    assert "too large" in str(e.value)
 
 
 def test_importing_does_not_overwrite_by_default(entorno, tmp_path):
@@ -180,7 +180,7 @@ def test_importing_does_not_overwrite_by_default(entorno, tmp_path):
     bundle.export_profile(perfil, zip_, assets_dir=assets)
     with pytest.raises(bundle.BundleError) as e:
         bundle.import_bundle(zip_, perfiles, assets)
-    assert "ya existe" in str(e.value)
+    assert "already exists" in str(e.value)
 
 
 def test_importing_can_rename_instead_of_overwriting(entorno, tmp_path):

@@ -239,12 +239,12 @@ class Tray:
         cls.lpszClassName = "VMaxPanelTray"
         cls.hInstance = kernel32.GetModuleHandleW(None)
         if not user32.RegisterClassW(ctypes.byref(cls)):
-            raise OSError("no se pudo registrar la clase de ventana de la bandeja")
+            raise OSError("could not register the tray window class")
         self._hwnd = user32.CreateWindowExW(0, cls.lpszClassName, "VMax Panel",
                                             0, 0, 0, 0, 0, None, None,
                                             cls.hInstance, None)
         if not self._hwnd:
-            raise OSError("no se pudo crear la ventana oculta de la bandeja")
+            raise OSError("could not create the tray's hidden window")
 
     def _icon(self):
         """El icono propio, y si falta, el genérico de Windows.
@@ -294,7 +294,7 @@ class Tray:
             if shell32.Shell_NotifyIconW(NIM_ADD, ctypes.byref(nid)):
                 self._icono_puesto = True
                 if intento:
-                    print(f"icono de bandeja agregado al intento {intento + 1}")
+                    print(f"tray icon added on attempt {intento + 1}")
                 # Recien despues del NIM_ADD existe la entrada en el registro que hay
                 # que promover: Windows la crea al aceptar el icono, con un nombre de
                 # subclave que calcula el. Por eso no se puede hacer en --instalar.
@@ -310,18 +310,18 @@ class Tray:
                 return
             if espera:
                 time.sleep(espera)
-        print("no se pudo agregar el icono a la bandeja: Windows rechazo el NIM_ADD. "
-              "El panel sigue dibujando, pero sin menu. El editor se abre igual con "
-              "'python -m vmaxpanel.editor', y se baja con "
-              "'python -m vmaxpanel --parar'.", file=sys.stderr)
+        print("could not add the icon to the tray: Windows rejected NIM_ADD. The "
+              "panel keeps drawing, but with no menu. The editor still opens with "
+              "'python -m vmaxpanel.editor', and it comes down with "
+              "'python -m vmaxpanel --stop'.", file=sys.stderr)
 
     def _tip(self) -> str:
         st = self.app.state()
         if st.get("paused"):
-            return "VMax Panel — en pausa"
+            return "VMax Panel — paused"
         if not st.get("running"):
-            return "VMax Panel — detenido"
-        return (f"VMax Panel — {st.get('profile') or 'sin perfil'}, "
+            return "VMax Panel — stopped"
+        return (f"VMax Panel — {st.get('profile') or 'no profile'}, "
                 f"{st.get('frames', 0)} frames")[:127]
 
     def _refresh_tip(self):
@@ -338,9 +338,9 @@ class Tray:
 
         panel = st.get("panel", "desconectado")
         if st.get("paused"):
-            titulo = "En pausa"
+            titulo = "Paused"
         elif not st.get("running"):
-            titulo = "Detenido"
+            titulo = "Stopped"
         else:
             titulo = f"{panel} · {st.get('frames', 0)} frames"
         user32.AppendMenuW(menu, MF_STRING | MF_GRAYED, CMD_STATE, titulo)
@@ -352,8 +352,8 @@ class Tray:
 
         user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, MF_STRING, CMD_TOGGLE,
-                           "Reanudar" if st.get("paused") else "Pausar (suelta el puerto)")
-        user32.AppendMenuW(menu, MF_STRING, CMD_RESTART, "Reiniciar el motor")
+                           "Resume" if st.get("paused") else "Pause (releases the port)")
+        user32.AppendMenuW(menu, MF_STRING, CMD_RESTART, "Restart the engine")
 
         # Submenu de brillo: el motor lo reaplica en cada recarga, asi que no
         # necesita reiniciar nada.
@@ -361,7 +361,7 @@ class Tray:
         for cmd, etiqueta, actual in self._brightness_entries():
             user32.AppendMenuW(subb, MF_STRING | (MF_CHECKED if actual else 0),
                                cmd, etiqueta)
-        user32.AppendMenuW(menu, MF_STRING | MF_POPUP, subb, "Brillo")
+        user32.AppendMenuW(menu, MF_STRING | MF_POPUP, subb, "Brightness")
 
         # Submenu de perfiles: es lo primero que alguien quiere cambiar.
         subp = user32.CreatePopupMenu()
@@ -370,10 +370,10 @@ class Tray:
                                cmd, nombre)
         if self._editor_abierto():
             user32.AppendMenuW(menu, MF_STRING | MF_GRAYED, 0,
-                               "Perfil (cerrá el editor primero)")
+                               "Profile (close the editor first)")
             user32.DestroyMenu(subp)
         else:
-            user32.AppendMenuW(menu, MF_STRING | MF_POPUP, subp, "Perfil")
+            user32.AppendMenuW(menu, MF_STRING | MF_POPUP, subp, "Profile")
 
         # Submenu de fps. El panel refresca a 60 Hz; por encima descarta, asi
         # que 60 es el tope y el costo de cada opcion va en su etiqueta.
@@ -385,20 +385,20 @@ class Tray:
         # mismo perfil y el ultimo en guardar se lleva puesto al otro.
         if self._editor_abierto():
             user32.AppendMenuW(menu, MF_STRING | MF_GRAYED, 0,
-                               "Cuadros por segundo (cerra el editor primero)")
+                               "Frames per second (close the editor first)")
             user32.DestroyMenu(sub)
         else:
             user32.AppendMenuW(menu, MF_STRING | MF_POPUP, sub,
                                "Cuadros por segundo")
         user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
-        user32.AppendMenuW(menu, MF_STRING, CMD_EDITOR, "Editor de layout…")
-        user32.AppendMenuW(menu, MF_STRING, CMD_PROFILE, "Abrir el perfil (JSON)")
-        user32.AppendMenuW(menu, MF_STRING, CMD_EXPORT, "Exportar el perfil…")
+        user32.AppendMenuW(menu, MF_STRING, CMD_EDITOR, "Layout editor…")
+        user32.AppendMenuW(menu, MF_STRING, CMD_PROFILE, "Open the profile (JSON)")
+        user32.AppendMenuW(menu, MF_STRING, CMD_EXPORT, "Export the profile…")
         flags = MF_STRING if (self.log_path and Path(self.log_path).exists()) else \
             MF_STRING | MF_GRAYED
-        user32.AppendMenuW(menu, flags, CMD_LOG, "Ver el log")
+        user32.AppendMenuW(menu, flags, CMD_LOG, "View the log")
         user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
-        user32.AppendMenuW(menu, MF_STRING, CMD_QUIT, "Salir")
+        user32.AppendMenuW(menu, MF_STRING, CMD_QUIT, "Exit")
         return menu
 
     def _show_menu(self):
@@ -434,7 +434,7 @@ class Tray:
         lineas = [f"⚠ {p[:self.ANCHO_LINEA]}" for p in problemas[:self.MAX_PROBLEMAS]]
         resto = len(problemas) - self.MAX_PROBLEMAS
         if resto > 0:
-            lineas.append(f"… y {resto} mas (ver el log)")
+            lineas.append(f"… and {resto} more (see the log)")
         return lineas
 
     def _brightness_entries(self):
@@ -579,8 +579,8 @@ class Tray:
         # que confirma que la bandeja llego a levantar el motor, y con que
         # metricas se quedo sin servir.
         st = self.app.state()
-        print(f"bandeja arriba (hwnd={self._hwnd}); perfil {st.get('profile')!r}; "
-              f"metricas no disponibles: {sorted(st.get('unavailable') or {})}")
+        print(f"tray up (hwnd={self._hwnd}); profile {st.get('profile')!r}; "
+              f"unavailable metrics: {sorted(st.get('unavailable') or {})}")
         try:
             msg = wintypes.MSG()
             while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:

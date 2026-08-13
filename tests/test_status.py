@@ -225,8 +225,8 @@ def test_a_status_file_that_cannot_be_written_is_reported_once(tmp_path, capsys)
     finally:
         app.stop()
     salida = capsys.readouterr().err
-    assert "no se pudo publicar" in salida, "no aviso que no podia escribir"
-    assert salida.count("no se pudo publicar") == 1, "lo repitio en cada latido"
+    assert "could not publish" in salida, "no aviso que no podia escribir"
+    assert salida.count("could not publish") == 1, "lo repitio en cada latido"
 
 
 def test_the_fps_is_shown_without_a_pointless_decimal(archivo):
