@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 
+import pytest
 from PIL import Image
 
 from vmaxpanel.layout import model
@@ -190,6 +191,16 @@ def test_buscar_ffmpeg_returns_none_when_there_is_none(tmp_path, monkeypatch):
     assert buscar_ffmpeg() is None
 
 
+# Los dos tests que siguen necesitan ffmpeg DE VERDAD: lo que prueban es que el
+# motivo que ffmpeg escribe en stderr llega al aviso. Sin ffmpeg el aviso correcto
+# es otro -- "falta ffmpeg" -- y afirmar sobre el primero seria afirmar sobre una
+# maquina en particular. Los cazo el CI, que corre en un Windows sin ffmpeg.
+necesita_ffmpeg = pytest.mark.skipif(
+    buscar_ffmpeg() is None,
+    reason="hace falta ffmpeg instalado: prueban el texto que ffmpeg da en stderr")
+
+
+@necesita_ffmpeg
 def test_a_file_ffmpeg_cannot_open_says_so_instead_of_that_it_ended(tmp_path):
     """ffmpeg contra un archivo que no existe (o que no es video) cierra stdout de
     entrada, y eso se leia como "el video termino". Manda al usuario a mirar la
@@ -208,6 +219,7 @@ def test_a_file_ffmpeg_cannot_open_says_so_instead_of_that_it_ended(tmp_path):
     assert "termino" not in aviso
 
 
+@necesita_ffmpeg
 def test_the_reason_ffmpeg_gives_is_included(tmp_path):
     """El texto de ffmpeg es lo unico que distingue "no existe" de "no es un video"
     de "falta el codec". Sin eso el aviso es generico y no lleva a ninguna parte."""

@@ -33,6 +33,16 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
 
+      # ffmpeg es OPCIONAL para el proyecto, pero dos tests prueban el texto que
+      # ffmpeg escribe en stderr y sin el binario no tienen nada que mirar: se
+      # saltean solos. Se instala para que en CI se corran de verdad.
+      # continue-on-error a proposito: si choco falla, los tests se saltean y la
+      # corrida sigue siendo valida. Que se caiga el build por una dependencia
+      # declarada opcional seria mentir sobre lo que el proyecto necesita.
+      - name: Instalar ffmpeg (opcional)
+        continue-on-error: true
+        run: choco install ffmpeg -y --no-progress
+
       - name: Correr la suite
         run: python -m pytest -q
 

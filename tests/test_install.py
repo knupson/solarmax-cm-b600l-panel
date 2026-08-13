@@ -385,7 +385,7 @@ def test_the_sensors_check_lists_what_is_lost_without_it(perfil, monkeypatch):
 
 
 def test_the_task_gets_an_absolute_profile_path(tmp_path, monkeypatch):
-    """La tarea guardaba la ruta tal cual la escribio el usuario. Con
+    r"""La tarea guardaba la ruta tal cual la escribio el usuario. Con
     `--instalar --profile vmaxpanel\profiles\apex.json` eso queda RELATIVO en el XML, y
     funciona solo porque el WorkingDirectory de la tarea coincide de casualidad. Al
     logon, Windows la resuelve contra ese directorio: instalar desde otra carpeta -- o
