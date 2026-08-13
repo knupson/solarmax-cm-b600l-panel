@@ -353,11 +353,11 @@ def test_their_catalogs_use_friendly_names_and_groups():
     cat = {**cpu.catalog(), **mobo.catalog()}
     grupos = {**cpu.groups(), **mobo.groups()}
     assert "1" in cat["core.1.temp"].label
-    assert grupos["core.1.temp"] == "Núcleos de CPU"
-    assert grupos["fan.1.rpm"] == "Ventiladores"
+    assert grupos["core.1.temp"] == "CPU cores"
+    assert grupos["fan.1.rpm"] == "Fans"
     # el fan del CPU se identifica, no queda como "Fan 1" a secas
     assert "CPU" in cat["cpu.fan"].label.upper()
-    assert grupos["mb.temp.0"] == "Placa madre"
+    assert grupos["mb.temp.0"] == "Motherboard"
 
 
 def test_a_machine_without_these_sources_reports_why():
