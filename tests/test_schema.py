@@ -101,12 +101,12 @@ def test_format_must_have_exactly_one_field():
              "font": "mono-14", "color": "#FFFFFF", "format": f}))
 
     assert fmt("{:.1f}%") == []
-    assert any("format" in e for e in fmt("sin campos"))
+    assert any("format" in e for e in fmt("no fields"))
     assert any("format" in e for e in fmt("{:.0f} {:.0f}"))
     assert any("format" in e for e in fmt("{load}"))
-    # "{0!r:>{1}}" reporta un solo campo de nivel superior para
-    # Formatter().parse(), pero anida un segundo campo en el format_spec que
-    # revienta en .format(valor) con un solo argumento posicional.
+    # "{0!r:>{1}}" reports a single top-level field to Formatter().parse(), but it
+    # nests a second field inside the format_spec that blows up in .format(value)
+    # with a single positional argument.
     assert any("format" in e for e in fmt("{0!r:>{1}}"))
 
 
@@ -127,8 +127,8 @@ def test_asset_paths_cannot_escape_the_assets_dir():
 
 
 def test_asset_paths_cannot_reveal_a_drive_letter_via_normalization():
-    # un ".." de mas puede consumirse contra un segmento real anterior y
-    # dejar una ruta absoluta de Windows recien expuesta tras normalizar.
+    # A stray ".." can be consumed against a real preceding segment and leave a
+    # Windows absolute path exposed only after normalising.
     for bad in ("a/../C:/Windows/win.ini", "x/..\\C:\\Windows\\win.ini",
                 "a/b/../../C:/x.png"):
         assert schema.safe_asset_path(bad) is None, bad
@@ -203,11 +203,11 @@ def test_humanize_must_be_a_known_mode():
 
 
 def test_format_with_a_suffix_is_ignored_by_humanize_and_rejected():
-    """humanize reemplaza el formato entero (widgets.format_value lo aplica
-    ANTES de mirar w.format), asi que un sufijo en format() nunca aparece en
-    pantalla. Sin este chequeo, alguien que escriba format="{} Mbps" con
-    humanize="rate" nunca ve "Mbps" en el panel y no hay ningun aviso de por
-    que -- el mismo tipo de campo mintiendo en silencio que este proyecto ya
+    """humanize replaces the whole format (widgets.format_value applies it BEFORE
+    looking at w.format), so a suffix in format() never appears on screen. Without
+    this check, somebody writing format="{} Mbps" with humanize="rate" never sees
+    "Mbps" on the panel and there is no hint as to why -- the same kind of field
+    lying silently that this project already
     evita en otros lados (ver _range() en widgets.py)."""
     def check(fmt):
         return schema.validate(with_widget(
@@ -257,8 +257,8 @@ def test_rect_requires_w_and_h():
 
 
 def test_rect_without_fill_or_stroke_is_rejected():
-    """Un rect sin ninguno de los dos no dibuja nada y no habria como
-    notarlo mirando el panel."""
+    """A rect with neither draws nothing, and there would be no way to notice by
+    looking at the panel."""
     r = dict(RECT)
     del r["fill"]
     errs = schema.validate(with_widget(r))
@@ -286,20 +286,20 @@ def test_rect_rejects_an_unknown_key():
 
 
 def test_rect_rejects_a_stroke_width_below_one():
-    """El render clampea a 1 px, asi que un 0 escrito en el layout se
-    dibujaria como 1 sin que nada avise de la diferencia."""
+    """The render clamps to 1 px, so a 0 written in the layout would be drawn as 1
+    with nothing pointing out the difference."""
     errs = schema.validate(rect(stroke="#FFFFFF", stroke_width=0))
     assert any("stroke_width" in e for e in errs)
 
 
-# --- campos que el validador dejaba pasar sin chequear el tipo ---
+# --- fields the validator used to let through with no type check ---
 #
 # Todos estos daban validate() == [] y despues TypeError dentro de
-# Renderer.frame(). Engine.run() captura solo (OSError, PanelNotFound) --
-# a proposito, ver el comentario de engine.py -- asi que el error se
-# escapaba del loop y el daemon moria. Por hot-reload es peor: el layout
-# malo pasa la validacion y REEMPLAZA al bueno, asi que no queda a que
-# volver, en contra del invariante "un JSON roto no apaga el panel".
+# Renderer.frame(). Engine.run() only catches (OSError, PanelNotFound) -- on
+# purpose, see the comment in engine.py -- so the error escaped the loop and the
+# engine died. With hot reload it is worse: the bad layout passes validation and
+# REPLACES the good one, so there is nothing left to fall back to, against the
+# invariant "a broken JSON does not blank the panel".
 
 def bar(**changes):
     b = {"id": "b", "type": "bar", "metric": "cpu.load", "x": 24, "y": 316,
@@ -314,8 +314,8 @@ def test_bar_rejects_a_non_numeric_min_or_max():
 
 
 def test_bar_rejects_a_max_that_is_not_above_min():
-    """hi <= lo hace que _fraction() devuelva None y la barra quede vacia
-    para siempre, sin ningun aviso."""
+    """hi <= lo makes _fraction() return None and the bar stays empty forever, with
+    no warning at all."""
     assert any("max" in e for e in schema.validate(bar(min=80, max=20)))
 
 
@@ -335,15 +335,15 @@ def test_label_rejects_a_non_string_text():
 
 
 def test_a_non_string_font_alias_is_rejected():
-    """El alias solo se buscaba en la tabla de fuentes cuando ya era str."""
+    """The alias was only looked up in the fonts table when it was already a str."""
     lbl = {"id": "l", "type": "label", "text": "CPU", "x": 24, "y": 198,
            "font": 3, "color": "#FFFFFF"}
     assert any("font" in e for e in schema.validate(with_widget(lbl)))
 
 
 def test_graph_rejects_samples_below_one():
-    """series[-0:] es series[0:]: samples=0 grafica TODO el historial en vez
-    de nada, y un negativo corta por el frente."""
+    """series[-0:] is series[0:]: samples=0 plots the WHOLE history instead of none,
+    and a negative slices from the front."""
     g = {"id": "g", "type": "graph", "metric": "cpu.load", "x": 10, "y": 10,
          "w": 200, "h": 60, "color": "#3987E5"}
     assert any("samples" in e for e in schema.validate(with_widget({**g, "samples": 0})))
@@ -352,8 +352,8 @@ def test_graph_rejects_samples_below_one():
 
 
 def test_fps_accepts_up_to_the_panel_refresh_rate():
-    """El panel refresca a 60 Hz (medido por el usuario). El tope de 30 era un
-    numero mio de cuando no se sabia el refresco real."""
+    """The panel refreshes at 60 Hz. The old ceiling of 30 was a guess from before
+    the real refresh rate was known."""
     def con_fps(v):
         return broken(panel={"rotate": 180, "brightness": 100, "fps": v,
                              "jpeg_quality": 82})
@@ -361,8 +361,8 @@ def test_fps_accepts_up_to_the_panel_refresh_rate():
     assert schema.validate(con_fps(60)) == []
     assert schema.validate(con_fps(30)) == []
     assert schema.validate(con_fps(0.5)) == []
-    # Por encima del refresco del panel los frames se descartan: es CPU
-    # quemada al vacio, asi que se rechaza en vez de dejarlo pasar.
+    # Above the panel's refresh rate the frames are discarded: that is CPU burned
+    # into the void, so it is rejected rather than let through.
     assert any("fps" in e for e in schema.validate(con_fps(61)))
     assert any("fps" in e for e in schema.validate(con_fps(120)))
     assert any("fps" in e for e in schema.validate(con_fps(0)))
@@ -393,7 +393,7 @@ def test_procedural_needs_a_known_generator():
 
 
 def test_procedural_needs_stops_like_a_gradient():
-    """Los dos generadores parten del gradiente: sin paradas no hay nada que
+    """Both generators start from the gradient: with no stops there is nothing to
     animar."""
     errs = schema.validate(con_fondo({"type": "procedural", "name": "scroll"}))
     assert any("stops" in e for e in errs)
@@ -427,9 +427,9 @@ def test_sequence_rejects_a_path_outside_the_assets_dir():
 
 def test_reserved_device_names_are_refused_as_asset_paths():
     """CON, NUL, COM1..COM9, LPT1.. y PRN son dispositivos, no archivos: en
-    Windows `open("CON")` abre la consola y una lectura puede quedarse
-    esperando para siempre. No es un escape del directorio, pero cuelga el
-    hilo de render, y con las secuencias de fondo esa ruta se abre de verdad.
+    On Windows `open("CON")` opens the console and a read can block forever. It is
+    not an escape from the directory, but it hangs the render thread, and with
+    sequence backgrounds that path is really opened.
     """
     for nombre in ("CON", "con", "NUL", "PRN", "AUX", "COM1", "com9", "LPT1",
                    "CON.png", "fondos/NUL", "NUL.jpg", "COM1.txt"):
@@ -437,16 +437,16 @@ def test_reserved_device_names_are_refused_as_asset_paths():
 
 
 def test_normal_names_that_only_start_like_a_device_are_allowed():
-    """CONSOLA no es CON: un prefijo no puede descartar un nombre legitimo."""
+    """CONSOLAS is not CON: a prefix must not rule out a legitimate name."""
     for nombre in ("consola.ttf", "CONSOLAS.png", "nulo.png", "com.png",
                    "auxiliar/fondo.png", "printer.png", "lpt.png"):
         assert schema.safe_asset_path(nombre) is not None, nombre
 
 
 def test_panel_and_font_keys_come_from_the_model():
-    """Estaban escritos a mano: agregarle un campo a PanelCfg o a Font hacia
-    que el validador empezara a rechazar layouts validos hasta que alguien se
-    acordara de actualizar el set. El chequeo de widgets ya se derivaba de
+    """They used to be written by hand: adding a field to PanelCfg or Font made the
+    validator start rejecting valid layouts until somebody remembered to update the
+    set. The widget check already derived from
     __dataclass_fields__; esto lo iguala."""
     from vmaxpanel.layout.model import Font, PanelCfg
     assert schema.PANEL_KEYS == set(PanelCfg.__dataclass_fields__)
@@ -454,18 +454,18 @@ def test_panel_and_font_keys_come_from_the_model():
 
 
 def test_an_unknown_widget_type_still_reports_its_bad_coordinates():
-    """El early return por tipo desconocido se saltaba el chequeo de x/y, asi
-    que un widget con las dos cosas mal solo reportaba una."""
+    """The early return on an unknown type skipped the x/y check, so a widget with
+    both things wrong only reported one."""
     errs = schema.validate(with_widget({"id": "raro", "type": "inventado",
-                                        "x": "aca", "y": None}))
+                                        "x": "here", "y": None}))
     assert any("unknown type" in e for e in errs)
     assert any("x must be an integer" in e for e in errs)
     assert any("y must be an integer" in e for e in errs)
 
 
 def test_a_missing_required_field_is_named_precisely():
-    """El test original preguntaba si la letra "w" aparecia en el mensaje, que
-    matchea cualquier palabra que la contenga."""
+    """The original test asked whether the letter "w" appeared in the message, which
+    matches any word containing it."""
     b = {"id": "b", "type": "bar", "metric": "cpu.load", "x": 1, "y": 1, "h": 4}
     errs = schema.validate(with_widget(b))
     assert any("required field 'w' is missing" in e for e in errs)
@@ -477,8 +477,8 @@ def test_a_missing_required_field_is_named_precisely():
 
 
 def test_a_font_can_declare_fallbacks():
-    """Un perfil que se comparte nombra fuentes que la otra maquina puede no tener.
-    La cadena la declara el perfil porque solo su autor sabe con que se parece."""
+    """A shared profile names fonts the other machine may not have. The chain is
+    declared by the profile because only its author knows what looks like what."""
     raw = copy.deepcopy(MINIMAL)
     raw["fonts"]["mono-14"]["fallbacks"] = ["Cascadia Mono", "Courier New"]
     assert schema.validate(raw) == []

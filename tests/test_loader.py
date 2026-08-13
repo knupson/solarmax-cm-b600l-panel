@@ -54,7 +54,7 @@ def test_store_keeps_previous_layout_when_reload_fails(tmp_path):
     changed, errors = store.reload_if_changed()
     assert changed is False
     assert errors
-    assert store.current is good        # el panel sigue mostrando el layout bueno
+    assert store.current is good        # the panel keeps showing the good layout
 
 
 def test_store_reloads_when_the_file_changes(tmp_path):
@@ -80,9 +80,9 @@ def test_store_on_missing_file_reports_error_without_raising(tmp_path):
 
 
 def test_rule_thresholds_roundtrip_across_magnitudes(tmp_path):
-    # :g (la version original) pasa a notacion cientifica desde 1e6, que
+    # :g (the original version) goes scientific from 1e6, which
     # schema._RULE_RE no reconoce. Cubre grande (>=1e6), fraccionario chico,
-    # negativo y el caso ordinario ya cubierto en otro test.
+    # negative, and the ordinary case already covered by another test.
     raw = json.loads(json.dumps(MINIMAL))
     raw["widgets"][1]["rules"] = [
         {"when": "> 1234567", "color": "#FF4444"},
@@ -97,9 +97,9 @@ def test_rule_thresholds_roundtrip_across_magnitudes(tmp_path):
 
 
 def test_store_recovers_after_user_fixes_the_file(tmp_path):
-    # El caso de uso real de hot-reload: el usuario tipea mal, el panel se
-    # queda con el layout bueno, el usuario corrige el typo y el panel
-    # levanta el archivo corregido en la siguiente pasada de polling.
+    # The real hot-reload use case: the user mistypes, the panel keeps the good
+    # layout, the user fixes the typo and the panel picks the corrected file up on
+    # the next polling pass.
     path = write(tmp_path, MINIMAL)
     store = loader.ProfileStore(path)
     store.load_now()
@@ -117,10 +117,9 @@ def test_store_recovers_after_user_fixes_the_file(tmp_path):
 
 
 def test_the_shipped_profile_survives_a_save_load_roundtrip(tmp_path):
-    """El editor de fase 3 guarda con loader.save, asi que un layout que
-    save() emite y load() rechaza es un archivo que el usuario no puede
-    volver a abrir. MINIMAL no cubre esto: no tiene los campos opcionales
-    que default a None."""
+    """The editor saves through loader.save, so a layout that save() emits and
+    load() rejects is a file the user cannot reopen. MINIMAL does not cover this: it
+    has none of the optional fields that default to None."""
     lay = loader.load(Path("vmaxpanel/profiles/vitals.json"))
     path = tmp_path / "roundtrip.json"
     loader.save(lay, path)
@@ -129,8 +128,8 @@ def test_the_shipped_profile_survives_a_save_load_roundtrip(tmp_path):
 
 
 def test_optional_fields_that_default_to_none_are_not_emitted(tmp_path):
-    """Un rect con fill y sin stroke serializaba "stroke": null, y null no
-    es un color valido. Mismo problema con min/max de bar/arc/graph."""
+    """A rect with fill and no stroke serialised "stroke": null, and null is not a
+    valid colour. Same problem with min/max on bar/arc/graph."""
     raw = json.loads(json.dumps(MINIMAL))
     raw["widgets"].append({"id": "sep", "type": "rect", "x": 24, "y": 164,
                            "w": 272, "h": 1, "fill": "#242834"})
@@ -144,11 +143,10 @@ def test_optional_fields_that_default_to_none_are_not_emitted(tmp_path):
 
 
 def test_reload_detects_a_change_that_lands_in_the_same_filesystem_tick(tmp_path):
-    """El criterio era solo st_mtime_ns. Dos escrituras en el mismo tick del
-    filesystem dejaban el mtime igual y la segunda se perdia: el editor de
-    fase 3 guarda dos veces seguidas y el panel se queda con la primera. Es
-    el flake de test_store_recovers_after_user_fixes_the_file y tambien un
-    agujero real del hot-reload."""
+    """The rule used to be st_mtime_ns alone. Two writes in the same filesystem tick
+    left the mtime unchanged and the second was lost: the editor saves twice in a
+    row and the panel keeps the first. It is the flake in
+    test_store_recovers_after_user_fixes_the_file and also a real hot-reload hole."""
     import os
     path = write(tmp_path, MINIMAL)
     store = loader.ProfileStore(path)
@@ -158,7 +156,7 @@ def test_reload_detects_a_change_that_lands_in_the_same_filesystem_tick(tmp_path
     raw = json.loads(json.dumps(MINIMAL))
     raw["name"] = "Editado"
     path.write_text(json.dumps(raw), encoding="utf-8")
-    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))   # mismo tick
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))   # the same tick
 
     changed, errors = store.reload_if_changed()
     assert changed is True and errors == []
@@ -174,8 +172,8 @@ def test_reload_reports_no_change_when_the_file_is_untouched(tmp_path):
 
 
 def test_an_animated_background_survives_the_roundtrip(tmp_path):
-    """El editor de fase 3 guarda con loader.save: un fondo animado que se
-    escribe y no se puede volver a abrir es trabajo perdido."""
+    """The editor saves through loader.save: an animated background that is written
+    and cannot be reopened is lost work."""
     raw = json.loads(json.dumps(MINIMAL))
     raw["background"] = {"type": "procedural", "name": "pulse", "period": 8,
                          "stops": [{"at": 0.0, "color": "#101725"},
@@ -189,10 +187,10 @@ def test_an_animated_background_survives_the_roundtrip(tmp_path):
 
 
 def test_two_writers_do_not_share_the_temp_file(tmp_path, monkeypatch):
-    """El temporal tenia nombre fijo (`<perfil>.tmp`), asi que dos escritores
-    en paralelo -- la bandeja cambiando el fps y el editor guardando -- se
-    pisaban el temporal y uno de los dos podia escribir un archivo mezclado.
-    Ahora cada escritura usa su propio temporal."""
+    """The temp file used to have a fixed name (`<profile>.tmp`), so two writers in
+    parallel -- the tray changing the fps and the editor saving -- clobbered each
+    other's temp file and one of them could write a mixed file. Now each write uses
+    its own temp file."""
     path = tmp_path / "p.json"
     path.write_text(json.dumps(MINIMAL), encoding="utf-8")
     vistos = []
@@ -205,14 +203,15 @@ def test_two_writers_do_not_share_the_temp_file(tmp_path, monkeypatch):
     monkeypatch.setattr(loader.os, "replace", espiar)
     loader.save_raw(json.loads(json.dumps(MINIMAL)), path)
     loader.save_raw(json.loads(json.dumps(MINIMAL)), path)
-    assert len(set(vistos)) == 2, f"reuso el mismo temporal: {vistos}"
-    assert not list(tmp_path.glob("*.tmp*")), "quedo un temporal sin borrar"
+    assert len(set(vistos)) == 2, f"it reused the same temp file: {vistos}"
+    assert not list(tmp_path.glob("*.tmp*")), "a temp file was left behind"
 
 
 def test_every_widget_type_survives_a_roundtrip(tmp_path):
-    """arc, graph e image no los round-trippeaba ningun test: el reviewer los
-    verifico a mano. Un tipo que save() escribe y load() rechaza es trabajo
-    perdido, y ya paso dos veces (rect con stroke null, y el fondo procedural)."""
+    """arc, graph and image were round-tripped by no test: they were checked by
+    hand. A type that save() writes and load() rejects is lost work, and it has
+    already happened twice (a rect with a null stroke, and the procedural
+    background)."""
     raw = json.loads(json.dumps(MINIMAL))
     raw["widgets"] += [
         {"id": "a", "type": "arc", "metric": "cpu.load", "x": 100, "y": 100,
@@ -255,8 +254,9 @@ def test_every_background_type_survives_a_roundtrip(tmp_path):
 
 
 def test_font_fallbacks_survive_a_save(tmp_path):
-    """El editor guarda con dumps_layout: si la cadena no se serializa, guardar desde
-    el editor la borra en silencio y el perfil deja de ser portable sin que nadie lo
+    """The editor saves through dumps_layout: if the chain is not serialised, saving
+    from the editor deletes it silently and the profile stops being portable without
+    anybody
     note."""
     raw = copy.deepcopy(MINIMAL)
     raw["fonts"]["mono-14"]["fallbacks"] = ["Cascadia Mono", "Courier New"]
@@ -268,17 +268,18 @@ def test_font_fallbacks_survive_a_save(tmp_path):
 
 
 def test_to_dict_keeps_the_fallback_chain(tmp_path):
-    """to_dict va del MODELO al dict, que es otro camino que el de save_raw: si acá se
-    pierde, cualquier herramienta que serialice desde el modelo borra la cadena."""
+    """to_dict goes from the MODEL to a dict, which is a different path from
+    save_raw: if it is lost here, any tool serialising from the model deletes the
+    chain."""
     raw = copy.deepcopy(MINIMAL)
     raw["fonts"]["mono-14"]["fallbacks"] = ["Courier New"]
     d = loader.to_dict(schema.build(raw))
     assert d["fonts"]["mono-14"]["fallbacks"] == ["Courier New"]
-    assert "fallbacks" not in d["fonts"]["mono-bold-60"]     # sin cadena, sin clave
+    assert "fallbacks" not in d["fonts"]["mono-bold-60"]     # no chain, no key
     assert schema.validate(d) == []
 
 
-# --- round-trip de todos los tipos, no de una muestra ---
+# --- round-trip of every type, not of a sample ---
 
 
 def _con(widgets=None, background=None):
@@ -291,9 +292,9 @@ def _con(widgets=None, background=None):
 
 
 def test_every_widget_type_survives_a_round_trip(tmp_path):
-    """arc, graph e image no los round-trippeaba ningun test: el reviewer de fase 1 los
-    verifico A MANO y quedo anotado como minor. Un campo que se pierda al guardar
-    (paso: _is_default descartaba el color de un text) no lo nota nadie hasta que el
+    """arc, graph and image were round-tripped by no test: they were checked BY HAND.
+    A field lost on save (it happened: _is_default discarded a text's colour) is
+    noticed by nobody until the
     perfil vuelve distinto."""
     widgets = [
         {"id": "a", "type": "arc", "metric": "cpu.load", "x": 40, "y": 40, "r": 30,
@@ -340,11 +341,12 @@ def test_every_background_type_survives_a_round_trip(tmp_path):
         vuelta = json.loads(p.read_text(encoding="utf-8"))
         assert vuelta["background"] == fondo, fondo["type"]
 
-        # Por el modelo -- el otro camino de serializacion -- el invariante es NO
-        # PERDER nada y seguir siendo valido, no "no agregar nada": to_dict sale del
-        # modelo, que tiene defaults (period=6.0), y no puede distinguir "ausente" de
+        # Through the model -- the other serialisation path -- the invariant is to
+        # LOSE nothing and stay valid, not "add nothing": to_dict comes from the
+        # model, which has defaults (period=6.0), and cannot tell "absent" from
         # "igual al default". Perder un campo es un bug; emitir un default explicito
-        # es ruido, y el JSON que el usuario abre lo escribe save_raw, no este camino.
+        # is noise, and the JSON the user opens is written by save_raw, not by this
+        # path.
         del_modelo = loader.to_dict(schema.build(raw))["background"]
         for k, v in fondo.items():
             assert del_modelo[k] == v, f"{fondo['type']}.{k} se perdio o cambio"
