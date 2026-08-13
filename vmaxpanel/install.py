@@ -53,7 +53,7 @@ class Chequeo:
 
     @property
     def marca(self) -> str:
-        return {True: "ok", False: "FALTA", None: "opcional"}[self.ok]
+        return {True: "ok", False: "MISSING", None: "optional"}[self.ok]
 
 
 def bloquea(checks) -> bool:
@@ -71,7 +71,7 @@ def _modulo(paquete, importable, para) -> Chequeo:
     try:
         mod = __import__(importable)
     except ImportError:
-        return Chequeo(paquete, False, f"falta: pip install {paquete} ({para})")
+        return Chequeo(paquete, False, f"missing: pip install {paquete} ({para})")
     v = getattr(mod, "__version__", "?")
     return Chequeo(paquete, True, f"{v} - {para}")
 
@@ -80,16 +80,16 @@ def _modulo(paquete, importable, para) -> Chequeo:
 # (MPL-2.0 y MIT) que este repo no redistribuye. Decir "falta X" sin decir de donde se
 # saca deja al que recibe el repo en el mismo lugar que estaba.
 COMO_SENSORES = (
-    "opcional. Sin esto el panel anda igual (reloj, carga de CPU, temp y VCORE por "
-    "GSA1, RAM, discos, procesos) pero NO hay GPU, temperatura por nucleo, potencia "
-    "del paquete, temperatura de discos ni RPM de fans. Para tenerlos: baja "
-    "LibreHardwareMonitor de https://github.com/LibreHardwareMonitor/"
-    "LibreHardwareMonitor/releases y copia LibreHardwareMonitorLib.dll Y HidSharp.dll "
-    "(las dos: sin HidSharp al lado, Open() falla) a vmaxpanel/lib/")
+    "optional. Without it the panel still works (clock, CPU load, temperature and "
+    "VCORE via GSA1, RAM, disks, processes) but there is NO GPU, no per-core "
+    "temperature, no package power, no disk temperatures and no fan RPM. To get "
+    "them: download LibreHardwareMonitor from https://github.com/LibreHardwareMonitor/"
+    "LibreHardwareMonitor/releases and copy LibreHardwareMonitorLib.dll AND "
+    "HidSharp.dll (both: without HidSharp beside it, Open() fails) into vmaxpanel/lib/")
 
-EN_USO = ("el puerto esta en uso: ya lo tiene otro proceso (la bandeja "
-          "corriendo, o LCD Control). Cerra el que sobre; el panel lo maneja uno "
-          "a la vez.")
+EN_USO = ("the port is in use: another process already has it (the tray running, "
+          "or LCD Control). Close whichever is spare; only one at a time can "
+          "drive the panel.")
 
 # Por texto y no por tipo: pyserial envuelve el error en SerialException -- que es
 # un OSError cualquiera -- y mete el PermissionError original adentro del mensaje.
@@ -116,7 +116,7 @@ def _detectar_panel(port=None):
     link = PanelLink.autodetect(port)
     try:
         link.open()
-        return link.serial_number or "sin numero de serie"
+        return link.serial_number or "no serial number"
     finally:
         link.close()
 
@@ -125,10 +125,10 @@ def diagnosticar(profile_path, port=None) -> list:
     """Todo lo que hace falta para que el panel funcione, en una lista."""
     checks = [
         Chequeo("python", sys.version_info >= (3, 11),
-                f"{sys.version.split()[0]} en {sys.executable}"),
-        _modulo("Pillow", "PIL", "render de los frames"),
-        _modulo("pyserial", "serial", "puerto del panel"),
-        _modulo("psutil", "psutil", "CPU, RAM, red y discos"),
+                f"{sys.version.split()[0]} at {sys.executable}"),
+        _modulo("Pillow", "PIL", "renders the frames"),
+        _modulo("pyserial", "serial", "the panel's port"),
+        _modulo("psutil", "psutil", "CPU, RAM, network and disks"),
     ]
     checks.append(
         # ok None y no False: verificado en un clon limpio del repo -- los DLL estan
@@ -137,23 +137,23 @@ def diagnosticar(profile_path, port=None) -> list:
         # del DLL), RAM, discos con tamanos reales, procesos. Marcarlo FALTA hacia que
         # --instalar se negara a instalar, o sea que el que recibia el repo no podia
         # arrancar NADA por unos sensores opcionales.
-        Chequeo("sensores", True if DLL_SENSORES.exists() else None,
+        Chequeo("sensors", True if DLL_SENSORES.exists() else None,
                 f"{DLL_SENSORES}" if DLL_SENSORES.exists() else COMO_SENSORES))
 
     from .render import video
     ffmpeg = video.buscar_ffmpeg()
     checks.append(Chequeo("ffmpeg", True if ffmpeg else None,
-                          ffmpeg or f"solo para fondos de video. {video.COMO_INSTALAR}"))
+                          ffmpeg or f"only for video backgrounds. {video.COMO_INSTALAR}"))
 
     ruta = Path(profile_path)
     try:
         lay = loader.load(ruta)
-        checks.append(Chequeo("perfil", True,
+        checks.append(Chequeo("profile", True,
                               f"{ruta.name}: {lay.name!r}, {len(lay.widgets)} widgets"))
     except loader.LayoutError as e:
-        checks.append(Chequeo("perfil", False, f"{ruta.name}: {'; '.join(e.errors)}"))
+        checks.append(Chequeo("profile", False, f"{ruta.name}: {'; '.join(e.errors)}"))
     except OSError as e:
-        checks.append(Chequeo("perfil", False, f"no se pudo leer {ruta}: {e}"))
+        checks.append(Chequeo("profile", False, f"could not read {ruta}: {e}"))
 
     try:
         checks.append(Chequeo("panel", True, _detectar_panel(port)))
@@ -161,7 +161,7 @@ def diagnosticar(profile_path, port=None) -> list:
         # ok None y no False: la tarea corre al logon y el motor reintenta la
         # conexion solo, asi que instalar con el panel desenchufado es legitimo.
         detalle = (EN_USO if _puerto_tomado(e) else
-                   f"{e}. La bandeja reintenta sola cuando aparezca.")
+                   f"{e}. The tray keeps retrying until it shows up.")
         checks.append(Chequeo("panel", None, detalle))
     return checks
 
@@ -284,8 +284,8 @@ def instalar(profile_path, runner=None, log=None, port=None) -> tuple:
         lineas.append(f"  [{c.marca:>8}] {c.nombre}: {c.detalle}")
     if bloquea(checks):
         lineas.append("")
-        lineas.append("No se registro nada: primero hay que resolver lo que dice "
-                      "FALTA arriba.")
+        lineas.append("Nothing was registered: resolve whatever says MISSING "
+                      "above first.")
         return 2, lineas
 
     xml = xml_tarea(profile_path, log=log)
@@ -307,19 +307,18 @@ def instalar(profile_path, runner=None, log=None, port=None) -> tuple:
 
     lineas.append("")
     if code == 0:
-        lineas.append(f"Tarea {TAREA} registrada: la bandeja arranca en cada "
-                      f"inicio de sesion.")
-        lineas.append(f"Para arrancarla ahora sin reiniciar sesion: "
+        lineas.append(f"Task {TAREA} registered: the tray starts at every logon.")
+        lineas.append(f"To start it now without logging out: "
                       f"schtasks /Run /TN {TAREA}")
     else:
-        lineas.append(f"schtasks fallo (codigo {code}): {salida.strip()}")
+        lineas.append(f"schtasks failed (code {code}): {salida.strip()}")
         if "denied" in salida.lower() or "denegado" in salida.lower():
             # schtasks dice "Access is denied" y nada mas. La causa es siempre la
             # misma: la tarea corre elevada (ver RunLevel en el XML) y registrar
             # eso pide una consola elevada.
-            lineas.append("La tarea corre elevada, asi que registrarla necesita "
-                          "una consola de administrador: abri PowerShell como "
-                          "administrador y corre lo mismo de nuevo.")
+            lineas.append("The task runs elevated, so registering it needs an "
+                          "administrator console: open PowerShell as "
+                          "administrator and run the same thing again.")
     return code, lineas
 
 
@@ -393,13 +392,13 @@ def parar(runner=None, matar=None, listar=None) -> tuple:
 
     code, salida = runner([_schtasks(), "/End", "/TN", TAREA])
     if code == 0:
-        lineas.append(f"tarea {TAREA} detenida")
+        lineas.append(f"task {TAREA} stopped")
     elif "cannot find" in salida.lower() or "no existe" in salida.lower():
-        lineas.append(f"la tarea {TAREA} no estaba registrada")
+        lineas.append(f"task {TAREA} was not registered")
     else:
         # /End con la tarea registrada pero no corriendo tambien devuelve != 0. No es
         # una falla: el estado final es el que se pidio.
-        lineas.append(f"la tarea {TAREA} no estaba corriendo")
+        lineas.append(f"task {TAREA} was not running")
 
     muertos, opacos, tercos = [], [], []
     for pid, linea in listar():
@@ -413,25 +412,25 @@ def parar(runner=None, matar=None, listar=None) -> tuple:
             continue
         if matar(pid):
             muertos.append(pid)
-            lineas.append(f"  matado {pid}: {linea[:70]}")
+            lineas.append(f"  killed {pid}: {linea[:70]}")
         else:
             tercos.append(pid)
     if muertos:
-        lineas.append(f"{len(muertos)} proceso(s) del panel bajados")
+        lineas.append(f"{len(muertos)} panel process(es) brought down")
     else:
         # "no quedaron" y no "no habia": /End ya se lleva el arbol de la tarea, asi
         # que para cuando se enumera puede no quedar nada. Decir "no habia" suena a
         # que nunca estuvo.
-        lineas.append("no quedaron procesos del panel corriendo "
-                      "(la tarea se lleva los suyos al detenerse)")
+        lineas.append("no panel processes were left running "
+                      "(stopping the task takes its own with it)")
     if tercos:
-        lineas.append(f"no pude matar {', '.join(map(str, tercos))}: corrlo desde una "
-                      f"consola de administrador (la bandeja corre elevada)")
+        lineas.append(f"could not kill {', '.join(map(str, tercos))}: run this from an "
+                      f"administrator console (the tray runs elevated)")
     if opacos:
-        lineas.append(f"hay {len(opacos)} proceso(s) que no puedo inspeccionar "
-                      f"({', '.join(map(str, opacos))}): corrlo desde una consola de "
-                      f"administrador para ver si son del panel")
-    lineas.append(f"para volver a levantarlo: schtasks /Run /TN {TAREA}")
+        lineas.append(f"there are {len(opacos)} process(es) I cannot inspect "
+                      f"({', '.join(map(str, opacos))}): run this from an administrator "
+                      f"console to see whether they belong to the panel")
+    lineas.append(f"to bring it back up: schtasks /Run /TN {TAREA}")
     return 0, lineas
 
 
@@ -440,9 +439,9 @@ def desinstalar(runner=None) -> tuple:
     runner = runner or _correr
     code, salida = runner([_schtasks(), "/Delete", "/TN", TAREA, "/F"])
     if code == 0:
-        return 0, [f"Tarea {TAREA} borrada. El panel ya no arranca solo."]
+        return 0, [f"Task {TAREA} deleted. The panel no longer starts on its own."]
     if "cannot find" in salida.lower() or "no existe" in salida.lower():
         # El estado final es el que el usuario pidio, asi que no es un error:
         # desinstalar dos veces tiene que salir 0 las dos.
-        return 0, [f"La tarea {TAREA} no estaba registrada; no habia nada que borrar."]
-    return code, [f"schtasks fallo (codigo {code}): {salida.strip()}"]
+        return 0, [f"Task {TAREA} was not registered; there was nothing to delete."]
+    return code, [f"schtasks failed (code {code}): {salida.strip()}"]

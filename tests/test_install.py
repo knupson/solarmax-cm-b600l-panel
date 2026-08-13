@@ -53,7 +53,7 @@ def test_an_invalid_profile_blocks_the_install(tmp_path):
     roto = tmp_path / "roto.json"
     roto.write_text("{ no es json", encoding="utf-8")
     checks = install.diagnosticar(roto)
-    perfil_check = next(c for c in checks if c.nombre == "perfil")
+    perfil_check = next(c for c in checks if c.nombre == "profile")
     assert perfil_check.ok is False
     assert install.bloquea(checks)
 
@@ -73,8 +73,8 @@ def test_a_panel_that_is_not_plugged_in_does_not_block(perfil, monkeypatch):
 
 def test_the_diagnosis_reports_the_dependencies_it_found(perfil):
     nombres = [c.nombre for c in install.diagnosticar(perfil)]
-    for esperado in ("python", "Pillow", "pyserial", "psutil", "sensores",
-                     "ffmpeg", "perfil", "panel"):
+    for esperado in ("python", "Pillow", "pyserial", "psutil", "sensors",
+                     "ffmpeg", "profile", "panel"):
         assert esperado in nombres
 
 
@@ -165,7 +165,7 @@ def test_installing_stops_before_touching_the_system_if_a_check_blocks(tmp_path)
     code, lineas = install.instalar(roto, runner=r)
     assert code == 2
     assert r.calls == []                      # no se registro nada
-    assert any("perfil" in l for l in lineas)
+    assert any("profile" in l for l in lineas)
 
 
 def test_a_failing_schtasks_is_reported_not_swallowed(perfil):
@@ -188,7 +188,7 @@ def test_uninstalling_a_task_that_is_not_there_is_not_an_error():
     r = FakeRunner(code=1, salida="ERROR: The system cannot find the file specified.")
     code, lineas = install.desinstalar(runner=r)
     assert code == 0
-    assert any("no estaba" in l for l in lineas)
+    assert any("was not" in l for l in lineas)
 
 
 # --- entrada por linea de comandos ---
@@ -204,7 +204,7 @@ def test_the_cli_diagnoses_without_touching_anything(perfil, capsys, monkeypatch
     salida = capsys.readouterr().out
     assert code == 0
     assert llamadas == []
-    assert "perfil" in salida
+    assert "profile" in salida
 
 
 def test_the_cli_install_flag_reaches_the_installer(perfil, capsys, monkeypatch):
@@ -239,7 +239,7 @@ def test_a_port_already_in_use_says_who_probably_has_it(perfil, monkeypatch):
     monkeypatch.setattr(install, "_detectar_panel", tomado)
     panel = next(c for c in install.diagnosticar(perfil) if c.nombre == "panel")
     assert panel.ok is None
-    assert "en uso" in panel.detalle
+    assert "in use" in panel.detalle
     assert "LCD Control" in panel.detalle
 
 
@@ -253,7 +253,7 @@ def test_a_serial_exception_wrapping_the_permission_error_is_recognized(perfil,
                       "'Acceso denegado.', None, 5)")
     monkeypatch.setattr(install, "_detectar_panel", tomado)
     panel = next(c for c in install.diagnosticar(perfil) if c.nombre == "panel")
-    assert "en uso" in panel.detalle
+    assert "in use" in panel.detalle
 
 
 def test_the_task_runs_elevated(perfil):
@@ -272,7 +272,7 @@ def test_a_denied_registration_says_it_needs_admin(perfil):
     r = FakeRunner(code=1, salida="ERROR: Access is denied.")
     code, lineas = install.instalar(perfil, runner=r)
     assert code == 1
-    assert any("administrador" in l.lower() for l in lineas)
+    assert any("administrator" in l.lower() for l in lineas)
 
 
 # --- bajar el panel ---
@@ -301,8 +301,8 @@ def test_stopping_when_nothing_is_running_is_not_an_error():
     r = FakeRunner(code=1, salida="ERROR: The system cannot find the task specified.")
     code, lineas = install.parar(runner=r, matar=lambda p: True, listar=lambda: [])
     assert code == 0
-    assert any("no quedaron" in l.lower() for l in lineas)
-    assert any("no estaba registrada" in l for l in lineas)
+    assert any("no panel processes" in l.lower() for l in lineas)
+    assert any("was not registered" in l for l in lineas)
 
 
 def test_stopping_does_not_touch_an_unrelated_python():
@@ -336,7 +336,7 @@ def test_a_process_it_cannot_inspect_is_reported_not_ignored():
                                  listar=lambda: [(999, None)])
     assert code == 0
     texto = " ".join(lineas).lower()
-    assert "administrador" in texto
+    assert "administrator" in texto
     assert "999" in texto
 
 
@@ -345,8 +345,8 @@ def test_a_process_it_cannot_kill_is_reported(monkeypatch):
     code, lineas = install.parar(runner=r, matar=lambda p: False,
                                  listar=lambda: [(7, "pythonw.exe -m vmaxpanel.tray")])
     texto = " ".join(lineas).lower()
-    assert "no pude" in texto or "no se pudo" in texto
-    assert "administrador" in texto
+    assert "could not kill" in texto or "cannot inspect" in texto
+    assert "administrator" in texto
 
 
 def test_missing_sensors_dll_limits_but_does_not_block(perfil, monkeypatch):
@@ -359,7 +359,7 @@ def test_missing_sensors_dll_limits_but_does_not_block(perfil, monkeypatch):
     recibia el repo no podia arrancar NADA por unos sensores opcionales."""
     monkeypatch.setattr(install, "DLL_SENSORES", Path("no-existe/LibreHardwareMonitorLib.dll"))
     checks = install.diagnosticar(perfil)
-    sensores = next(c for c in checks if c.nombre == "sensores")
+    sensores = next(c for c in checks if c.nombre == "sensors")
     assert sensores.ok is None, "bloquea la instalacion por algo opcional"
     assert not install.bloquea(checks)
 
@@ -370,7 +370,7 @@ def test_the_sensors_check_says_where_to_get_the_dll(perfil, monkeypatch):
     automatizar (son DLL de terceros que no redistribuimos)."""
     monkeypatch.setattr(install, "DLL_SENSORES", Path("no-existe/LibreHardwareMonitorLib.dll"))
     detalle = next(c for c in install.diagnosticar(perfil)
-                   if c.nombre == "sensores").detalle
+                   if c.nombre == "sensors").detalle
     assert "LibreHardwareMonitor" in detalle
     assert "github" in detalle.lower()
     assert "HidSharp" in detalle, "sin HidSharp al lado, LHM.Open() falla"
@@ -379,8 +379,8 @@ def test_the_sensors_check_says_where_to_get_the_dll(perfil, monkeypatch):
 def test_the_sensors_check_lists_what_is_lost_without_it(perfil, monkeypatch):
     monkeypatch.setattr(install, "DLL_SENSORES", Path("no-existe/x.dll"))
     detalle = next(c for c in install.diagnosticar(perfil)
-                   if c.nombre == "sensores").detalle.lower()
-    for perdido in ("gpu", "nucleo", "rpm"):
+                   if c.nombre == "sensors").detalle.lower()
+    for perdido in ("gpu", "per-core", "rpm"):
         assert perdido in detalle, perdido
 
 
