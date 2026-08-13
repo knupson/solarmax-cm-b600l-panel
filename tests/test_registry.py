@@ -50,10 +50,10 @@ def test_priority_is_independent_of_construction_order():
 
 
 def test_metric_nobody_serves_is_unavailable_with_reason():
-    """El nombre promete un MOTIVO y el test no lo miraba: comprobaba que la metrica
-    no estuviera en resolution() y nada mas. El motivo es lo que el editor y la
-    bandeja muestran, o sea lo unico que el usuario puede leer para entender por que
-    un valor sale en guiones."""
+    """The name promises a REASON and the test did not look at it: it checked that
+    the metric was absent from resolution() and nothing more. The reason is what the
+    editor and the tray show, which is to say the only thing the user can read to
+    understand why a value comes out as dashes."""
     r = Registry([Fake("psutil", ["cpu.load"])])
     sample = r.read()
     assert sample["cpu.load"] == 1.0
@@ -116,7 +116,7 @@ def test_close_closes_every_provider():
 
 
 class TwoWayProvider(Provider):
-    """Sirve las mismas metricas que otro, con prioridad distinta."""
+    """Serves the same metrics as another one, at a different priority."""
 
     def __init__(self, pid, served, sample=None, fail=False):
         self.id = pid
@@ -137,10 +137,10 @@ class TwoWayProvider(Provider):
 
 
 def test_a_failing_owner_falls_back_to_a_lower_priority_provider():
-    """cpu.clock y cpu.name los sirven pdh Y psutil. Cuando pdh fallaba, la
+    """cpu.clock and cpu.name are served by pdh AND psutil. When pdh failed, the
     metrica se marcaba degradada y psutil quedaba salteado por
-    self._resolution.get(mid) != p.id: iba a "--" con un provider vivo al
-    lado que la servia igual."""
+    self._resolution.get(mid) != p.id: it went to "--" with a live provider right
+    beside it serving it perfectly well."""
     pdh = TwoWayProvider("pdh", {"cpu.clock"}, {"cpu.clock": 4080})
     psu = TwoWayProvider("psutil", {"cpu.clock"}, {"cpu.clock": 3200})
     r = Registry([pdh, psu])
@@ -175,9 +175,9 @@ def test_a_metric_with_no_surviving_provider_is_unavailable_with_the_reason():
 
 
 def test_the_registry_aggregates_catalog_and_groups():
-    """El editor pide un solo catalogo, no uno por provider. Y solo de los
-    providers disponibles: ofrecer una metrica que nadie sirve seria invitar
-    al usuario a poner un widget que va a mostrar "--"."""
+    """The editor asks for a single catalogue, not one per provider. And only from
+    the available providers: offering a metric nobody serves would invite the user
+    to place a widget that will show "--"."""
 
     class ConCatalogo(TwoWayProvider):
         def catalog(self):
@@ -202,22 +202,22 @@ def test_the_registry_aggregates_catalog_and_groups():
 
 
 def test_the_catalog_falls_back_to_the_generic_label():
-    """Un provider que no publica catalogo igual tiene que aparecer en el
-    catalogo del registry: la etiqueta sale de metrics.spec_for()."""
+    """A provider that publishes no catalogue still has to appear in the registry's
+    catalogue: the label comes from metrics.spec_for()."""
     r = Registry([TwoWayProvider("pdh", {"cpu.clock"}, {"cpu.clock": 4080})])
     assert r.catalog()["cpu.clock"].label == "CPU clock"
     assert r.groups().get("cpu.clock") == "CPU"
 
 
 def test_the_unavailable_reason_is_the_providers_own_words():
-    """El test original se llamaba "..._with_reason" y solo miraba que la
-    metrica fuera UNAVAILABLE, sin chequear el motivo que promete el nombre."""
+    """The original test was named "..._with_reason" and only checked that the
+    metric was UNAVAILABLE, without checking the reason its name promises."""
 
     class Caido(Provider):
         id = "gsa1"
 
         def probe(self):
-            self.unavailable_reason = "requiere placa Gigabyte con GSA1"
+            self.unavailable_reason = "needs a Gigabyte board with GSA1"
             return False
 
         def metrics(self):
@@ -228,14 +228,15 @@ def test_the_unavailable_reason_is_the_providers_own_words():
 
     r = Registry([Caido()])
     assert r.read()["cpu.temp"] is UNAVAILABLE
-    assert r.unavailable()["cpu.temp"] == "requiere placa Gigabyte con GSA1"
+    assert r.unavailable()["cpu.temp"] == "needs a Gigabyte board with GSA1"
 
 
 def test_a_provider_that_serves_a_metric_keeps_it_out_of_the_unavailable_list():
-    """Lo que SI se sirve no puede aparecer como faltante, o la lista de problemas se
-    vuelve ruido y el usuario deja de leerla. Por lo mismo, unavailable() NO lista
-    todas las metricas sin dueno: en una maquina sin GPU serian 27 lineas para un
-    perfil que no usa ninguna. Eso lo decide el motor, que sabe que usa el layout
+    """What IS served must not appear as missing, or the problem list turns into
+    noise and the user stops reading it. For the same reason, unavailable() does NOT
+    list every ownerless metric: on a machine with no GPU that would be 27 lines for
+    a profile that uses none of them. The engine decides that, because it knows what
+    the layout uses
     (ver Engine._sin_datos)."""
     r = Registry([Fake("psutil", ["cpu.load"])])
     r.read()
@@ -244,10 +245,11 @@ def test_a_provider_that_serves_a_metric_keeps_it_out_of_the_unavailable_list():
 
 
 def test_the_reason_of_a_failing_provider_wins_over_the_generic_one():
-    """Si el provider existe pero no arranco, su motivo concreto ("driver bloqueado",
-    "no hay sidecar") es infinitamente mas util que "ningun provider la sirve"."""
+    """If the provider exists but did not start, its concrete reason ("driver
+    blocked", "no sidecar") is infinitely more useful than "no provider serves
+    it"."""
     p = Fake("gsa1", ["cpu.vcore"], ok=False,
-             reason="WinRing0 esta en la blocklist de Windows")
+             reason="WinRing0 is on the Windows blocklist")
     r = Registry([p])
     r.read()
-    assert r.unavailable()["cpu.vcore"] == "WinRing0 esta en la blocklist de Windows"
+    assert r.unavailable()["cpu.vcore"] == "WinRing0 is on the Windows blocklist"

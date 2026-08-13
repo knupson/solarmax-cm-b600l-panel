@@ -38,28 +38,28 @@ def test_disk_metrics_are_positional():
 
 
 def test_is_metric_rejects_a_non_string_instead_of_raising():
-    """schema.validate() le pasa lo que haya en el JSON. Con un entero,
+    """schema.validate() passes it whatever is in the JSON. With an integer,
     _DISK_RE.match tiraba TypeError y validate() reventaba en vez de
-    devolver la lista de errores: el arranque moria con traceback y un
-    hot-reload se llevaba el loop de render puesto."""
+    returning the list of errors: start-up died with a traceback and a hot reload
+    took the render loop down with it."""
     for bad in (123, None, True, ["cpu.load"], {"a": 1}):
         assert metrics.is_metric(bad) is False
         assert metrics.spec_for(bad) is None
 
 
 def test_mem_speed_is_a_known_metric():
-    """Estaba horneada como label "6000" en el perfil. Una actualizacion de
-    BIOS reseteo el XMP y el numero quedo mintiendo."""
+    """It used to be baked in as a label reading "6000". A BIOS update reset the XMP
+    profile and the number was left lying."""
     assert is_metric("mem.speed")
     spec = metrics.spec_for("mem.speed")
     assert spec.kind == "number" and spec.unit == "MT/s"
 
 
-# --- cpu.name_short: el nombre de CPU sin la basura de marketing ---
+# --- cpu.name_short: the CPU name without the marketing noise ---
 
 def test_short_cpu_name_on_real_strings():
-    """Casos reales, no inventados: lo que devuelve Win32_Processor.Name en
-    distintas maquinas. El objetivo es familia + modelo, que es lo que sirve
+    """Real cases, not invented ones: what Win32_Processor.Name returns on different
+    machines. The goal is family + model, which is what is useful
     en un panel de 320 px de ancho."""
     casos = [
         ("12th Gen Intel(R) Core(TM) i5-12400F", "Core i5-12400F"),
@@ -74,8 +74,8 @@ def test_short_cpu_name_on_real_strings():
 
 
 def test_short_cpu_name_leaves_an_unknown_string_usable():
-    """Un nombre que no matchea ningun patron no puede quedar vacio: mejor
-    el original que un hueco en el panel."""
+    """A name matching no pattern must not end up empty: better the original than a
+    hole in the panel."""
     assert metrics.short_cpu_name("Cortex-A72") == "Cortex-A72"
     assert metrics.short_cpu_name("") == ""
     assert metrics.short_cpu_name(None) is None
@@ -88,15 +88,15 @@ def test_cpu_name_short_is_a_registered_text_metric():
 
 # --- familias de metricas por dispositivo ---
 #
-# El id es tecnico y estable (vol.C.free); la etiqueta amigable la arma
-# spec_for() y el provider la refina con el nombre real del dispositivo.
+# The id is technical and stable (vol.C.free); the friendly label is built by
+# spec_for() and refined by the provider with the device's real name.
 
 def test_volume_metrics_are_valid_and_have_a_friendly_label():
     assert is_metric("vol.C.free")
     assert is_metric("vol.D.load")
     spec = metrics.spec_for("vol.C.free")
     assert spec.kind == "number" and spec.unit == "GiB"
-    assert "C:" in spec.label                    # la etiqueta nombra el volumen
+    assert "C:" in spec.label                    # the label names the volume
     carga = metrics.spec_for("vol.D.load")
     assert (carga.min, carga.max) == (0.0, 100.0)
     assert carga.unit == "%"
@@ -120,7 +120,7 @@ def test_fan_and_motherboard_metrics_are_valid():
 def test_network_metrics_per_adapter_accept_a_slug():
     assert is_metric("net.ethernet.down")
     assert is_metric("net.wi-fi-2.up")
-    assert not is_metric("net.Ethernet 2.down")   # con espacios y mayusculas, no
+    assert not is_metric("net.Ethernet 2.down")   # not with spaces and capitals
     assert metrics.spec_for("net.ethernet.down").unit == "B/s"
 
 
@@ -132,8 +132,8 @@ def test_unknown_families_are_still_rejected():
 
 
 def test_the_slug_helper_is_reversible_enough_to_be_readable():
-    """El id lleva un slug del nombre del dispositivo porque tiene que entrar
-    en un id de metrica; el nombre lindo lo publica el provider aparte."""
+    """The id carries a slug of the device name because it has to fit inside a
+    metric id; the pretty name is published separately by the provider."""
     assert metrics.slug("Ethernet") == "ethernet"
     assert metrics.slug("Wi-Fi 2") == "wi-fi-2"
     assert metrics.slug("Realtek PCIe GbE Family Controller") == \
@@ -141,9 +141,9 @@ def test_the_slug_helper_is_reversible_enough_to_be_readable():
 
 
 def test_registered_metrics_have_unique_labels():
-    """La etiqueta es lo que el usuario elige en el selector del editor: dos
-    metricas con la misma etiqueta son indistinguibles ahi, y elegir una
-    escribe la otra. mem.load y mem.used se llamaban las dos "RAM usada"."""
+    """The label is what the user picks in the editor's selector: two metrics with
+    the same label are indistinguishable there, and choosing one writes the other.
+    mem.load and mem.used were both called "RAM used"."""
     por_etiqueta = {}
     for mid, spec in METRICS.items():
         assert spec.label not in por_etiqueta, \
@@ -152,7 +152,7 @@ def test_registered_metrics_have_unique_labels():
 
 
 def test_group_names_are_friendly_not_id_prefixes():
-    """El grupo tambien lo lee el usuario: "NET" y "MEM" son prefijos de id,
+    """The group is read by the user too: "NET" and "MEM" are id prefixes,
     no nombres."""
     assert metrics.group_for("net.down") == "Network"
     assert metrics.group_for("mem.load") == "RAM"
@@ -165,14 +165,14 @@ def test_group_names_are_friendly_not_id_prefixes():
     assert metrics.group_for("sys.uptime") == "System"
     assert metrics.group_for("cpu.load") == "CPU"
     assert metrics.group_for("gpu.load") == "GPU"
-    # un prefijo desconocido no puede quedar sin grupo
+    # an unknown prefix must not be left without a group
     assert metrics.group_for("inventado.algo") == "INVENTADO"
 
 
 def test_every_registered_metric_is_covered_by_this_file():
-    """El test original cubria 7 de 23 ids a mano, asi que renombrar una
-    metrica no rompia ningun test y el perfil se enteraba en produccion.
-    Ahora la cobertura es del registro entero."""
+    """The original test covered 7 of 23 ids by hand, so renaming a metric broke no
+    test and the profile found out in production. Now the coverage is the whole
+    registry."""
     for mid, spec in METRICS.items():
         assert is_metric(mid), mid
         assert metrics.spec_for(mid) is spec or metrics.spec_for(mid) == spec
@@ -184,8 +184,8 @@ def test_every_registered_metric_is_covered_by_this_file():
 
 
 def test_disk_metric_and_is_metric_agree():
-    """disk_metric(-1) generaba "disk.temp.-1", que is_metric rechaza: el
-    generador y el validador no coincidian."""
+    """disk_metric(-1) produced "disk.temp.-1", which is_metric rejects: the
+    generator and the validator disagreed."""
     for n in (0, 1, 7, 99):
         assert is_metric(disk_metric(n)), n
     for malo in (-1, -5):
@@ -194,28 +194,28 @@ def test_disk_metric_and_is_metric_agree():
 
 
 def test_every_metric_the_shipped_profiles_use_exists():
-    """Vale mas que una lista de ids escrita a mano: un rename en METRICS no rompe
-    ningun test si los tests nombran 7 ids sueltos, pero SI rompe los perfiles que
-    vienen con el repo -- y eso es lo que el usuario ve. Cubre los 3 perfiles
-    completos, no una muestra."""
+    """Worth more than a hand-written list of ids: a rename in METRICS breaks no test
+    if the tests name 7 loose ids, but it DOES break the profiles that ship with the
+    repo -- and that is what the user sees. It covers the shipped profiles in full,
+    not a sample."""
     import json
     from pathlib import Path
     from vmaxpanel.metrics import is_metric
 
     perfiles = sorted(Path("vmaxpanel/profiles").glob("*.json"))
-    assert perfiles, "no encontre los perfiles del repo"
+    assert perfiles, "could not find the repo's profiles"
     for p in perfiles:
         raw = json.loads(p.read_text(encoding="utf-8"))
         usadas = {w["metric"] for w in raw["widgets"] if "metric" in w}
         assert usadas, f"{p.name} no usa ninguna metrica"
         for mid in sorted(usadas):
-            assert is_metric(mid), f"{p.name} usa {mid!r}, que ya no existe"
+            assert is_metric(mid), f"{p.name} uses {mid!r}, which no longer exists"
 
 
 def test_every_metric_spec_is_complete():
-    """Un spec a medias (sin label, sin unit) sale en el editor como una fila vacia y
-    en el panel como un valor sin contexto. Se chequea el catalogo entero, que es lo
-    que la lista de 7 ids no hacia."""
+    """A half-built spec (no label, no unit) shows up in the editor as an empty row
+    and on the panel as a value with no context. The whole catalogue is checked,
+    which is what the list of 7 ids did not do."""
     for mid, spec in METRICS.items():
         assert spec.label and spec.label.strip(), mid
         assert isinstance(spec.kind, str) and spec.kind, mid
