@@ -1,21 +1,23 @@
-"""Exportar e importar un perfil como un solo archivo (.vmaxpanel, que es un zip).
+"""Exporting and importing a profile as a single file (.vmaxpanel, which is a zip).
 
-**Por que no alcanza con copiar el .json.** Un perfil referencia assets -- el video
-o la imagen del fondo, la carpeta de una secuencia -- y nombra fuentes por familia.
-Copiado suelto a otra maquina da un panel con el fondo degradado y las fuentes
-cambiadas, sin que nadie entienda por que. El bundle lleva el JSON y los assets
-juntos, y al importar dice que fuentes no estan aca.
+**Why copying the .json is not enough.** A profile references assets -- the video
+or image of the background, a sequence's folder -- and names fonts by family.
+Copied on its own to another machine it gives a panel with a degraded background
+and different fonts, with nobody understanding why. The bundle carries the JSON
+and the assets together, and on import it says which fonts are absent here.
 
-**Las fuentes no se empaquetan y no es un olvido:** Consolas y las Franklin Gothic
-son de Microsoft y no se redistribuyen. Se listan en el manifiesto y se avisa al
-importar cual falta -- que es la diferencia entre "se ve raro" y "te falta esta
+**Fonts are not packaged, and that is not an oversight:** Consolas and the Franklin
+Gothic family belong to Microsoft and are not redistributable. They are listed in
+the manifest and on import you are told which one is missing -- which is the
+difference between "it looks wrong" and "you are missing this
 fuente".
 
-**Todo lo que entra de un zip ajeno se trata como hostil.** El proceso que importa
-puede estar elevado (la tarea usa HighestAvailable), asi que un miembro con
-`..\\..\\` escribiendo donde quiera es un agujero real, no teorico. Se valida el
-perfil ANTES de escribir nada, se rechaza cualquier ruta que se escape del destino
-y se corta por tamano declarado para no descomprimir una bomba.
+**Everything coming out of somebody else's zip is treated as hostile.** The
+importing process can be elevated (the scheduled task uses HighestAvailable), so a
+member with `..\\..\\` writing wherever it likes is a real hole, not a theoretical
+one. The profile is validated BEFORE anything is written, any path escaping the
+destination is rejected, and extraction is bounded by declared size so a zip bomb
+cannot run away.
 """
 import json
 import os
@@ -31,9 +33,9 @@ PERFIL = "perfil.json"
 MANIFIESTO = "bundle.json"
 ASSETS = "assets"
 
-# Topes: un perfil son kilobytes y el asset mas gordo que tiene sentido es un video
+# Caps: a profile is kilobytes and the fattest asset that makes sense is a video
 # de unos pocos minutos. Un miembro de 512 MB o un bundle de 2 GB no es un perfil,
-# es otra cosa.
+# is something else.
 MAX_MIEMBRO = 512 * 1024 * 1024
 MAX_TOTAL = 2 * 1024 * 1024 * 1024
 
@@ -56,12 +58,12 @@ def _familias(raw) -> list:
 
 
 def _asset_del_fondo(raw) -> str | None:
-    """La ruta que el fondo referencia, ya saneada, o None.
+    """The path the background references, already sanitised, or None.
 
-    Se pasa por safe_asset_path aunque el perfil venga de esta maquina: exportar
-    lee ese archivo, y un src con `..` leeria cualquier cosa del disco para meterla
-    en un zip que despues se comparte. Es el mismo chequeo que hace el render, por
-    la misma razon.
+    It goes through safe_asset_path even when the profile comes from this machine:
+    exporting reads that file, and a src with `..` would read anything off the disk
+    to put it in a zip that then gets shared. It is the same check the renderer
+    does, for the same reason.
     """
     bg = raw.get("background") or {}
     if bg.get("type") not in ("image", "sequence", "video"):
@@ -70,19 +72,21 @@ def _asset_del_fondo(raw) -> str | None:
 
 
 def export_profile(profile_path, destino, assets_dir) -> dict:
-    """Escribe el bundle. Devuelve {assets, faltantes, fonts, profile}.
+    """Writes the bundle. Returns {assets, faltantes, fonts, profile}.
 
-    Un asset que falta se reporta pero no impide exportar: el motor degrada a color
-    plano, asi que el perfil sigue siendo util, y bloquear por eso dejaria al
-    usuario sin poder compartir su layout por un archivo que quizas no le importa.
+    A missing asset is reported but does not stop the export: the engine degrades
+    to a flat colour, so the profile is still useful, and blocking over it would
+    leave the user unable to share their layout because of a file they may not care
+    about.
     """
     profile_path = Path(profile_path)
     destino = Path(destino)
     assets_dir = Path(assets_dir)
     try:
-        # En bytes y no read_text: leer como texto traduce CRLF a LF -- los
-        # perfiles de Windows salen con CRLF -- y el perfil que vuelve del bundle
-        # ya no seria byte a byte el que se exporto. json.loads acepta bytes.
+        # In bytes and not read_text: reading as text translates CRLF to LF --
+        # Windows profiles come out with CRLF -- and the profile coming back out of
+        # the bundle would no longer be byte for byte the one exported. json.loads
+        # accepts bytes.
         crudo = profile_path.read_bytes()
         raw = json.loads(crudo)
     except (OSError, ValueError) as e:
@@ -98,8 +102,9 @@ def export_profile(profile_path, destino, assets_dir) -> dict:
 
     destino.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(destino, "w", zipfile.ZIP_DEFLATED) as z:
-        # El JSON va tal cual, byte a byte: reescribirlo con json.dump cambiaria el
-        # formato y el usuario no podria comparar el suyo con el que le vuelve.
+        # The JSON goes in as-is, byte for byte: rewriting it with json.dump would
+        # change the formatting and the user could not compare theirs with the one
+        # that comes back.
         z.writestr(PERFIL, crudo)
         if origen is not None:
             if origen.is_dir():
@@ -138,11 +143,12 @@ def export_profile(profile_path, destino, assets_dir) -> dict:
 
 
 def _revisar_nombre(nombre):
-    """Rechaza un nombre de miembro que apunte afuera. Zip-slip, primera mitad.
+    """Rejects a member name pointing outside. Zip-slip, first half.
 
-    Lo absoluto, lo que tenga '..' y lo que traiga letra de unidad. Es solo el
-    chequeo del texto; el que de verdad cierra la puerta es el de _destino_seguro,
-    que compara rutas ya resueltas y no depende de haber enumerado bien todas las
+    Anything absolute, anything with '..' and anything carrying a drive letter. It
+    is only the textual check; the one that really closes the door is in
+    _destino_seguro, which compares already-resolved paths and does not depend on
+    having correctly enumerated every
     formas de escribir "subir un nivel".
     """
     limpio = nombre.replace("\\", "/")
@@ -153,10 +159,10 @@ def _revisar_nombre(nombre):
 
 
 def _destino_seguro(nombre, raiz) -> Path:
-    """Resuelve un miembro del zip dentro de `raiz`, o levanta.
+    """Resolves a zip member inside `raiz`, or raises.
 
-    Zip-slip, segunda mitad: despues de resolver, la ruta tiene que quedar debajo
-    de la raiz. Este es el chequeo que no depende de reconocer patrones en el
+    Zip-slip, second half: after resolving, the path has to land below the root.
+    This is the check that does not depend on recognising patterns in the
     texto.
     """
     pp = _revisar_nombre(nombre)
@@ -169,11 +175,11 @@ def _destino_seguro(nombre, raiz) -> Path:
 def _escribir_atomico(destino, datos):
     """Escribe en un temporal al lado y reemplaza.
 
-    Lo que se pisa puede estar EN USO: el perfil lo relee el motor en caliente (por
-    hash del contenido, asi que un archivo a medio escribir se puede leer truncado) y
-    el asset lo puede estar leyendo un ffmpeg. `loader.save_raw` ya escribia asi por
-    esta misma razon; importar tenia que hacer lo mismo. El temporal lleva el pid
-    para que dos importaciones a la vez no se pisen el temporal entre ellas.
+    What gets overwritten may be IN USE: the engine re-reads the profile live (by
+    content hash, so a half-written file can be read truncated) and an ffmpeg may be
+    reading the asset. `loader.save_raw` already wrote this way for the same reason;
+    importing had to do the same. The temp file carries the pid so two simultaneous
+    imports do not clobber each other.
     """
     tmp = destino.with_name(f"{destino.name}.{os.getpid()}.tmp")
     try:
@@ -209,11 +215,11 @@ def _nombre_libre(carpeta, nombre) -> Path:
 
 
 def import_bundle(origen, profiles_dir, assets_dir, si_existe="fallar") -> dict:
-    """Instala el bundle. -> {profile, assets, fuentes_faltantes, manifest}.
+    """Installs the bundle. -> {profile, assets, fuentes_faltantes, manifest}.
 
     `si_existe`: "fallar" (default), "renombrar" o "pisar". El default no pisa
-    porque el layout del usuario es trabajo suyo, y dos personas exportando "apex"
-    es lo normal, no la excepcion.
+    because the user's layout is their own work, and two people exporting "apex" is
+    the normal case, not the exception.
     """
     origen = Path(origen)
     profiles_dir = Path(profiles_dir)
@@ -236,8 +242,8 @@ def import_bundle(origen, profiles_dir, assets_dir, si_existe="fallar") -> dict:
             raw = json.loads(crudo)
         except ValueError as e:
             raise BundleError(f"the bundle's profile is not valid JSON: {e}") from e
-        # Se valida ANTES de escribir: un bundle con un perfil roto no puede dejar
-        # assets a medio copiar en la carpeta del usuario.
+        # Validated BEFORE writing: a bundle with a broken profile must not leave
+        # assets half-copied in the user's folder.
         errores = schema.validate(raw)
         if errores:
             raise BundleError("the bundle's profile is not valid: "
@@ -248,26 +254,27 @@ def import_bundle(origen, profiles_dir, assets_dir, si_existe="fallar") -> dict:
         except ValueError:
             manifiesto = {}
 
-        # Los destinos se resuelven TODOS antes de escribir el primero, por lo
-        # mismo: un miembro malicioso en la mitad del zip no puede dejar la mitad
+        # ALL destinations are resolved before the first one is written, for the
+        # same reason: a malicious member halfway through the zip must not leave the
+        # good half
         # buena ya copiada.
         nombre_perfil = manifiesto.get("profile_file") or f"{raw.get('name', 'perfil')}.json"
         destino_perfil = _destino_seguro(Path(nombre_perfil).name, profiles_dir)
         planificados = []
         for nombre in sorted(nombres):
-            # El nombre de CADA miembro se revisa, incluso los que no se van a
-            # instalar. Un miembro absoluto o con '..' no es un archivo extra de
-            # una version futura: es un bundle que intento escribir afuera, y
-            # aceptar el resto de un zip asi es confiar en que el unico intento fue
-            # el que vi.
+            # EVERY member name is checked, including the ones that will not be
+            # installed. An absolute member or one with '..' is not an extra file
+            # from a future version: it is a bundle that tried to write outside, and
+            # accepting the rest of such a zip is trusting that the only attempt was
+            # the one I happened to see.
             _revisar_nombre(nombre)
             if nombre in (PERFIL, MANIFIESTO) or nombre.endswith("/"):
                 continue
             if not nombre.startswith(f"{ASSETS}/"):
-                # Un miembro fuera de assets/ no se instala: el bundle define dos
-                # lugares y nada mas. Se ignora en silencio en vez de fallar para
-                # que un bundle de una version futura con archivos extra siga
-                # importando lo que si entiende.
+                # A member outside assets/ is not installed: the bundle defines two
+                # places and no more. It is ignored silently rather than failing, so
+                # that a bundle from a future version with extra files still imports
+                # whatever this version does understand.
                 continue
             relativo = nombre[len(ASSETS) + 1:]
             planificados.append((nombre, _destino_seguro(relativo, assets_dir)))
@@ -282,8 +289,9 @@ def import_bundle(origen, profiles_dir, assets_dir, si_existe="fallar") -> dict:
 
         profiles_dir.mkdir(parents=True, exist_ok=True)
         assets_dir.mkdir(parents=True, exist_ok=True)
-        # Byte a byte y no json.dump: exportar e importar no puede reformatear el
-        # perfil, o el usuario no puede comparar el suyo con el que le vuelve.
+        # Byte for byte and not json.dump: exporting and importing must not
+        # reformat the profile, or the user cannot compare theirs with the one that
+        # comes back.
         _escribir_atomico(destino_perfil, crudo)
         instalados = []
         for nombre, destino in planificados:
@@ -296,10 +304,11 @@ def import_bundle(origen, profiles_dir, assets_dir, si_existe="fallar") -> dict:
 
 
 def _faltan_fuentes(raw) -> list:
-    """Las familias del perfil que no estan instaladas en ESTA maquina.
+    """The profile's families that are not installed on THIS machine.
 
-    Import time y no export time: la pregunta que importa es "que le va a faltar al
-    que lo recibe", y eso solo se puede contestar en la maquina que recibe.
+    At import time and not at export time: the question that matters is "what will
+    the recipient be missing", and that can only be answered on the receiving
+    machine.
     """
     from .render.fonts import FontResolver
     resolver = FontResolver()
@@ -307,7 +316,7 @@ def _faltan_fuentes(raw) -> list:
 
 
 def describe_bundle(origen) -> dict:
-    """El manifiesto de un bundle, sin instalar nada. Para mirar antes de importar."""
+    """A bundle's manifest, without installing anything. To look before importing."""
     origen = Path(origen)
     try:
         with zipfile.ZipFile(origen) as z:
