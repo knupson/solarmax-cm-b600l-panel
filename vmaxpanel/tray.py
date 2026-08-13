@@ -1,14 +1,14 @@
-"""Icono de bandeja: la cara visible de la app.
+"""The tray icon: the app's visible face.
 
-Win32 crudo por ctypes, sin `pystray` ni `pywin32`. Dos razones: la app se
-reparte a otros duenos del panel y una dependencia menos es una instalacion
-menos que puede fallar, y pystray es LGPL-3.0 -- este proyecto ya cuida que
-nada no-redistribuible entre al paquete.
+Raw Win32 through ctypes, with neither `pystray` nor `pywin32`. Two reasons: the
+app is shared with other owners of the panel and one dependency fewer is one
+installation step fewer that can fail, and pystray is LGPL-3.0 -- this project
+already takes care that nothing non-redistributable enters the package.
 
-Aca no hay logica de negocio: todo lo que el menu hace se lo pide a
-`PanelApp` (vmaxpanel/app.py), que se prueba entero sin ventanas. Este modulo
-es la unica parte del proyecto que no tiene tests automaticos, precisamente
-porque es solo pegamento contra la API de Windows.
+There is no business logic here: everything the menu does it asks `PanelApp`
+(vmaxpanel/app.py) to do, and that is tested in full without windows. This module
+is the one part of the project with no automated tests, precisely because it is
+only glue against Windows' API.
 """
 import ctypes
 import os
@@ -32,11 +32,12 @@ WM_DESTROY = 0x0002
 WM_COMMAND = 0x0111
 WM_RBUTTONUP = 0x0205
 WM_LBUTTONDBLCLK = 0x0203
-WM_TRAY = 0x0400 + 1            # WM_APP: mensaje propio del icono
+WM_TRAY = 0x0400 + 1            # WM_APP: the icon's own message
 
-# Esperas entre intentos de agregar el icono. La primera es 0 -- el caso normal entra
-# de una -- y el resto cubre la carrera de arranque al logon, donde la bandeja de
-# Windows puede no estar lista todavia. Suman ~7 s y despues se rinde avisando.
+# Waits between attempts to add the icon. The first is 0 -- the normal case gets in
+# straight away -- and the rest cover the start-up race at logon, where Windows'
+# tray may not be ready yet. They add up to ~7 s, after which it gives up with a
+# warning.
 ESPERAS_ICONO = (0, 0.5, 1, 1.5, 2, 2)
 
 NIM_ADD, NIM_MODIFY, NIM_DELETE = 0, 1, 2
@@ -52,7 +53,7 @@ ICONO = Path(__file__).resolve().parent / "assets" / "vmaxpanel.ico"
 MF_STRING, MF_SEPARATOR, MF_GRAYED, MF_CHECKED = 0x0000, 0x0800, 0x0001, 0x0008
 MF_POPUP = 0x0010
 TPM_RIGHTBUTTON = 0x0002
-TPM_RETURNCMD = 0x0100          # el id vuelve por retorno, no por WM_COMMAND
+TPM_RETURNCMD = 0x0100          # the id comes back as the return value, not by WM_COMMAND
 
 CMD_STATE = 1001
 CMD_TOGGLE = 1002
@@ -62,18 +63,18 @@ CMD_LOG = 1005
 CMD_RESTART = 1006
 CMD_QUIT = 1007
 CMD_EXPORT = 1008
-# Los fps van en un rango aparte, CMD_FPS_BASE + indice de la opcion: si se
-# solaparan con los ids fijos, elegir un fps ejecutaria otra cosa.
+# The fps entries live in their own range, CMD_FPS_BASE + the option index: if they
+# overlapped the fixed ids, picking an fps would run something else.
 CMD_FPS_BASE = 1100
 CMD_PROFILE_BASE = 1200
 CMD_BRIGHT_BASE = 1300
 
-# LRESULT es del tamano de un puntero: en 64 bits, c_long (32) TRUNCA el valor
-# de retorno. Y sin argtypes declarados, ctypes asume int de 32 bits para cada
-# argumento, asi que un LPARAM real de 64 bits explota con "OverflowError: int
-# too long to convert" adentro del callback -- donde Python se come la
-# excepcion e imprime "Exception ignored", o sea que la ventana deja de
-# responder mensajes sin que nada falle a la vista. Lo encontro el log de la
+# LRESULT is pointer-sized: on 64-bit, c_long (32) TRUNCATES the return value. And
+# with no argtypes declared, ctypes assumes a 32-bit int for every argument, so a
+# real 64-bit LPARAM blows up with "OverflowError: int too long to convert" inside
+# the callback -- where Python swallows the exception and prints "Exception
+# ignored", which is to say the window stops responding to messages with nothing
+# visibly failing. It was found by the log of the
 # tarea programada en su primera corrida.
 LRESULT = ctypes.c_ssize_t
 WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, wintypes.UINT,
@@ -98,9 +99,9 @@ user32.SetForegroundWindow.argtypes = [wintypes.HWND]
 user32.RegisterWindowMessageW.argtypes = [wintypes.LPCWSTR]
 user32.RegisterWindowMessageW.restype = wintypes.UINT
 shell32.Shell_NotifyIconW.restype = wintypes.BOOL
-# Sin restype declarado, ctypes asume int de 32 bits y TRUNCA el handle: el
-# modulo base queda con un valor que no es el real, y la clase se registra
-# contra una instancia inexistente.
+# With no restype declared, ctypes assumes a 32-bit int and TRUNCATES the handle:
+# the base module ends up with a value that is not the real one, and the class is
+# registered against a nonexistent instance.
 kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
 kernel32.GetModuleHandleW.restype = wintypes.HMODULE
 user32.CreateWindowExW.argtypes = [wintypes.DWORD, wintypes.LPCWSTR,
@@ -121,8 +122,8 @@ class WNDCLASS(ctypes.Structure):
                 ("lpszMenuName", wintypes.LPCWSTR), ("lpszClassName", wintypes.LPCWSTR)]
 
 
-# El id del mensaje "TaskbarCreated" no es una constante fija: lo asigna Windows y hay
-# que pedirlo. Se registra al importar, una sola vez.
+# The id of the "TaskbarCreated" message is not a fixed constant: Windows assigns
+# it and it has to be asked for. It is registered on import, once.
 WM_TASKBARCREATED = user32.RegisterWindowMessageW("TaskbarCreated")
 
 
@@ -177,20 +178,21 @@ def _escribir_promovido(subclave, valor):
 
 
 def promover_icono(exe, tip_prefijo, leer=None, escribir=None) -> bool:
-    """Hace visible el icono en la barra si Windows lo escondio. -> True si lo cambio.
+    """Makes the icon visible in the taskbar if Windows hid it. -> True if it changed it.
 
     **Windows 11 esconde TODO icono nuevo**: lo manda al menu de iconos ocultos y no a
-    la barra. Verificado en esta maquina: la entrada estaba con el tooltip "VMax Panel"
-    y sin `IsPromoted`, y el usuario nunca vio el icono. Para una app cuya UNICA
-    interfaz es ese icono, quedar escondido es quedar sin interfaz -- no hay pausa, ni
+    the taskbar. Verified in practice: the entry was there with the tooltip "VMax
+    Panel" and no `IsPromoted`, and the user never saw the icon. For an app whose
+    ONLY interface is that icon, staying hidden means having no interface -- no
+    pause, no
     cambio de perfil, ni editor.
 
-    **Si el valor esta en 0 no se toca:** eso significa que el usuario lo apago a mano
-    en Configuracion, y volver a prenderlo en cada arranque seria pelearle a su
-    decision. Solo se arregla la ausencia, que es el default de Windows y no una
+    **If the value is 0 it is left alone:** that means the user turned it off by hand
+    in Settings, and turning it back on at every start-up would be fighting their
+    decision. Only its absence is fixed, which is Windows' default and not a
     eleccion de nadie.
 
-    Nunca levanta: es cosmetico y no puede impedir que la bandeja arranque.
+    It never raises: it is cosmetic and must not stop the tray from starting.
     """
     leer = leer or _leer_entradas_icono
     escribir = escribir or _escribir_promovido
@@ -210,12 +212,12 @@ def promover_icono(exe, tip_prefijo, leer=None, escribir=None) -> bool:
 
 
 def _open_with_shell(path):
-    """Abre un archivo con la app asociada, sin bloquear la bandeja."""
+    """Opens a file with its associated app, without blocking the tray."""
     try:
         os.startfile(str(path))                                # noqa: S606
     except Exception:
         subprocess.Popen(["cmd", "/c", "start", "", str(path)],
-                         creationflags=0x08000000)             # sin ventana
+                         creationflags=0x08000000)             # no window
 
 
 class Tray:
@@ -225,13 +227,13 @@ class Tray:
         self._editor_launcher = editor_launcher or self._default_editor
         self._hwnd = None
         self._nid = None
-        self._editor = None             # el proceso del editor, si hay uno vivo
-        # La referencia al WNDPROC tiene que sobrevivir a __init__: si la
-        # recolecta el GC, Windows llama a un puntero muerto en el primer
-        # mensaje y el proceso se cae sin traceback.
+        self._editor = None             # the editor's process, if one is alive
+        # The reference to the WNDPROC has to outlive __init__: if the GC collects
+        # it, Windows calls a dead pointer on the first message and the process dies
+        # with no traceback.
         self._proc = WNDPROC(self._on_message)
 
-    # --- ventana oculta que recibe los mensajes del icono ---
+    # --- the hidden window that receives the icon's messages ---
 
     def _register(self):
         cls = WNDCLASS()
@@ -247,12 +249,12 @@ class Tray:
             raise OSError("could not create the tray's hidden window")
 
     def _icon(self):
-        """El icono propio, y si falta, el genérico de Windows.
+        """Our own icon, and if it is missing, the generic Windows one.
 
         Se pide al tamano exacto de icono chico (SM_CXSMICON) en vez de
-        LR_DEFAULTSIZE: el default carga la capa de 32 px y deja que Windows
-        la reduzca, y a 16 px eso convierte las barras en un gris ilegible. El
-        .ico trae una capa dibujada para cada resolucion justamente para esto.
+        LR_DEFAULTSIZE: the default loads the 32 px layer and lets Windows shrink
+        it, and at 16 px that turns the bars into an illegible grey. The .ico
+        carries a layer drawn for each resolution precisely for this.
         """
         if ICONO.exists():
             cx = user32.GetSystemMetrics(SM_CXSMICON) or 16
@@ -262,22 +264,23 @@ class Tray:
                                   LR_LOADFROMFILE)
             if h:
                 return h
-        # IDI_APPLICATION es un id numerico donde la API espera un puntero a
-        # nombre (MAKEINTRESOURCE): va como c_void_p, no como int.
+        # IDI_APPLICATION is a numeric id where the API expects a pointer to a name
+        # (MAKEINTRESOURCE): it goes as c_void_p, not as int.
         return user32.LoadImageW(None, ctypes.c_void_p(IDI_APPLICATION),
                                  IMAGE_ICON, 0, 0, LR_DEFAULTSIZE)
 
     def _add_icon(self):
-        """Agrega el icono, VERIFICANDO que Windows lo haya aceptado.
+        """Adds the icon, VERIFYING that Windows accepted it.
 
-        El retorno se ignoraba, y Windows rechaza el NIM_ADD de verdad cuando la
-        bandeja todavia no esta lista -- que es exactamente el momento en que la tarea
-        arranca esto, al logon. Sin icono no hay menu: ni pausa, ni cambio de perfil,
-        ni editor. La app seguiria dibujando y sin ninguna forma de manejarla, y nada
+        The return value used to be ignored, and Windows really does reject the
+        NIM_ADD when the tray is not ready yet -- which is exactly the moment the
+        scheduled task starts this, at logon. With no icon there is no menu: no
+        pause, no profile switch, no editor. The app would keep drawing with no way
+        to manage it, and nothing
         lo diria.
 
-        Reintenta con esperas cortas porque el caso normal es una carrera de arranque
-        que se resuelve en uno o dos segundos.
+        It retries with short waits because the normal case is a start-up race that
+        resolves within a second or two.
         """
         nid = NOTIFYICONDATA()
         nid.cbSize = ctypes.sizeof(NOTIFYICONDATA)
@@ -295,15 +298,17 @@ class Tray:
                 self._icono_puesto = True
                 if intento:
                     print(f"tray icon added on attempt {intento + 1}")
-                # Recien despues del NIM_ADD existe la entrada en el registro que hay
-                # que promover: Windows la crea al aceptar el icono, con un nombre de
-                # subclave que calcula el. Por eso no se puede hacer en --instalar.
+                # Only after the NIM_ADD does the registry entry that has to be
+                # promoted exist: Windows creates it on accepting the icon, with a
+                # subkey name it computes itself. That is why this cannot be done in
+                # --install.
                 if promover_icono(sys.executable, "VMax Panel"):
                     print("the icon was hidden (the Windows 11 default): "
                           "promoted it to the taskbar")
-                    # Windows decide barra vs menu oculto EN EL MOMENTO del NIM_ADD:
-                    # promoverlo despues no lo mueve solo. Se borra y se agrega de
-                    # nuevo para que la barra lo re-evalue, o el cambio recien se
+                    # Windows decides taskbar versus hidden menu AT THE MOMENT of the
+                    # NIM_ADD: promoting it afterwards does not move it on its own.
+                    # It is deleted and added again so the taskbar re-evaluates it,
+                    # or the change only
                     # veria al proximo arranque.
                     shell32.Shell_NotifyIconW(NIM_DELETE, ctypes.byref(nid))
                     shell32.Shell_NotifyIconW(NIM_ADD, ctypes.byref(nid))
@@ -345,8 +350,8 @@ class Tray:
             titulo = f"{panel} · {st.get('frames', 0)} frames"
         user32.AppendMenuW(menu, MF_STRING | MF_GRAYED, CMD_STATE, titulo)
 
-        # Los problemas van arriba, antes de cualquier accion: si algo anda mal,
-        # es lo primero que el usuario tiene que leer al abrir el menu.
+        # The problems go at the top, before any action: if something is wrong, it is
+        # the first thing the user has to read on opening the menu.
         for linea in self._problem_lines():
             user32.AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, linea)
 
@@ -355,15 +360,15 @@ class Tray:
                            "Resume" if st.get("paused") else "Pause (releases the port)")
         user32.AppendMenuW(menu, MF_STRING, CMD_RESTART, "Restart the engine")
 
-        # Submenu de brillo: el motor lo reaplica en cada recarga, asi que no
-        # necesita reiniciar nada.
+        # Brightness submenu: the engine reapplies it on every reload, so it needs no
+        # restart.
         subb = user32.CreatePopupMenu()
         for cmd, etiqueta, actual in self._brightness_entries():
             user32.AppendMenuW(subb, MF_STRING | (MF_CHECKED if actual else 0),
                                cmd, etiqueta)
         user32.AppendMenuW(menu, MF_STRING | MF_POPUP, subb, "Brightness")
 
-        # Submenu de perfiles: es lo primero que alguien quiere cambiar.
+        # Profiles submenu: it is the first thing anybody wants to change.
         subp = user32.CreatePopupMenu()
         for cmd, nombre, actual in self._profile_entries():
             user32.AppendMenuW(subp, MF_STRING | (MF_CHECKED if actual else 0),
@@ -375,14 +380,14 @@ class Tray:
         else:
             user32.AppendMenuW(menu, MF_STRING | MF_POPUP, subp, "Profile")
 
-        # Submenu de fps. El panel refresca a 60 Hz; por encima descarta, asi
-        # que 60 es el tope y el costo de cada opcion va en su etiqueta.
+        # Fps submenu. The panel refreshes at 60 Hz and discards anything above, so
+        # 60 is the ceiling and each option's cost goes in its label.
         sub = user32.CreatePopupMenu()
         for cmd, etiqueta, marcado in self._fps_entries():
             banderas = MF_STRING | (MF_CHECKED if marcado else 0)
             user32.AppendMenuW(sub, banderas, cmd, etiqueta)
-        # Con el editor abierto el submenu queda gris: los dos escriben el
-        # mismo perfil y el ultimo en guardar se lleva puesto al otro.
+        # With the editor open the submenu is greyed out: both write the same profile
+        # and whichever saves last wipes out the other.
         if self._editor_abierto():
             user32.AppendMenuW(menu, MF_STRING | MF_GRAYED, 0,
                                "Frames per second (close the editor first)")
@@ -405,13 +410,13 @@ class Tray:
         menu = self._menu()
         pt = POINT()
         user32.GetCursorPos(ctypes.byref(pt))
-        # SetForegroundWindow antes de TrackPopupMenu: sin esto el menu no se
-        # cierra al hacer clic afuera, que es el bug clasico de los iconos de
+        # SetForegroundWindow before TrackPopupMenu: without it the menu does not
+        # close when clicking outside, which is the classic bug of tray
         # bandeja hechos a mano.
         user32.SetForegroundWindow(self._hwnd)
-        # TPM_RETURNCMD: el id elegido vuelve como valor de retorno. Sin el,
-        # TrackPopupMenu devuelve un BOOL de exito y el codigo de abajo lo
-        # trataba como si fuera un id de comando.
+        # TPM_RETURNCMD: the chosen id comes back as the return value. Without it,
+        # TrackPopupMenu returns a success BOOL and the code below treated that as
+        # if it were a command id.
         cmd = user32.TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_RETURNCMD,
                                     pt.x, pt.y, 0, self._hwnd, None)
         user32.DestroyMenu(menu)
@@ -425,10 +430,10 @@ class Tray:
     ANCHO_LINEA = 70
 
     def _problem_lines(self):
-        """Los problemas, recortados para que quepan como entradas de menu.
+        """The problems, trimmed to fit as menu entries.
 
-        Se topean en cuatro mas un contador: veinte avisos convierten el menu en
-        un muro ilegible, y el que necesita los veinte abre el log.
+        They are capped at four plus a counter: twenty warnings turn the menu into
+        an illegible wall, and whoever needs all twenty opens the log.
         """
         problemas = list(self.app.problems())
         lineas = [f"⚠ {p[:self.ANCHO_LINEA]}" for p in problemas[:self.MAX_PROBLEMAS]]
@@ -438,13 +443,13 @@ class Tray:
         return lineas
 
     def _brightness_entries(self):
-        """[(comando, etiqueta, es_el_actual)] del submenu de brillo."""
+        """[(command, label, is_current)] for the brightness submenu."""
         actual = self.app.brightness()
         return [(CMD_BRIGHT_BASE + i, etiqueta, valor == actual)
                 for i, (valor, etiqueta) in enumerate(self.app.brightness_options())]
 
     def _profile_entries(self):
-        """[(comando, nombre, es_el_actual)] para el submenu de perfiles."""
+        """[(command, name, is_current)] for the profiles submenu."""
         actual = Path(self.app.profile_path)
         salida = []
         for i, p in enumerate(self.app.profiles()):
@@ -452,7 +457,7 @@ class Tray:
         return salida
 
     def _fps_entries(self):
-        """[(comando, etiqueta, marcado)] para el submenu de fps."""
+        """[(command, label, checked)] for the fps submenu."""
         actual = self.app.fps()
         salida = []
         for i, (valor, etiqueta) in enumerate(self.app.fps_options()):
@@ -471,27 +476,27 @@ class Tray:
             perfiles = self.app.profiles()
             i = cmd - CMD_PROFILE_BASE
             if 0 <= i < len(perfiles):
-                # En un thread: set_profile baja el motor y lo vuelve a
-                # levantar, lo que incluye esperar al sidecar.
+                # On a thread: set_profile brings the engine down and back up, which
+                # includes waiting for the sidecar.
                 threading.Thread(target=self.app.set_profile,
                                  args=(perfiles[i],), daemon=True).start()
             return
         if CMD_FPS_BASE <= cmd < CMD_FPS_BASE + 64:
             if self._editor_abierto():
-                return              # el editor tiene el perfil en memoria
+                return              # the editor holds the profile in memory
             opciones = self.app.fps_options()
             i = cmd - CMD_FPS_BASE
             if 0 <= i < len(opciones):
-                # En un thread: set_fps() escribe el perfil y el motor lo
-                # recarga; bloquear aca congelaria el bombeo de mensajes.
+                # On a thread: set_fps() writes the profile and the engine reloads
+                # it; blocking here would freeze the message pump.
                 valor = opciones[i][0]
                 threading.Thread(target=self.app.set_fps, args=(valor,),
                                  daemon=True).start()
             return
         if cmd == CMD_TOGGLE:
-            # En un thread: pause() hace join del motor y puede tardar lo que
-            # tarde el frame en curso. Bloquear aca congela la bandeja entera,
-            # porque este es el thread que bombea los mensajes de Windows.
+            # On a thread: pause() joins the engine and can take as long as the frame
+            # in flight. Blocking here freezes the whole tray, because this is the
+            # thread pumping the Windows messages.
             threading.Thread(target=self.app.toggle, daemon=True).start()
         elif cmd == CMD_RESTART:
             threading.Thread(target=self._restart, daemon=True).start()
@@ -501,7 +506,7 @@ class Tray:
             _open_with_shell(self.app.profile_path)
         elif cmd == CMD_EXPORT:
             # En un thread: comprimir un fondo de video son megas, y esto corre en
-            # el thread que bombea los mensajes de Windows.
+            # the thread pumping the Windows messages.
             threading.Thread(target=self._exportar, daemon=True).start()
         elif cmd == CMD_LOG and self.log_path:
             _open_with_shell(self.log_path)
@@ -509,11 +514,11 @@ class Tray:
             user32.DestroyWindow(self._hwnd)
 
     def _exportar(self):
-        """Exporta y abre la carpeta donde quedo.
+        """Exports and opens the folder it landed in.
 
-        Abrir la carpeta es la unica confirmacion posible: la bandeja no tiene
-        ventana propia donde escribir un mensaje, y un export silencioso es
-        indistinguible de un boton que no hace nada.
+        Opening the folder is the only confirmation available: the tray has no window
+        of its own to write a message in, and a silent export is indistinguishable
+        from a button that does nothing.
         """
         destino, mensaje = self.app.export_profile()
         print(mensaje)
@@ -525,21 +530,20 @@ class Tray:
         self.app.start()
 
     def _default_editor(self):
-        """El editor corre en su propio proceso, y solo uno a la vez.
+        """The editor runs in its own process, and only one at a time.
 
-        Tkinter quiere ser el thread principal y aca el thread principal esta
-        bombeando mensajes de Win32: meter los dos en el mismo proceso es la
-        receta para un cuelgue. Un proceso aparte tambien significa que si el
-        editor se cae, el panel sigue dibujando.
+        Tkinter wants to be the main thread and here the main thread is pumping Win32
+        messages: putting both in the same process is a recipe for a hang. A separate
+        process also means that if the editor crashes, the panel keeps drawing.
 
-        Uno solo porque dos editores sobre el mismo perfil se pisan los
-        guardados -- gana el ultimo y el otro cree que guardo -- y porque el
-        temporal de save_raw() tiene nombre fijo, o sea que asume un unico
-        escritor. Paso de verdad: quedaron dos ventanas abiertas sobre
+        Only one because two editors on the same profile clobber each other's saves
+        -- the last one wins and the other believes it saved -- and because
+        save_raw()'s temp file has a fixed name, which assumes a single writer. It
+        really happened: two windows were left open on
         vitals.json.
         """
         if self._editor is not None and self._editor.poll() is None:
-            return                      # ya hay uno vivo
+            return                      # one is already alive
         self._editor = subprocess.Popen(
             [sys.executable, "-m", "vmaxpanel.editor",
              "--profile", str(self.app.profile_path)],
@@ -557,11 +561,11 @@ class Tray:
             else:
                 self._refresh_tip()
         elif msg == WM_TASKBARCREATED:
-            # Explorer se reinicio (pasa, y no es raro: un cuelgue del shell, un
-            # cambio de escala). Windows manda esto a todas las ventanas y CADA app
-            # tiene que volver a agregar su icono; el anterior ya no existe. Sin esto
-            # el panel sigue dibujando pero el icono no vuelve hasta el proximo logon,
-            # o sea que el usuario se queda sin menu.
+            # Explorer restarted (it happens, and it is not rare: a shell hang, a
+            # scaling change). Windows sends this to every window and EACH app has to
+            # add its icon again; the previous one no longer exists. Without this the
+            # panel keeps drawing but the icon does not come back until the next
+            # logon, which is to say the user is left with no menu.
             self._add_icon()
             self._dispatch(wparam & 0xFFFF)
         elif msg == WM_DESTROY:
@@ -575,9 +579,9 @@ class Tray:
         self._register()
         self._add_icon()
         self.app.start()
-        # Se loguea el arranque igual que el CLI: bajo pythonw esto es lo unico
-        # que confirma que la bandeja llego a levantar el motor, y con que
-        # metricas se quedo sin servir.
+        # Start-up is logged the same way the CLI does it: under pythonw this is the
+        # only thing that confirms the tray got as far as starting the engine, and
+        # which metrics it ended up without.
         st = self.app.state()
         print(f"tray up (hwnd={self._hwnd}); profile {st.get('profile')!r}; "
               f"unavailable metrics: {sorted(st.get('unavailable') or {})}")
@@ -587,9 +591,9 @@ class Tray:
                 user32.TranslateMessage(ctypes.byref(msg))
                 user32.DispatchMessageW(ctypes.byref(msg))
         finally:
-            # El motor se baja SIEMPRE, incluso si el bombeo revienta: si no,
-            # queda un thread daemon con COM3 tomado hasta que muera el
-            # proceso, y el sidecar con el DLL de LHM agarrado.
+            # The engine is ALWAYS brought down, even if the pump blows up: otherwise
+            # a daemon thread is left holding the COM port until the process dies,
+            # and the sidecar holding the LHM DLL.
             self.app.stop()
 
 
@@ -604,13 +608,13 @@ def main(argv=None) -> int:
     ap.add_argument("--log", type=Path)
     a = ap.parse_args(argv)
 
-    # La bandeja publica su estado a un archivo: es el proceso que de verdad maneja
-    # el panel, asi que es el unico que puede contestarle a `--estado`.
+    # The tray publishes its status to a file: it is the process that really drives
+    # the panel, so it is the only one that can answer `--status`.
     app = PanelApp(a.profile, port=a.port, status_path=status_path())
     tray = Tray(app, log_path=a.log)
-    # run_with_log tambien y no solo el log_path del menu: la bandeja corre
-    # bajo pythonw.exe, sin consola, asi que sin esto un error al arrancar --
-    # incluido el traceback -- no queda escrito en ningun lado.
+    # run_with_log as well, and not only the menu's log_path: the tray runs under
+    # pythonw.exe, with no console, so without this an error at start-up -- traceback
+    # included -- is written down nowhere.
     run_with_log(a.log, tray.run)
     return 0
 
