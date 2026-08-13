@@ -1,14 +1,13 @@
 """Datos de WMI/CIM: espacio por volumen, uptime, procesos.
 
-Aparte del sidecar a proposito. El sidecar existe para lo que necesita
-LibreHardwareMonitor o la interfaz GSA1 de Gigabyte; esto es CIM comun, que se
-consulta sin elevacion y sin DLLs de terceros.
+Deliberately apart from the sidecar. The sidecar exists for what needs
+LibreHardwareMonitor or Gigabyte's GSA1 interface; this is plain CIM, queried
+without elevation and without third-party DLLs.
 
-**Con cache propia.** Consultar los volumenes cuesta ~300 ms medidos en esta
-maquina: a 1 fps eso es un tercio del presupuesto de un cuadro, y el espacio
-libre de un disco no cambia entre frames. El motor tiene una sola cadencia de
-muestreo para todos los providers, asi que el que sabe cuanto cuesta su lectura
-es el provider.
+**With its own cache.** Querying the volumes costs ~300 ms measured: at 1 fps
+that is a third of a frame's budget, and a disk's free space does not change
+between frames. The engine has a single sampling cadence for every provider, so
+the one that knows what its own reading costs is the provider.
 """
 import subprocess
 import time
@@ -18,8 +17,8 @@ from .base import Provider
 
 TTL = 30.0
 
-# Un solo PowerShell para las tres consultas: levantar el proceso cuesta mas
-# que las consultas en si.
+# A single PowerShell for all three queries: starting the process costs more than
+# the queries themselves.
 _SCRIPT = r"""
 $ErrorActionPreference = 'Stop'
 $vol = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object {
@@ -38,7 +37,7 @@ MEDIDAS = ("free", "used", "total", "load")
 
 
 def _consultar_cim() -> dict:
-    """Corre el script y devuelve el dict parseado. Levanta si falla."""
+    """Runs the script and returns the parsed dict. Raises on failure."""
     import json
     p = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive",
                         "-ExecutionPolicy", "Bypass", "-Command", _SCRIPT],
@@ -47,7 +46,7 @@ def _consultar_cim() -> dict:
     if p.returncode != 0:
         raise OSError(f"CIM failed: {(p.stderr or '').strip()[:120]}")
     datos = json.loads(p.stdout)
-    # ConvertTo-Json colapsa una lista de un solo elemento en un objeto.
+    # ConvertTo-Json collapses a single-element list into an object.
     vols = datos.get("volumenes") or []
     if isinstance(vols, dict):
         vols = [vols]
@@ -84,7 +83,7 @@ class WmiProvider(Provider):
         self.unavailable_reason = None
         return True
 
-    # --- que sirve ---
+    # --- what it serves ---
 
     def _volumenes(self):
         try:
@@ -116,21 +115,21 @@ class WmiProvider(Provider):
                 if total else None
         return out
 
-    # --- nombres amigables, para el editor ---
+    # --- friendly names, for the editor ---
 
     def _nombre(self, v) -> str:
-        """"D: (JUEGOS)" o "C:" si el volumen no tiene etiqueta.
+        """"D: (GAMES)", or "C:" when the volume has no label.
 
-        Sin el parentesis vacio: un "C: ()" se lee como un bug."""
+        Without the empty parentheses: a "C: ()" reads as a bug."""
         etiqueta = (v.get("etiqueta") or "").strip()
         return f"{v['letra']}: ({etiqueta})" if etiqueta else f"{v['letra']}:"
 
     def catalog(self) -> dict:
-        """id -> MetricSpec con la etiqueta que ve el usuario.
+        """id -> MetricSpec carrying the label the user sees.
 
-        La familia de metrics.py ya arma "D: — libre"; aca se le agrega el
-        nombre que el usuario le puso al volumen, que es el unico dato que no
-        se puede deducir del id.
+        The family in metrics.py already builds "D: — free"; here the name the
+        user gave the volume is added, which is the one piece that cannot be
+        derived from the id.
         """
         cat = {}
         for mid in ("sys.uptime", "sys.procs"):
@@ -150,7 +149,7 @@ class WmiProvider(Provider):
         return cat
 
     def groups(self) -> dict:
-        """id -> dispositivo al que pertenece, para agrupar en el editor."""
+        """id -> the device it belongs to, for grouping in the editor."""
         g = {"sys.uptime": "Sistema", "sys.procs": "Sistema"}
         for v in self._volumenes():
             for medida in MEDIDAS:

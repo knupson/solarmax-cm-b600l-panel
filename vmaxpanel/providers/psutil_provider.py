@@ -1,8 +1,8 @@
-"""Metricas que no necesitan privilegios ni hardware especifico.
+"""Metrics that need neither privileges nor specific hardware.
 
-`cpu.load` es `% Processor Time` — la carga real. NO es `% Processor Utility`,
-que es lo que usaba LCD Control (carga x clock/base) y saturaba en 100 con
-carga real >= ~61%.
+`cpu.load` is `% Processor Time` — the real load. It is NOT `% Processor
+Utility`, which is what LCD Control used (load x clock/base) and which saturated
+at 100 for any real load above roughly 61%.
 """
 import platform
 import time
@@ -34,7 +34,7 @@ class PsutilProvider(Provider):
         self._prev = (c.bytes_recv, c.bytes_sent, time.time())
         self._nics = self._adaptadores()
         self._prev_nic = {}
-        psutil.cpu_percent(interval=None)      # arma la linea base
+        psutil.cpu_percent(interval=None)      # establishes the baseline
 
     def probe(self) -> bool:
         return True
@@ -53,11 +53,11 @@ class PsutilProvider(Provider):
         freq = psutil.cpu_freq()
         return {
             "cpu.name": self._cpu_name.upper(),
-            # platform.processor() en Windows da "Intel64 Family 6 Model
-            # 151..." -- sin modelo que acortar. short_cpu_name() devuelve el
-            # original cuando no encuentra nada que sacar, asi que el widget
-            # muestra algo en vez de un hueco. El nombre lindo lo sirve el
-            # sidecar por PDH, que tiene mas prioridad que este provider.
+            # platform.processor() on Windows gives "Intel64 Family 6 Model
+            # 151..." -- with no model to shorten. short_cpu_name() returns the
+            # original when it finds nothing to strip, so the widget shows
+            # something instead of a hole. The pretty name is served by the sidecar
+            # through PDH, which outranks this provider.
             "cpu.name_short": short_cpu_name(self._cpu_name).upper(),
             "cpu.load": psutil.cpu_percent(interval=None),
             "cpu.clock": float(freq.current) if freq else None,
@@ -67,8 +67,8 @@ class PsutilProvider(Provider):
             "net.down": down,
             "net.up": up,
             "clock.time": time.strftime("%H:%M", t),
-            # Con segundos, para un panel a 30 fps: el segundero moviendose es la
-            # senal mas barata de que lo que se ve esta vivo y no congelado.
+            # With seconds, for a panel at 30 fps: a moving seconds field is the
+            # cheapest signal that what you see is alive and not frozen.
             "clock.time_hms": time.strftime("%H:%M:%S", t),
             "clock.date": self._date(t),
             **self._net_rate_por_adaptador(),
@@ -82,10 +82,10 @@ class PsutilProvider(Provider):
     def _net_rate(self):
         c = psutil.net_io_counters()
         now = time.time()
-        # max(0.2, ...): la primera lectura puede caer a microsegundos de la
-        # linea base tomada en __init__, y dividir por un dt de ~0 convierte
-        # cualquier diferencia de bytes en una tasa absurda de gigabytes por
-        # segundo. Es una guarda contra la division, no una cadencia.
+        # max(0.2, ...): the first reading can land microseconds after the baseline
+        # taken in __init__, and dividing by a dt of ~0 turns any difference in
+        # bytes into an absurd rate of gigabytes per second. It is a guard on the
+        # division, not a cadence.
         dt = max(0.2, now - self._prev[2])
         down = (c.bytes_recv - self._prev[0]) / dt
         up = (c.bytes_sent - self._prev[1]) / dt
@@ -94,23 +94,23 @@ class PsutilProvider(Provider):
 
     # --- red por adaptador ---
     #
-    # net.down/net.up son el total de la maquina, que con dos placas o con una
-    # VPN levantada no dice de cual es el trafico. El id lleva un slug del
-    # nombre del adaptador y el nombre real va en el catalogo.
+    # net.down/net.up are the machine total, which with two NICs or a VPN up does
+    # not say whose traffic it is. The id carries a slug of the adapter name and
+    # the real name goes in the catalogue.
 
     def _adaptadores(self) -> dict:
-        """{slug: nombre real} de los adaptadores con trafico contabilizado.
+        """{slug: real name} for the adapters whose traffic is counted.
 
-        Se descubren una sola vez, en __init__: Registry lee metrics() en su
-        constructor, asi que un adaptador que aparezca despues no se serviria
-        igual, y recalcular la lista dejaria el conjunto de ids cambiando entre
-        muestras -- lo mismo que ya causo el bug del indice de discos.
+        They are discovered once, in __init__: Registry reads metrics() in its
+        constructor, so an adapter appearing later would not be served anyway, and
+        recalculating the list would leave the set of ids changing between samples
+        -- the same thing that already caused the disk index bug.
         """
         try:
             contadores = psutil.net_io_counters(pernic=True)
         except Exception:
             return {}
-        # Se salta loopback: su trafico no le dice nada a nadie.
+        # Loopback is skipped: its traffic tells nobody anything.
         return {slug(nombre): nombre for nombre in contadores
                 if slug(nombre) and "loopback" not in nombre.lower()}
 
