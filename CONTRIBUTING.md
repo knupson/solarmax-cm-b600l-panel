@@ -31,9 +31,9 @@ git clone https://github.com/knupson/solarmax-cm-b600l-panel
 cd solarmax-cm-b600l-panel
 pip install -r requirements.txt
 pip install pytest
-python -m pytest                          # 594 tests, about 85 s
-python -m vmaxpanel --diagnostico         # what is missing on this machine
-python -m vmaxpanel --save preview.png    # renders without touching the panel
+python -m pytest                        # 594 tests, about 85 s
+python -m vmaxpanel --diagnose          # what is missing on this machine
+python -m vmaxpanel --save preview.png  # renders without touching the panel
 ```
 
 **You do not need the panel to develop.** `--save` draws to a PNG and the tests never touch
@@ -50,7 +50,7 @@ it they skip themselves.
 
 ```
 vmaxpanel/
-  cli.py          arguments: --save / --once / --estado / --instalar / --parar
+  cli.py          arguments: --save / --once / --status / --install / --stop
   app.py          wires the engine up with its dependencies
   engine.py       the loop: read sensors -> render -> send to the panel
   tray.py         tray app (pure ctypes/Win32)
@@ -110,7 +110,7 @@ orphan process behind on every profile save.
   against its base commit has to stay empty. If you think you need to change something in
   there, you do not.
 - **`daemon/stop.ps1` does not work for the new engine** and is not fixed, for the reason
-  above. To bring the panel down: `python -m vmaxpanel --parar`.
+  above. To bring the panel down: `python -m vmaxpanel --stop`.
 - **WinRing0 and any ring0 driver.** It is on the Windows vulnerable-driver blocklist and it is
   not going to be enabled. If a metric needs MSR access, it does not get read.
 - **GSA1 writes.** Gigabyte's WMI interface exposes `PIOWrite`, `MEMWrite` and `PCIWrite`:
@@ -121,7 +121,7 @@ orphan process behind on every profile save.
 
 ## Reporting a bug
 
-Open an issue with the output of `python -m vmaxpanel --diagnostico` and, if it concerns what
+Open an issue with the output of `python -m vmaxpanel --diagnose` and, if it concerns what
 gets drawn, the PNG from `python -m vmaxpanel --save bug.png`. Those two are almost always
 enough.
 

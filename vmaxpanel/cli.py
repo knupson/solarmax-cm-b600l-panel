@@ -1,7 +1,13 @@
-"""Punto de entrada de linea de comandos: python -m vmaxpanel
+"""Command-line entry point: python -m vmaxpanel
 
-Corre el motor en primer plano. La app de bandeja (vmaxpanel.tray) es la otra
-entrada: la misma maquinaria, manejada desde un menu en vez de la consola.
+Runs the engine in the foreground. The tray app (vmaxpanel.tray) is the other
+entry point: the same machinery, driven from a menu instead of the console.
+
+Every Spanish flag name is kept as an alias of its English one. They were the
+original names, they are in installed scheduled tasks and in whatever scripts
+people already wrote, and breaking those to make the help text prettier is not a
+trade worth making. `dest` is pinned so renaming an option never silently renames
+the attribute the rest of this module reads.
 """
 import argparse
 import sys
@@ -17,13 +23,19 @@ from .transport.panel_link import PanelLink
 
 HERE = Path(__file__).resolve().parent
 
+# The Spanish values are what bundle.import_bundle speaks; the English ones are
+# aliases accepted on the command line and translated here, so the flag reads in
+# English without a rename reaching into the bundle code.
+SI_EXISTE = {"fail": "fallar", "rename": "renombrar", "overwrite": "pisar",
+             "fallar": "fallar", "renombrar": "renombrar", "pisar": "pisar"}
+
 
 def default_profile_path() -> Path:
     return HERE / "profiles" / "vitals.json"
 
 
 def profiles_dir() -> Path:
-    """Donde viven los perfiles. Funcion y no constante para poder sustituirla."""
+    """Where the profiles live. A function, not a constant, so it can be replaced."""
     return HERE / "profiles"
 
 
@@ -32,11 +44,11 @@ def assets_dir() -> Path:
 
 
 def status_path() -> Path:
-    """Donde el proceso que maneja el panel publica su estado.
+    """Where the process driving the panel publishes its status.
 
-    Al lado del log y por el mismo motivo: es donde el usuario ya va a buscar
-    cuando algo no anda, y tiene que ser el mismo lugar para el que escribe y el
-    que lee sin que nadie configure nada.
+    Next to the log, and for the same reason: it is where the user already looks
+    when something is wrong, and it has to be the same place for the writer and
+    the reader without anybody configuring anything.
     """
     return HERE.parent / "vmaxpanel-estado.json"
 
@@ -44,61 +56,66 @@ def status_path() -> Path:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="vmaxpanel")
     ap.add_argument("--profile", type=Path, default=default_profile_path())
-    ap.add_argument("--save", type=Path, help="renderiza un PNG y sale, sin tocar el panel")
-    ap.add_argument("--port", help="COM del panel; por defecto se autodetecta")
-    ap.add_argument("--once", action="store_true", help="manda un solo frame")
+    ap.add_argument("--save", type=Path,
+                    help="render a PNG and exit, without touching the panel")
+    ap.add_argument("--port", help="the panel's COM port; autodetected by default")
+    ap.add_argument("--once", action="store_true", help="send a single frame")
     ap.add_argument("--no-sensors", action="store_true",
-                    help="no lanza el sidecar (util para probar layouts)")
+                    help="do not launch the sidecar (useful for testing layouts)")
     ap.add_argument("--log", type=Path,
-                    help="ademas de la consola, escribe todo a este archivo "
-                         "(necesario cuando corre con pythonw.exe, que no tiene "
-                         "consola donde imprimir)")
-    ap.add_argument("--diagnostico", action="store_true",
-                    help="revisa dependencias, sensores, perfil y panel, y sale "
-                         "sin tocar nada")
-    ap.add_argument("--instalar", action="store_true",
-                    help="revisa todo y registra la tarea que arranca la bandeja "
-                         "al iniciar sesion")
-    ap.add_argument("--desinstalar", action="store_true",
-                    help="borra esa tarea; el panel deja de arrancar solo")
-    ap.add_argument("--parar", action="store_true",
-                    help="baja el panel ahora: detiene la tarea y mata la bandeja, "
-                         "el motor y el sidecar de sensores")
-    ap.add_argument("--estado", action="store_true",
-                    help="dice si el panel esta andando ahora, leyendo lo que "
-                         "publica el proceso que lo maneja")
-    ap.add_argument("--exportar", type=Path, metavar="ARCHIVO",
-                    help="guarda el perfil y sus assets en un solo archivo "
-                         f"({bundle.EXT}) para compartirlo o respaldarlo")
-    ap.add_argument("--importar", type=Path, metavar="ARCHIVO",
-                    help="instala un perfil exportado con --exportar")
-    ap.add_argument("--si-existe", choices=("fallar", "renombrar", "pisar"),
-                    default="fallar",
-                    help="que hacer al importar si ya hay un perfil con ese "
-                         "nombre (por defecto: fallar y no tocar nada)")
+                    help="write everything to this file as well as to the console "
+                         "(required when running under pythonw.exe, which has no "
+                         "console to print to)")
+    ap.add_argument("--diagnose", "--diagnostico", dest="diagnostico",
+                    action="store_true",
+                    help="check dependencies, sensors, profile and panel, then "
+                         "exit without changing anything")
+    ap.add_argument("--install", "--instalar", dest="instalar", action="store_true",
+                    help="check everything, then register the task that starts the "
+                         "tray at logon")
+    ap.add_argument("--uninstall", "--desinstalar", dest="desinstalar",
+                    action="store_true",
+                    help="remove that task; the panel stops starting on its own")
+    ap.add_argument("--stop", "--parar", dest="parar", action="store_true",
+                    help="bring the panel down now: stop the task and kill the "
+                         "tray, the engine and the sensor sidecar")
+    ap.add_argument("--status", "--estado", dest="estado", action="store_true",
+                    help="say whether the panel is drawing right now, by reading "
+                         "what the process driving it publishes")
+    ap.add_argument("--export", "--exportar", dest="exportar", type=Path,
+                    metavar="FILE",
+                    help="save the profile and its assets into a single file "
+                         f"({bundle.EXT}) to share or back up")
+    ap.add_argument("--import", "--importar", dest="importar", type=Path,
+                    metavar="FILE",
+                    help="install a profile exported with --export")
+    ap.add_argument("--if-exists", "--si-existe", dest="si_existe",
+                    choices=tuple(SI_EXISTE), default="fail",
+                    help="what to do on import when a profile of that name already "
+                         "exists (default: fail and change nothing)")
     a = ap.parse_args(argv)
 
-    # Antes del run_with_log: estos tres salen por consola y terminan. Escribir
-    # el diagnostico a un log en vez de a la pantalla seria justo lo contrario de
-    # lo que se le pide a alguien que dice "no anda".
+    # Before run_with_log: these all print to the console and exit. Writing the
+    # diagnostic to a log file instead of to the screen would be the exact
+    # opposite of what somebody saying "it does not work" needs.
     if a.parar:
         return _reportar(install.parar())
     if a.desinstalar:
         return _reportar(install.desinstalar())
     if a.instalar:
-        print(f"Instalando VMax Panel con el perfil {a.profile}")
+        print(f"Installing VMax Panel with profile {a.profile}")
         return _reportar(install.instalar(a.profile, log=a.log or _log_por_defecto(),
                                           port=a.port))
     if a.estado:
         leido = status.StatusFile(status_path()).read()
         print(status.describe(leido))
-        # 1 y no 2: no es un error de uso ni una falla del comando, es la respuesta
-        # "no esta corriendo" -- que un script pueda distinguir con el codigo.
+        # 1 and not 2: this is neither a usage error nor a failed command, it is
+        # the answer "it is not running" -- which a script can tell apart by code.
         return 0 if leido and leido.get("running") else 1
     if a.exportar:
         return _exportar(a.profile, a.exportar)
     if a.importar:
-        return _importar(a.importar, a.si_existe)
+        return _importar(a.importar, SI_EXISTE[a.si_existe])
     if a.diagnostico:
         checks = install.diagnosticar(a.profile, a.port)
         for c in checks:
@@ -109,11 +126,11 @@ def main(argv=None) -> int:
 
 
 def _log_por_defecto() -> Path:
-    """Donde escribe la bandeja cuando la levanta la tarea.
+    """Where the tray writes when the scheduled task starts it.
 
-    Al lado del repo y no en %TEMP%: la tarea corre con pythonw, sin consola, asi
-    que este archivo es el UNICO lugar donde queda el motivo de que el panel no
-    haya arrancado. Tiene que estar donde el usuario lo encuentre.
+    Beside the repo and not in %TEMP%: the task runs under pythonw, with no
+    console, so this file is the ONLY place the reason the panel failed to start
+    is recorded. It has to be somewhere the user will find it.
     """
     return HERE.parent / "vmaxpanel.log"
 
@@ -121,10 +138,10 @@ def _log_por_defecto() -> Path:
 def _exportar(perfil, destino) -> int:
     destino = Path(destino)
     if destino.exists():
-        # Sin --si-existe para exportar a proposito: el bundle anterior puede ser
-        # justo el que el usuario ya le mando a alguien, y pisarlo en silencio no
-        # tiene vuelta atras. Cambiar el nombre cuesta menos que recuperarlo.
-        print(f"{destino} ya existe: elegi otro nombre o borralo primero.")
+        # No --if-exists for export, on purpose: the previous bundle may be the
+        # very one the user already sent to somebody, and overwriting it silently
+        # cannot be undone. Choosing another name costs less than recovering it.
+        print(f"{destino} already exists: pick another name or delete it first.")
         return 2
     try:
         info = bundle.export_profile(perfil, destino, assets_dir())
@@ -132,17 +149,17 @@ def _exportar(perfil, destino) -> int:
         print(str(e))
         return 2
     kb = destino.stat().st_size / 1024
-    print(f"exportado: {destino} ({kb:.0f} KB)")
-    print(f"  perfil:  {Path(perfil).name}")
-    print(f"  assets:  {', '.join(info['assets']) or 'ninguno'}")
-    print(f"  fuentes: {', '.join(info['fonts'])}")
+    print(f"exported: {destino} ({kb:.0f} KB)")
+    print(f"  profile: {Path(perfil).name}")
+    print(f"  assets:  {', '.join(info['assets']) or 'none'}")
+    print(f"  fonts:   {', '.join(info['fonts'])}")
     if info["faltantes"]:
-        print(f"  OJO, no estaban y no van en el bundle: "
+        print(f"  CAREFUL, these were missing and are not in the bundle: "
               f"{', '.join(info['faltantes'])}")
-    # Las fuentes no viajan y eso no es un olvido: son de Microsoft. Se dice aca
-    # para que nadie se sorprenda del otro lado.
-    print("  (las fuentes no se empaquetan: se piden por familia y en cualquier "
-          "Windows estan)")
+    # Fonts do not travel, and that is not an oversight: they are Microsoft's.
+    # Said here so nobody is surprised on the other side.
+    print("  (fonts are not packaged: they are requested by family and are "
+          "present on any Windows)")
     return 0
 
 
@@ -153,15 +170,15 @@ def _importar(origen, si_existe) -> int:
     except bundle.BundleError as e:
         print(str(e))
         return 2
-    print(f"importado: {info['profile']}")
+    print(f"imported: {info['profile']}")
     if info["assets"]:
-        print(f"  assets:  {', '.join(info['assets'])}")
+        print(f"  assets: {', '.join(info['assets'])}")
     if info["fuentes_faltantes"]:
-        print(f"  fuentes que NO estan en esta maquina: "
+        print(f"  fonts NOT present on this machine: "
               f"{', '.join(info['fuentes_faltantes'])}")
-        print("  el panel va a usar una de reemplazo: el layout se ve distinto "
-              "pero funciona.")
-    print(f"  para usarlo: elegilo en el menu de la bandeja, o "
+        print("  the panel will substitute another one: the layout looks "
+              "different but it works.")
+    print(f"  to use it: pick it from the tray menu, or "
           f"--profile {info['profile']}")
     return 0
 
@@ -191,15 +208,15 @@ def _run(a) -> int:
             r = Renderer(store.current)
             r.frame(registry.read()).save(a.save)
             for w in r.warnings():
-                print(f"aviso: {w}", file=sys.stderr)
-            print("guardado", a.save)
+                print(f"warning: {w}", file=sys.stderr)
+            print("saved", a.save)
             return 0
 
         cfg = EngineConfig(profile_path=a.profile, max_iterations=1 if a.once else None)
         eng = Engine(store, registry, cfg,
                      link_factory=lambda: PanelLink.autodetect(a.port))
-        print(f"perfil {store.current.name!r}; "
-              f"metricas no disponibles: {sorted(registry.unavailable())}")
+        print(f"profile {store.current.name!r}; "
+              f"unavailable metrics: {sorted(registry.unavailable())}")
         eng.run()
         return 0
     except KeyboardInterrupt:

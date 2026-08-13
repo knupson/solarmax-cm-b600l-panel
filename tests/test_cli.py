@@ -41,7 +41,7 @@ def test_log_redirects_stdout_and_stderr_to_the_file(tmp_path):
     out = tmp_path / "out.png"
     rc = cli.main(["--save", str(out), "--no-sensors", "--log", str(log)])
     assert rc == 0
-    assert "guardado" in log.read_text(encoding="utf-8")
+    assert "saved" in log.read_text(encoding="utf-8")
 
 
 def test_log_appends_instead_of_truncating(tmp_path):

@@ -26,8 +26,11 @@ driver of any kind.
 any noncommercial purpose. Selling it is not allowed. To contribute, see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-> The code comments and the app's own messages are still in Spanish. Translating them is in
-> progress; the docs came first.
+> **On language:** the docs and the command-line interface are in English. The code comments,
+> the tray and editor menus and the remaining messages are still in Spanish — translation is in
+> progress, in that order. Every command-line flag keeps its old Spanish name as an alias
+> (`--status` and `--estado` are the same flag), so nothing already installed or scripted
+> breaks.
 
 ## From scratch
 
@@ -37,9 +40,9 @@ On a new machine, in this order:
 git clone https://github.com/knupson/solarmax-cm-b600l-panel
 cd solarmax-cm-b600l-panel
 pip install -r requirements.txt
-python -m vmaxpanel --diagnostico          # says what is missing and what is optional
-python -m vmaxpanel --save preview.png     # a PNG, without touching the panel: proves it renders
-python -m vmaxpanel --profile vmaxpanel\profiles\apex.json --instalar   # administrator console
+python -m vmaxpanel --diagnose          # says what is missing and what is optional
+python -m vmaxpanel --save preview.png  # a PNG, without touching the panel: proves it renders
+python -m vmaxpanel --profile vmaxpanel\profiles\apex.json --install   # administrator console
 ```
 
 **Verified from a clean clone**: the full test suite passes and the panel draws completely
@@ -49,7 +52,7 @@ them is the GPU, per-core figures, disk temperatures and fan RPM. The diagnostic
 **optional** and tells you where to download them. It is the one step that cannot be
 automated: they are third-party binaries and this repo does not redistribute them.
 
-`--instalar` needs an **administrator console**, because the scheduled task runs elevated
+`--install` needs an **administrator console**, because the scheduled task runs elevated
 (without elevation there is no GSA1 and no SMART).
 
 ## Why it exists
@@ -155,8 +158,8 @@ python -m vmaxpanel --once                     # a single frame
 python -m vmaxpanel --save preview.png         # render to PNG, does not touch the panel
 python -m vmaxpanel --save p.png --no-sensors  # same, without launching the sensor sidecar
 python -m vmaxpanel.editor                     # layout editor
-python -m vmaxpanel --estado                   # is it drawing right now?
-python -m vmaxpanel --parar                    # bring the whole thing down
+python -m vmaxpanel --status                   # is it drawing right now?
+python -m vmaxpanel --stop                    # bring the whole thing down
 ```
 
 Editing `vmaxpanel/profiles/<profile>.json` **reloads live**, with no restart. A broken JSON
@@ -180,21 +183,21 @@ cannot show a tray icon or a window at all.
 ### Install and autostart
 
 ```powershell
-python -m vmaxpanel --diagnostico                  # checks and exits, changes nothing
-python -m vmaxpanel --profile <profile> --instalar # checks, then registers the logon task
-python -m vmaxpanel --desinstalar                  # removes the task
+python -m vmaxpanel --diagnose                  # checks and exits, changes nothing
+python -m vmaxpanel --profile <profile> --install # checks, then registers the logon task
+python -m vmaxpanel --uninstall                  # removes the task
 ```
 
-`--diagnostico` is what to run when "it does not work": dependencies (named as pip names, not
+`--diagnose` is what to run when "it does not work": dependencies (named as pip names, not
 import names — "PIL is missing" sends people looking for a package that does not exist), the
 sensor DLL, the profile and the panel. Three states rather than two: **ok**, **MISSING**
-(blocks operation, and blocks `--instalar`) and **optional** — without ffmpeg you lose video
+(blocks operation, and blocks `--install`) and **optional** — without ffmpeg you lose video
 backgrounds and nothing else, and an unplugged panel is not a problem because the tray keeps
 retrying. An "Access denied" on the port is translated to *in use*: pyserial wraps the
 `PermissionError` in a `SerialException`, and read literally it sends you to fight UAC instead
 of to close LCD Control.
 
-`--instalar` registers the task **from XML**, not via `/SC ONLOGON`, because the schtasks
+`--install` registers the task **from XML**, not via `/SC ONLOGON`, because the schtasks
 defaults refuse to start on battery, kill the task when you unplug, and stop it after 72 hours:
 on a laptop that is the panel switching itself off. It uses **`RunLevel HighestAvailable`** —
 GSA1 and NVMe SMART both need elevation — which is why registering it needs an administrator
@@ -219,7 +222,7 @@ it is better not to run both.
 ### Bringing it down for real
 
 ```powershell
-python -m vmaxpanel --parar
+python -m vmaxpanel --stop
 ```
 
 Three things, because all three are needed: it stops the scheduled task (otherwise it returns
@@ -240,7 +243,7 @@ byte-identical rollback path for the whole rewrite.
 ### Knowing whether it is running
 
 ```powershell
-python -m vmaxpanel --estado
+python -m vmaxpanel --status
 ```
 
 ```
@@ -270,9 +273,9 @@ one day.
 ### Sharing and backing up a profile
 
 ```powershell
-python -m vmaxpanel --profile <profile> --exportar my-profile.vmaxpanel
-python -m vmaxpanel --importar my-profile.vmaxpanel
-python -m vmaxpanel --importar other.vmaxpanel --si-existe renombrar
+python -m vmaxpanel --profile <profile> --export my-profile.vmaxpanel
+python -m vmaxpanel --import my-profile.vmaxpanel
+python -m vmaxpanel --import other.vmaxpanel --if-exists rename
 ```
 
 Also from the editor (**Exportar… / Importar…**, with a file dialog) and from the tray
@@ -297,7 +300,7 @@ Four decisions that are not obvious:
   "it is the same file" would have been a lie. A check against the repo's real profiles caught
   it, not the test — the test used a single-line fixture.
 - **Import never overwrites by default.** Two people exporting "apex" is normal, and the user's
-  layout is their own work. Use `--si-existe renombrar` or `pisar` when that is what you want.
+  layout is their own work. Use `--if-exists rename` or `overwrite` when that is what you want.
 - **A zip from elsewhere is treated as hostile.** The profile is validated *before* anything is
   written (a broken bundle must not leave assets half-copied), any member that is absolute,
   contains `..` or carries a drive letter is rejected — zip-slip, and this process runs
@@ -387,7 +390,7 @@ Python 3.13 plus `psutil`, `pyserial` and `pillow`. `ffmpeg` is optional, and on
 backgrounds. The three DLLs (`LibreHardwareMonitorLib`, `HidSharp`, `HidLibrary`) go in
 `vmaxpanel/lib/` — LHM needs HidSharp beside it or `Open()` fails. **They are not in the
 repo**: they are third-party and are not redistributed here. `python -m vmaxpanel
---diagnostico` says where to get them and what you lose without them. `frida-tools` was only
+--diagnose` says where to get them and what you lose without them. `frida-tools` was only
 used to reverse the protocol; the driver does not need it.
 
 ## Licence

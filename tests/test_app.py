@@ -4,6 +4,7 @@ Toda la logica de la app de bandeja vive aca y se prueba sin ventanas ni
 panel: la bandeja (vmaxpanel/tray.py) es solo el menu de Win32 que llama a
 estos metodos.
 """
+import copy
 import json
 import time
 from pathlib import Path
@@ -28,15 +29,26 @@ class FakeCpu(Provider):
         return {"cpu.load": 42.0}
 
 
-def profile(tmp_path):
+def profile(tmp_path, fps=None):
     path = tmp_path / "vitals.json"
-    path.write_text(json.dumps(MINIMAL), encoding="utf-8")
+    raw = copy.deepcopy(MINIMAL)
+    if fps is not None:
+        raw["panel"]["fps"] = fps
+    path.write_text(json.dumps(raw), encoding="utf-8")
     return path
 
 
-def app_for(tmp_path, link_factory=None, **kw):
+def app_for(tmp_path, link_factory=None, fps=None, **kw):
     """PanelApp con transporte y registry falsos. `kw` va derecho al constructor
-    (status_path, status_period, port)."""
+    (status_path, status_period, port).
+
+    `fps` sube la cadencia del perfil para los tests que CUENTAN cuadros. MINIMAL
+    viene a 1 fps, asi que esperar dos cuadros son mas de mil milisegundos de
+    reloj real encima del arranque en frio -- cargar Consolas a 60 px, levantar
+    Pillow y codificar un JPEG de 320x1480. En esta maquina sobra; en el runner
+    del CI no, y el test fallo una corrida y paso la siguiente con el mismo
+    codigo. Contar cuadros no deberia depender del pacing.
+    """
     made = []
 
     def factory():
@@ -44,7 +56,7 @@ def app_for(tmp_path, link_factory=None, **kw):
         made.append(t)
         return PanelLink(t)
 
-    return PanelApp(profile(tmp_path),
+    return PanelApp(profile(tmp_path, fps=fps),
                     link_factory=link_factory or factory,
                     registry_factory=lambda: (Registry([FakeCpu()]), None),
                     **kw), made
@@ -60,19 +72,19 @@ def wait_until(pred, timeout=5.0):
 
 
 def test_start_renders_frames_in_the_background(tmp_path):
-    app, made = app_for(tmp_path)
+    app, made = app_for(tmp_path, fps=30)
     app.start()
     try:
-        assert wait_until(lambda: app.state()["frames"] >= 2)
+        assert wait_until(lambda: app.state()["frames"] >= 2, timeout=20)
         assert app.state()["running"] is True
     finally:
         app.stop()
 
 
 def test_stop_ends_the_thread_and_releases_the_panel(tmp_path):
-    app, made = app_for(tmp_path)
+    app, made = app_for(tmp_path, fps=30)
     app.start()
-    assert wait_until(lambda: app.state()["frames"] >= 1)
+    assert wait_until(lambda: app.state()["frames"] >= 1, timeout=20)
     app.stop()
     assert app.state()["running"] is False
     assert made[0].closed is True

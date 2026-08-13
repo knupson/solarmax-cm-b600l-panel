@@ -297,9 +297,12 @@ def test_the_cli_export_refuses_to_overwrite_silently(entorno, tmp_path, capsys,
     from vmaxpanel import cli
     monkeypatch.setattr(cli, "assets_dir", lambda: assets)
     salida = tmp_path / "s.vmaxpanel"
+    # A proposito con el flag viejo `--exportar` y no con `--export`: los nombres
+    # castellanos quedaron como alias para no romper scripts ya escritos, y este
+    # es el test que lo demuestra.
     assert cli.main(["--profile", str(perfil), "--exportar", str(salida)]) == 0
     assert cli.main(["--profile", str(perfil), "--exportar", str(salida)]) == 2
-    assert "ya existe" in capsys.readouterr().out
+    assert "already exists" in capsys.readouterr().out
 
 
 def test_a_profile_with_crlf_survives_the_roundtrip(entorno, tmp_path):
