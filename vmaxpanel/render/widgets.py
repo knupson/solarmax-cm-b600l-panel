@@ -159,7 +159,13 @@ def _draw_graph(img, g, w, value, ctx):
         g.rectangle([x, y, x + ww, y + hh], fill=w.track)
     series = list(ctx.history.get(w.metric) or [])[-w.samples:]
     if not series:
-        return
+        # Sin historial todavia -- el primer cuadro de la corrida, y el unico
+        # caso de --save, que dibuja uno y sale -- pero el valor de ahora ya
+        # llego como argumento. Usarlo es lo mismo que tener una muestra.
+        actual = _num(value)
+        if actual is None:
+            return
+        series = [actual]
     if len(series) == 1:
         # Una sola muestra es el caso normal del primer cuadro de cualquier
         # corrida, y de --save, que dibuja uno solo y sale. Antes caia en el

@@ -147,6 +147,21 @@ def test_graph_uses_history():
     assert im.getbbox() is not None
 
 
+def test_graph_without_history_falls_back_to_the_current_value():
+    # El caso de --save y del PRIMER cuadro de cualquier corrida: todavia no se
+    # acumulo ninguna muestra, pero el valor de ahora ya esta y llega como
+    # argumento. Sin esto la caja sale vacia, que es lo que se veia en las
+    # capturas del README.
+    im = canvas()
+    w = model.GraphWidget(id="g", type="graph", x=10, y=10, metric="cpu.load",
+                          w=200, h=60, color="#3987E5", samples=10)
+    widgets.draw(im, w, 50.0, ctx(history={}))
+    px = im.load()
+    fila = [y for y in range(10, 71) if px[110, y] == (57, 135, 229)]
+    assert fila, "sin historial no dibujo la linea del valor actual"
+    assert 38 <= sum(fila) / len(fila) <= 42
+
+
 def test_graph_with_a_single_sample_draws_a_flat_line():
     # El primer cuadro de una corrida tiene UNA muestra. Antes eso caia en el
     # mismo caso que "no hay historial" y el widget quedaba en una caja vacia,
