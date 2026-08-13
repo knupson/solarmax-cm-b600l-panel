@@ -1,10 +1,7 @@
-"""Smoke tests del CLI que no tocan el panel ni lanzan el sidecar.
+"""Smoke tests for the CLI that touch neither the panel nor the sidecar.
 
-El brief de la tarea 12 no pedia un test file para cli.py -- la verificacion
-de --save/--once/hot-reload queda en los pasos manuales del brief (9 y 10).
-Pero cli.py es codigo de produccion nuevo sin ninguna cobertura automatica, y
---no-sensors permite probar el camino feliz y el de un perfil roto sin abrir
-el puerto serie ni levantar powershell.
+`--no-sensors` makes it possible to exercise both the happy path and the broken
+profile path without opening the serial port or starting powershell.
 """
 import pytest
 from PIL import Image
@@ -34,9 +31,9 @@ def test_a_missing_profile_exits_with_an_error_instead_of_a_traceback(tmp_path):
 
 
 def test_log_redirects_stdout_and_stderr_to_the_file(tmp_path):
-    """La tarea programada corre con pythonw.exe, que no tiene consola: sin
-    --log, un motor que muere al logon deja el panel negro y ningun rastro
-    de por que."""
+    """The scheduled task runs under pythonw.exe, which has no console: without
+    --log, an engine that dies at logon leaves the panel black and no trace of
+    why."""
     log = tmp_path / "panel.log"
     out = tmp_path / "out.png"
     rc = cli.main(["--save", str(out), "--no-sensors", "--log", str(log)])
@@ -45,7 +42,7 @@ def test_log_redirects_stdout_and_stderr_to_the_file(tmp_path):
 
 
 def test_log_appends_instead_of_truncating(tmp_path):
-    """Un reinicio no puede borrar la evidencia de la corrida anterior."""
+    """A restart must not erase the evidence of the previous run."""
     log = tmp_path / "panel.log"
     log.write_text("corrida previa\n", encoding="utf-8")
     cli.main(["--save", str(tmp_path / "a.png"), "--no-sensors", "--log", str(log)])
@@ -63,10 +60,9 @@ def test_log_captures_the_error_of_a_broken_profile(tmp_path):
 
 
 def test_log_captures_a_traceback_from_an_unexpected_crash(tmp_path, monkeypatch):
-    """Un TypeError adentro del render -- la clase de fallo que la revision
-    final encontro -- se escapa hasta matar el proceso. Con pythonw el
-    traceback no tiene donde imprimirse, asi que tiene que quedar en el log
-    antes de que se restaure stderr."""
+    """A TypeError inside the render -- the class of failure the final review found
+    -- escapes all the way to killing the process. Under pythonw the traceback has
+    nowhere to print, so it has to land in the log before stderr is restored."""
     log = tmp_path / "panel.log"
 
     def boom(*args, **kw):

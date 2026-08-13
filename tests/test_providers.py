@@ -13,9 +13,8 @@ def test_psutil_provider_probes_true():
 
 def test_psutil_declares_only_registered_metrics():
     p = PsutilProvider()
-    # is_metric y no "subset de METRICS": desde que hay familias por
-    # dispositivo (net.<adaptador>.down) un id valido no tiene por que estar en
-    # la tabla plana.
+    # is_metric and not "a subset of METRICS": since there are per-device families
+    # (net.<adapter>.down), a valid id has no reason to be in the flat table.
     for mid in p.metrics():
         assert is_metric(mid), mid
     assert {"cpu.load", "mem.used", "net.down", "clock.time"} <= p.metrics()
@@ -23,7 +22,7 @@ def test_psutil_declares_only_registered_metrics():
 
 def test_psutil_read_returns_declared_keys_only():
     p = PsutilProvider()
-    p.read()                      # primer llamada arma la linea base de red
+    p.read()                      # the first call establishes the network baseline
     time.sleep(0.2)
     sample = p.read()
     assert set(sample) == p.metrics()
@@ -40,10 +39,10 @@ def test_psutil_clock_and_date_are_strings():
 
 
 def test_psutil_also_serves_the_short_cpu_name():
-    """psutil es el respaldo cuando el sidecar se cae, asi que tiene que
-    servir las mismas metricas de nombre. platform.processor() en Windows
-    devuelve "Intel64 Family 6 Model 151...", que no tiene modelo: el corto
-    no puede quedar vacio ni desaparecer."""
+    """psutil is the fallback when the sidecar dies, so it has to serve the same
+    metrics by name. platform.processor() on Windows returns "Intel64 Family 6
+    Model 151...", which has no model in it: the short name must not end up empty
+    or disappear."""
     p = PsutilProvider()
     assert "cpu.name_short" in p.metrics()
     muestra = p.read()
@@ -52,8 +51,8 @@ def test_psutil_also_serves_the_short_cpu_name():
 
 
 def test_psutil_serves_network_rates_per_adapter():
-    """net.down/net.up son el total de la maquina. Con dos placas o con una
-    VPN levantada eso no dice de cual es el trafico."""
+    """net.down/net.up are the machine total. With two NICs or a VPN up, that does
+    not say whose traffic it is."""
     p = PsutilProvider()
     porads = {m for m in p.metrics() if m.startswith("net.") and m.count(".") == 2}
     assert porads, "no publico ninguna metrica de red por adaptador"
@@ -61,7 +60,7 @@ def test_psutil_serves_network_rates_per_adapter():
     for mid in porads:
         assert mid in m
         assert m[mid] is None or m[mid] >= 0
-    # y el catalogo trae el nombre real del adaptador, no el slug
+    # and the catalogue carries the adapter's real name, not the slug
     cat = p.catalog()
     assert any("Ethernet" in c.label or "Wi" in c.label
                for mid, c in cat.items() if mid in porads), \
@@ -71,8 +70,8 @@ def test_psutil_serves_network_rates_per_adapter():
 
 
 def test_psutil_serves_the_clock_with_seconds():
-    """clock.time es HH:MM. A 30 fps el segundero se mueve, asi que vale
-    tenerlo: es la senal mas barata de que el panel esta vivo."""
+    """clock.time is HH:MM. At 30 fps the seconds field moves, so it is worth
+    having: it is the cheapest signal that the panel is alive."""
     p = PsutilProvider()
     assert "clock.time_hms" in p.metrics()
     valor = p.read()["clock.time_hms"]

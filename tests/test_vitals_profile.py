@@ -37,14 +37,16 @@ def test_profile_only_references_known_metrics():
 
 
 def test_profile_ships_no_bundled_font_files():
-    """Consolas es de Microsoft: el perfil la pide por familia, no por archivo."""
+    """Consolas belongs to Microsoft: the profile asks for it by family, not by
+    file."""
     lay = loader.load(PROFILE)
     for f in lay.fonts.values():
         assert not f.family.lower().endswith((".ttf", ".otf"))
 
 
 def test_profile_uses_no_vendor_artwork():
-    """back.png es arte del tema Vitals de LCD Control y no se redistribuye."""
+    """back.png is artwork from LCD Control's Vitals theme and is not
+    redistributed."""
     lay = loader.load(PROFILE)
     assert lay.background.type == "gradient"
     assert lay.background.src is None
@@ -61,7 +63,7 @@ def test_frame_matches_the_golden_image():
     if bbox is None:
         return
     worst = max(max(band.getextrema()) for band in diff.split())
-    assert worst <= 8, f"el render cambio respecto del golden (delta {worst})"
+    assert worst <= 8, f"the render changed against the golden (delta {worst})"
 
 
 def test_unavailable_metrics_render_as_dashes_not_crashes():
@@ -80,9 +82,8 @@ def test_end_to_end_frame_fits_the_panel_protocol():
 
 
 def test_every_section_header_has_a_rule_above_it():
-    """Las lineas separadoras estaban horneadas en back.png, el arte del
-    vendor que el perfil propio ya no usa. Sin ellas las secciones quedan
-    flotando sin estructura."""
+    """The separator lines used to be baked into back.png, the vendor artwork this
+    profile no longer uses. Without them the sections float with no structure."""
     lay = loader.load(PROFILE)
     rules = [w for w in lay.widgets if w.type == "rect"]
     headers = [w for w in lay.widgets if w.type == "label" and w.font == "section"]
@@ -90,14 +91,14 @@ def test_every_section_header_has_a_rule_above_it():
     assert len(rules) == len(headers)
     for h in headers:
         above = [r for r in rules if 0 < h.y - r.y <= 40]
-        assert len(above) == 1, f"{h.text} no tiene una regla arriba"
-        assert above[0].h == 1               # hairline, no una banda
+        assert len(above) == 1, f"{h.text} has no rule above it"
+        assert above[0].h == 1               # a hairline, not a band
 
 
 def test_the_profile_reads_the_memory_speed_instead_of_hardcoding_it():
-    """Era un label con el texto "6000". Una actualizacion de BIOS reseteo el
-    XMP, la maquina paso a 5600 y el panel siguio mostrando 6000. Un perfil
-    que se comparte con otros duenos del panel no puede traer el numero de
+    """It used to be a label reading "6000". A BIOS update reset the XMP profile,
+    the machine dropped to 5600 and the panel went on showing 6000. A profile shared
+    with other owners of the panel cannot carry the number of
     ESTA maquina escrito a mano."""
     lay = loader.load(PROFILE)
     speed = [w for w in lay.widgets if w.id == "mem-speed"][0]
@@ -108,10 +109,10 @@ def test_the_profile_reads_the_memory_speed_instead_of_hardcoding_it():
 
 
 def test_the_shipped_profile_is_not_modified_by_the_test_suite():
-    """Guarda contra un accidente que ya paso: un script de verificacion
-    escribio sobre el perfil VIVO en vez de sobre una copia, y lo dejo en
-    'procedural' con 30 fps. Los tests trabajan sobre copias en tmp_path; si
-    este falla, algo esta escribiendo donde no debe."""
+    """A guard against an accident that already happened: a verification script
+    wrote over the LIVE profile instead of over a copy, and left it on 'procedural'
+    at 30 fps. The tests work on copies in tmp_path; if this one fails, something is
+    writing where it should not."""
     raw = __import__("json").loads(PROFILE.read_text(encoding="utf-8"))
     assert raw["panel"]["fps"] == 1
     assert raw["background"]["type"] == "gradient"

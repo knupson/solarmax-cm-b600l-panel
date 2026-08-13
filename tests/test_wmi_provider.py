@@ -1,7 +1,7 @@
 """WmiProvider: espacio en disco por volumen, uptime, procesos.
 
-Se testea con un ejecutor de CIM falso, sin tocar WMI: lo que importa es el
-mapeo a ids de metrica, el catalogo de nombres amigables y la cache -- no
+Tested with a fake CIM runner, without touching WMI: what matters is the mapping
+to metric ids, the catalogue of friendly names and the cache -- not
 PowerShell.
 """
 import pytest
@@ -41,8 +41,8 @@ def test_serves_one_metric_set_per_volume():
 
 
 def test_every_served_id_is_a_valid_metric():
-    """Si un id que el provider sirve no valida, Registry lo rechaza en el
-    constructor y se cae el arranque entero."""
+    """If an id the provider serves does not validate, Registry rejects it in its
+    constructor and the whole start-up falls over."""
     for mid in WmiProvider(cim=FakeCim()).metrics():
         assert is_metric(mid), mid
 
@@ -57,20 +57,20 @@ def test_values_are_computed_per_volume():
 
 
 def test_the_catalog_carries_the_friendly_device_name():
-    """El id es tecnico (vol.D.free) y la etiqueta la ve el usuario en el
-    editor: tiene que decir de que disco habla, con el nombre que le puso."""
+    """The id is technical (vol.D.free) and the label is what the user sees in the
+    editor: it has to say which disk it is about, by the name they gave it."""
     cat = WmiProvider(cim=FakeCim()).catalog()
     assert "JUEGOS" in cat["vol.D.free"].label
     assert "D:" in cat["vol.D.free"].label
     assert "free" in cat["vol.D.free"].label.lower()
-    # un volumen sin etiqueta no puede quedar con un guion suelto
+    # a volume with no label must not be left with a stray dash
     assert cat["vol.C.free"].label.startswith("C:")
     assert "Google Drive" in cat["vol.G.load"].label
 
 
 def test_the_catalog_groups_by_device():
-    """El editor agrupa por dispositivo, asi que el catalogo tiene que decir
-    a que dispositivo pertenece cada metrica."""
+    """The editor groups by device, so the catalogue has to say which device each
+    metric belongs to."""
     p = WmiProvider(cim=FakeCim())
     grupos = p.groups()
     assert grupos["vol.D.free"] == "Disk D: (JUEGOS)"
@@ -79,8 +79,8 @@ def test_the_catalog_groups_by_device():
 
 
 def test_wmi_is_not_queried_on_every_read():
-    """Consultar los cuatro volumenes cuesta ~300 ms. A 1 fps eso es un tercio
-    del presupuesto de cuadro para un dato que cambia cada varios minutos."""
+    """Querying the four volumes costs ~300 ms. At 1 fps that is a third of the
+    frame budget for a value that changes every few minutes."""
     cim = FakeCim()
     p = WmiProvider(cim=cim, ttl=30.0)
     for _ in range(5):

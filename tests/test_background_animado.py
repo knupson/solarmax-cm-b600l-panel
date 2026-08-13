@@ -1,7 +1,7 @@
 """Fondos animados de fase 2: procedural y sequence.
 
-El reloj se inyecta: un fondo que depende del tiempo real no se puede testear
-de forma determinista, y sin determinismo estos tests serian inutiles.
+The clock is injected: a background depending on real time cannot be tested
+deterministically, and without determinism these tests would be useless.
 """
 from pathlib import Path
 
@@ -44,19 +44,19 @@ def test_scroll_moves_with_time_and_reports_animated():
     a = src.frame()
     reloj.t = 0.5
     b = src.frame()
-    assert difiere(a, b), "el fondo no se movio con el tiempo"
+    assert difiere(a, b), "the background did not move with time"
     assert src.warnings == []
 
 
 def test_scroll_loops_seamlessly():
-    """Un scroll que salta al dar la vuelta se ve como un tiron cada ciclo."""
+    """A scroll that jumps on wrapping around looks like a jolt every cycle."""
     src, reloj = fuente(type="procedural", name="scroll", stops=STOPS, speed=100.0)
     alto = TAM.height
     reloj.t = 0.0
     inicio = src.frame()
-    reloj.t = (2 * alto) / 100.0          # un ciclo completo: la tira es 2x el alto
+    reloj.t = (2 * alto) / 100.0          # a full cycle: the strip is 2x the height
     vuelta = src.frame()
-    assert not difiere(inicio, vuelta), "el ciclo no cierra donde arranco"
+    assert not difiere(inicio, vuelta), "the cycle does not close where it started"
 
 
 def test_scroll_with_speed_zero_is_a_still_gradient():
@@ -72,7 +72,7 @@ def test_pulse_changes_brightness_over_its_period():
     src, reloj = fuente(type="procedural", name="pulse", stops=STOPS, period=4.0)
     reloj.t = 0.0
     claro = ImageStat.Stat(src.frame()).mean
-    reloj.t = 2.0                          # medio periodo: el otro extremo
+    reloj.t = 2.0                          # half a period: the other extreme
     oscuro = ImageStat.Stat(src.frame()).mean
     assert abs(sum(claro) - sum(oscuro)) > 3, f"{claro} vs {oscuro}"
 
@@ -86,8 +86,8 @@ def test_pulse_repeats_exactly_each_period():
 
 
 def test_an_unknown_procedural_name_degrades_with_a_warning():
-    """Un perfil compartido que use un generador que no existe tiene que
-    seguir abriendo, como ya hacen los tipos de fase 2 no implementados."""
+    """A shared profile using a generator that does not exist has to keep
+    opening."""
     src, _ = fuente(type="procedural", name="inventado", stops=STOPS)
     img = src.frame()
     assert img.size == (64, 200)
@@ -100,7 +100,7 @@ def carpeta_con_frames(tmp_path, n=3, ext="png"):
     d = tmp_path / "cuadros"
     d.mkdir()
     for i in range(n):
-        # Cada cuadro de un color distinto, para poder distinguirlos.
+        # Each frame a different colour, so they can be told apart.
         Image.new("RGB", (32, 100), (10 + i * 60, 20, 30)).save(d / f"{i:03d}.{ext}")
     return d
 
@@ -152,8 +152,8 @@ def test_static_backgrounds_are_not_animated():
 
 
 def test_a_frame_is_always_a_copy():
-    """Quien recibe el frame le dibuja widgets encima: si fuera el cache, el
-    cuadro siguiente arrancaria con la basura del anterior."""
+    """Whoever receives the frame draws widgets on top of it: if it were the cache,
+    the next frame would start with the previous one's leftovers."""
     src, _ = fuente(type="procedural", name="scroll", stops=STOPS, speed=10.0)
     a, b = src.frame(), src.frame()
     assert a is not b
@@ -162,7 +162,8 @@ def test_a_frame_is_always_a_copy():
 # --- video ---
 
 def test_video_uses_the_video_source(tmp_path, monkeypatch):
-    """El fondo 'video' deja de degradar a color plano: delega en ffmpeg."""
+    """The 'video' background stops degrading to a flat colour: it delegates to
+    ffmpeg."""
     from PIL import Image as I
     import vmaxpanel.render.background as bg
 
@@ -190,18 +191,18 @@ def test_video_uses_the_video_source(tmp_path, monkeypatch):
                            TAM, tmp_path, clock=Reloj())
     assert src.animated is True
     assert src.frame().getpixel((0, 0)) == (7, 8, 9)
-    assert FalsoVideo.creado[0][1] == (64, 200)      # al tamano del panel
+    assert FalsoVideo.creado[0][1] == (64, 200)      # at the panel's size
     assert FalsoVideo.creado[0][2] == 24
 
 
 def test_video_falls_back_to_solid_while_there_is_no_frame(tmp_path, monkeypatch):
-    """El primer cuadro tarda: ffmpeg tiene que arrancar. Hasta que llegue, un
-    color plano en vez de un frame negro sin explicacion."""
+    """The first frame takes a while: ffmpeg has to start. Until it arrives, a flat
+    colour rather than a black frame with no explanation."""
     import vmaxpanel.render.background as bg
 
     class SinFrames:
         def __init__(self, *a, **kw):
-            self.warnings = ["falta ffmpeg para los fondos de video"]
+            self.warnings = ["ffmpeg is missing and video backgrounds need it"]
 
         def start(self):
             return self
@@ -223,8 +224,8 @@ def test_video_falls_back_to_solid_while_there_is_no_frame(tmp_path, monkeypatch
 
 
 def test_closing_the_background_closes_the_video(tmp_path, monkeypatch):
-    """Un ffmpeg huerfano sigue decodificando para nadie. El Renderer cambia de
-    fondo en cada set_layout, asi que sin close() cada recarga en caliente
+    """An orphan ffmpeg keeps decoding for nobody. The Renderer changes background
+    on every set_layout, so without close() each hot reload
     dejaria un proceso mas."""
     import vmaxpanel.render.background as bg
     cerrados = []

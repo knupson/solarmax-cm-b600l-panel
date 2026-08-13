@@ -13,10 +13,10 @@ def test_parse_geometry_from_the_real_serial_number():
 
 def test_parse_geometry_handles_a_hypothetical_second_model():
     # Este SN es sintetico -- no corresponde a ningun dispositivo real
-    # observado, y su ancho de 3 digitos es una suposicion, no un dato
-    # verificado. El unico SN confirmado en hardware real es el de
-    # test_parse_geometry_from_the_real_serial_number. No "proteger" este
-    # valor como si fuera ground truth si algun dia cambia el regex.
+    # observed, and its 3-digit width is an assumption, not verified data. The only
+    # serial confirmed on real hardware is the one in
+    # test_parse_geometry_from_the_real_serial_number. Do not "protect" this value
+    # as though it were ground truth if the regex ever changes.
     assert parse_geometry("VMAXB99480*1920S000000001") == Size(480, 1920)
 
 
@@ -26,11 +26,11 @@ def test_parse_geometry_falls_back_when_unparseable():
 
 
 def test_parse_geometry_falls_back_when_the_parsed_width_is_implausible():
-    # "...1024*768..." es un ancho hipotetico de 4 digitos: el regex de 3
+    # "...1024*768..." is a hypothetical 4-digit width: the 3-digit regex
     # digitos fijos (ver comentario junto a _GEOM_RE en panel_link.py) lo
-    # trunca a "024" -> 24. 24 no es un ancho plausible para ningun panel
-    # HL-VMAX conocido; el piso de plausibilidad tiene que rechazarlo y caer
-    # al default en vez de propagar el valor truncado.
+    # truncates to "024" -> 24. 24 is not a plausible width for any known HL-VMAX
+    # panel; the plausibility floor has to reject it and fall back to the default
+    # instead of propagating the truncated value.
     assert parse_geometry("VMAXQ1024*768S1") == Size(320, 1480)
 
 
@@ -66,7 +66,7 @@ def test_send_frame_writes_the_jpeg_verbatim():
     link.open()
     jpeg = b"\xff\xd8\xff" + b"\x00" * 40 + b"\xff\xd9"
     link.send_frame(jpeg)
-    assert t.writes[-1] == jpeg          # sin header ni framing propio
+    assert t.writes[-1] == jpeg          # no header and no framing of its own
 
 
 def test_send_frame_rejects_data_that_is_not_a_jpeg():
@@ -77,10 +77,10 @@ def test_send_frame_rejects_data_that_is_not_a_jpeg():
 
 
 def test_send_frame_rejects_short_data_that_only_looks_like_a_jpeg_by_overlap():
-    # b"\xff\xd8\xff\xd9" tiene 4 bytes: los primeros 3 matchean el header
-    # FFD8FF y los ultimos 2 matchean el footer FFD9, pero comparten el byte
-    # del medio -- no hay ni un solo byte de imagen real. Un chequeo que solo
-    # mira jpeg[:3] y jpeg[-2:] sin exigir un largo minimo aprueba esto por
+    # b"\xff\xd8\xff\xd9" is 4 bytes: the first 3 match the FFD8FF header and the
+    # last 2 match the FFD9 footer, but they share the middle byte -- there is not
+    # one byte of real image. A check that only looks at jpeg[:3] and jpeg[-2:]
+    # without requiring a minimum length approves this by
     # accidente de superposicion.
     link = PanelLink(FakeTransport())
     link.open()
@@ -115,12 +115,12 @@ def test_write_failure_propagates_as_oserror():
 
 
 def test_a_serial_number_that_is_not_printable_is_rejected():
-    """Si el proceso murio con un handshake a medias, en el buffer del puerto quedan
-    bytes viejos: al reconectar, read(26) los devuelve y tenian el largo justo, asi que
-    pasaban como SN. Resultado: numero de serie basura en el estado y la geometria
-    cayendo al default por casualidad. Un SN que no es ASCII imprimible es una lectura
-    sucia, y levantar es lo correcto: el engine reconecta y la proxima vez el buffer ya
-    esta limpio."""
+    """If the process died mid-handshake, old bytes are left in the port's buffer:
+    on reconnecting, read(26) returns them at exactly the expected length, so they
+    passed as a serial. Result: a garbage serial in the status and the geometry
+    falling back to the default by luck. A serial that is not printable ASCII is a
+    dirty read, and raising is the right move: the engine reconnects and next time
+    the buffer is already clean."""
     basura = PanelLink(FakeTransport(sn=bytes(range(1, 27))))
     with pytest.raises(OSError) as e:
         basura.open()
@@ -135,8 +135,8 @@ def test_a_real_serial_number_still_opens():
 
 
 def test_the_port_buffers_are_cleared_before_the_handshake():
-    """El arreglo de fondo: al abrir el puerto se descarta lo que haya quedado. Sin
-    esto la primera lectura despues de un reinicio sucio puede traer la cola de la
+    """The underlying fix: on opening the port, whatever was left is discarded.
+    Without this the first read after a dirty restart can bring back the tail of the
     sesion anterior."""
     hechos = []
 
