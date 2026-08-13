@@ -1,27 +1,27 @@
-"""Resuelve alias de fuente a archivos reales, por nombre de familia.
+"""Resolves font aliases to real files, by family name.
 
-No empaquetamos TTFs: consola.ttf/consolab.ttf son Consolas, de Microsoft, y no
-son redistribuibles. Se busca por familia en assets/fonts/ (donde la fase 3
-pondra una mono libre) y despues entre las fuentes del sistema.
+No TTFs are bundled: Consolas and the rest belong to Microsoft and are not
+redistributable. Families are looked up in assets/fonts/ first and then among the
+system's fonts.
 
-Una familia ausente cae al fallback. **Para avisarlo se usa `is_available()`, no
-`missing()`**: missing() solo anota lo que un resolve() efectivamente vio faltar,
-y resolve() devuelve desde la cache en un hit sin volver a pasar por ahi, asi que
-un resolver de larga vida puede quedarse mudo sobre una familia que sigue
-faltando. is_available() es una consulta contra el indice, no un historial de
-llamadas, y da la misma respuesta la primera vez y la enesima. Nunca lanza: un
-layout ajeno no puede tumbar el render.
+A missing family falls back. **To report that, `is_available()` is used, not
+`missing()`**: missing() only records what a resolve() actually saw missing, and
+resolve() returns from the cache on a hit without passing through there again, so
+a long-lived resolver can stay silent about a family that is still missing.
+is_available() is a query against the index, not a history of calls, and gives the
+same answer the first time and the hundredth. It never raises: somebody else's
+layout must not be able to bring the render down.
 
-Un .ttc empaqueta varias caras en un archivo y **se indexan todas**. La version
-anterior leia solo la cara 0, con el argumento de que en Windows los pesos vienen
-en archivos separados (msjh.ttc / msjhbd.ttc). Es cierto para los pesos y falso
-para las familias: msgothic.ttc trae MS Gothic, MS UI Gothic y MS PGothic como
-caras 0, 1 y 2; cambria.ttc esconde Cambria Math en la 1; simsun.ttc, NSimSun. Con
-la cara 0 sola, esas familias no existian para el motor -- un perfil que las
-pidiera caia al fallback y el aviso decia que faltaban, estando instaladas. Y
-Nirmala.ttc si empaqueta el bold como cara extra, o sea que el caso que "no se
-dio" tambien estaba en esta maquina. El costo es abrir cada .ttc unas pocas veces
-mas, una sola vez por proceso.
+A .ttc packs several faces into one file and **all of them are indexed**. An
+earlier version read only face 0, on the argument that on Windows the weights come
+in separate files (msjh.ttc / msjhbd.ttc). That is true for weights and false for
+families: msgothic.ttc carries MS Gothic, MS UI Gothic and MS PGothic as faces 0,
+1 and 2; cambria.ttc hides Cambria Math in face 1; simsun.ttc hides NSimSun. With
+face 0 alone those families did not exist for the engine -- a profile asking for
+them fell back, and the warning said they were missing while they were installed.
+And Nirmala.ttc does pack its bold as an extra face, so the case that "does not
+happen" was on the machine too. The cost is opening each .ttc a few more times,
+once per process.
 """
 import os
 from dataclasses import dataclass
@@ -30,9 +30,9 @@ from pathlib import Path
 from PIL import ImageFont
 
 BUNDLED = Path(__file__).resolve().parent.parent / "assets" / "fonts"
-# Tope de caras por archivo. El .ttc mas gordo de Windows tiene 6 (Nirmala); 16 da
-# margen de sobra y acota el escaneo por si un archivo raro devuelve caras para
-# siempre en vez de levantar.
+# Cap on faces per file. The fattest .ttc on Windows has 6 (Nirmala); 16 leaves
+# plenty of room and bounds the scan in case some odd file returns faces forever
+# instead of raising.
 MAX_CARAS = 16
 _EXTS = (".ttf", ".otf", ".ttc")
 _BOLD_HINTS = ("bold", "bd", "black", "heavy", "semibold")
@@ -40,11 +40,11 @@ _BOLD_HINTS = ("bold", "bd", "black", "heavy", "semibold")
 
 @dataclass(frozen=True)
 class Cara:
-    """Un archivo de fuente y la cara de adentro.
+    """A font file and the face inside it.
 
-    `index` es casi siempre 0 -- un .ttf tiene una sola cara -- pero para un .ttc
-    es la unica forma de volver a abrir la cara correcta: PIL toma el indice al
-    abrir, no despues.
+    `index` is almost always 0 -- a .ttf has a single face -- but for a .ttc it is
+    the only way to reopen the right face: PIL takes the index when opening, not
+    afterwards.
     """
     path: Path
     index: int = 0
@@ -65,13 +65,13 @@ def _system_font_dirs() -> list[Path]:
 
 
 class FontResolver:
-    """Busca fuentes por familia y cachea el resultado. No requiere estar
-    en Windows: fuera de Windows simplemente no hay directorios de sistema
-    y todo cae al fallback empaquetado o al default de PIL.
+    """Looks fonts up by family and caches the result. It does not require
+    Windows: elsewhere there simply are no system directories and everything falls
+    back to the bundled font or to PIL's default.
     """
 
     def __init__(self, extra_dirs: list[Path] | None = None):
-        # orden de precedencia: extra_dirs > empaquetadas > sistema
+        # Precedence: extra_dirs > bundled > system
         self._dirs = [Path(d) for d in (extra_dirs or [])] + [BUNDLED] + _system_font_dirs()
         self._index: dict[str, dict[str, Cara]] | None = None
         self._cache: dict[tuple, ImageFont.FreeTypeFont] = {}
@@ -85,25 +85,24 @@ class FontResolver:
         return self._index
 
     def unreadable_dirs(self) -> set[Path]:
-        """Directorios de _dirs que existen pero no se pudieron listar
-        (permiso denegado, recurso de red caido, etc). No tumba el
-        indexado -- se saltean y el resto del indice se construye igual --
-        pero es una mala configuracion real y por eso queda visible aca,
-        igual que missing() deja ver las familias ausentes.
+        """Directories in _dirs that exist but could not be listed (permission
+        denied, a network share down, and so on). It does not bring the indexing
+        down -- they are skipped and the rest of the index is built anyway -- but
+        it is a real misconfiguration, and that is why it is visible here, the same
+        way missing() makes absent families visible.
         """
         return set(self._unreadable_dirs)
 
     def is_available(self, family: str) -> bool:
-        """True si `family` aparece en el indice de fuentes (empaquetadas o
-        de sistema), sin importar el peso (bold/regular) pedido ni si
-        alguna vez se llamo resolve() para ella.
+        """True if `family` appears in the font index (bundled or system),
+        regardless of the weight (bold/regular) asked for and of whether resolve()
+        was ever called for it.
 
-        A diferencia de missing() -- que solo anota lo que un resolve()
-        anterior efectivamente vio faltar, y por eso se queda calvo en un
-        cache hit -- esto es una funcion pura del indice: se puede llamar
-        antes de resolver nada y da la misma respuesta despues. Es lo que
-        usa Renderer.warnings() para no tener que acumular ni resetear
-        ningun estado propio por layout.
+        Unlike missing() -- which only records what an earlier resolve() actually
+        saw missing, and therefore goes quiet on a cache hit -- this is a pure
+        function of the index: it can be called before resolving anything and gives
+        the same answer afterwards. It is what Renderer.warnings() uses so it does
+        not have to accumulate or reset any per-layout state of its own.
         """
         return bool(self.index().get(family.lower()))
 
@@ -112,21 +111,18 @@ class FontResolver:
         for d in self._dirs:
             try:
                 if not d.is_dir():
-                    # extra_dirs lo puede pasar el caller con cualquier
-                    # cosa; un directorio inexistente no debe tumbar el
-                    # indexado.
+                    # The caller can pass anything in extra_dirs; a directory that
+                    # does not exist must not bring the indexing down.
                     continue
                 paths = sorted(d.iterdir())
             except OSError:
-                # permiso denegado, recurso de red caido, etc. Si esto
-                # escapara de _build_index(), self._index nunca se
-                # asignaria y CADA resolve() reintentaria reconstruir el
-                # indice completo (todos los directorios, todos los
-                # archivos) una y otra vez -- en un panel a 1 fps con
-                # varios widgets de texto eso son cientos de aperturas de
-                # archivo por segundo, para siempre. Se saltea el
-                # directorio roto, se anota, y el resto del indice se
-                # sigue construyendo y cachea normalmente.
+                # Permission denied, a network share down, and so on. If this
+                # escaped _build_index(), self._index would never be assigned and
+                # EVERY resolve() would retry rebuilding the whole index (every
+                # directory, every file) over and over -- on a panel at 1 fps with
+                # several text widgets that is hundreds of file opens a second,
+                # forever. The broken directory is skipped, recorded, and the rest
+                # of the index is built and cached normally.
                 self._unreadable_dirs.add(d)
                 continue
             for path in paths:
@@ -134,19 +130,19 @@ class FontResolver:
                     continue
                 for cara, family, style in self._caras(path):
                     slot = "bold" if self._is_bold(style, path.stem) else "regular"
-                    # setdefault: el primer directorio en _dirs que trae una
-                    # familia/slot gana. Como extra_dirs va primero en la lista,
-                    # una copia ahi pisa a la del sistema para la misma familia.
+                    # setdefault: the first directory in _dirs that carries a
+                    # family/slot wins. Since extra_dirs comes first in the list, a
+                    # copy there overrides the system one for the same family.
                     idx.setdefault(family.lower(), {}).setdefault(slot, cara)
         return idx
 
     @staticmethod
     def _caras(path: Path):
-        """[(Cara, familia, estilo)] de todas las caras del archivo.
+        """[(Cara, family, style)] for every face in the file.
 
-        Solo los .ttc pueden traer mas de una, asi que para el resto esto abre el
-        archivo una vez y corta: pedir la cara 1 de un .ttf levanta y ese except
-        es el que termina el bucle.
+        Only .ttc files can carry more than one, so for the rest this opens the
+        file once and stops: asking for face 1 of a .ttf raises, and that except is
+        what ends the loop.
         """
         fuera = []
         for i in range(MAX_CARAS):
@@ -154,29 +150,28 @@ class FontResolver:
                 f = ImageFont.truetype(os.fspath(path), 12, index=i)
                 family, style = f.getname()
             except Exception:
-                # Se termino el archivo, o esta corrupto/ilegible. Ninguna de las
-                # dos puede tumbar el indexado completo: se corta y se sigue con
-                # el resto de los archivos, quedandose con las caras que si se
-                # leyeron.
+                # The file ended, or it is corrupt/unreadable. Neither can bring
+                # the whole indexing down: it stops and moves on to the rest of the
+                # files, keeping the faces that did read.
                 break
             fuera.append((Cara(path, i), family or path.stem, style or ""))
         return fuera
 
     @staticmethod
     def _is_bold(style: str, stem: str) -> bool:
-        """Si esta cara es la variante bold de su familia.
+        """Whether this face is its family's bold variant.
 
-        **El estilo que declara la fuente decide; el nombre de archivo es solo el
-        plan B.** Si la fuente dice cualquier estilo -- "Regular", "Italic", "Light
-        Italic", "Semilight" -- se le cree: es bold solo si ese estilo lo dice. El
-        nombre de archivo se mira unicamente cuando no hay estilo.
+        **The style the font declares decides; the file name is only the fallback.**
+        If the font states any style at all -- "Regular", "Italic", "Light Italic",
+        "Semilight" -- it is believed: it is bold only if that style says so. The
+        file name is consulted only when there is no style.
 
-        Antes esto era una whitelist de match exacto ("regular", "light", ...), y por
-        eso "Regular Italic" no matcheaba nada y caia al heuristico del nombre: ahi un
-        "bd" por casualidad (ERASBD.TTF es "Eras Bold ITC" con estilo *Regular*,
-        webdings.ttf tiene "bd" adentro) marcaba la cara como bold y la familia perdia
-        su regular. La regla nueva no necesita enumerar los estilos que existen, que
-        era el problema de fondo.
+        This used to be an exact-match whitelist ("regular", "light", ...), which is
+        why "Regular Italic" matched nothing and fell through to the name heuristic:
+        there a coincidental "bd" (ERASBD.TTF is "Eras Bold ITC" with style
+        *Regular*; webdings.ttf has "bd" inside it) marked the face as bold and the
+        family lost its regular. The new rule does not need to enumerate the styles
+        that exist, which was the underlying problem.
         """
         style_l = style.lower().strip()
         if style_l:
@@ -184,12 +179,12 @@ class FontResolver:
         return any(h in stem.lower() for h in _BOLD_HINTS)
 
     def missing(self) -> set[str]:
-        """Familias que ALGUN resolve() vio faltar. Historial, no estado.
+        """Families that SOME resolve() saw missing. A history, not a state.
 
-        No es el canal para avisar al usuario -- para eso esta is_available().
-        resolve() devuelve desde la cache en un hit sin volver a anotar, asi que
-        una familia que sigue faltando puede no aparecer aca. Se conserva porque
-        sirve para diagnosticar que pidio el layout, no que hay en el sistema.
+        This is not the channel for warning the user -- is_available() is. resolve()
+        returns from the cache on a hit without recording again, so a family that is
+        still missing may not show up here. It is kept because it is useful for
+        diagnosing what the layout asked for, not what the system has.
         """
         return set(self._missing)
 
@@ -202,21 +197,21 @@ class FontResolver:
         try:
             cara = self._pick_cara(font)
         except Exception:
-            # un extra_dir roto, un permiso denegado, lo que sea: nunca
-            # tumba el render, se anota como perdida y se cae al default.
+            # A broken extra_dir, a permission denied, whatever: it never brings the
+            # render down, it is recorded as missing and falls back to the default.
             self._missing.add(font.family)
             cara = None
 
         resolved = None
         for intento in (lambda: cara.open(size) if cara is not None else None,
                         lambda: ImageFont.load_default(size),
-                        # Ultimo recurso SIN size: load_default(size) de Pillow
-                        # moderno abre una fuente con truetype por dentro, asi que si
-                        # lo que falla es truetype -- un TTF corrupto, un disco de red
-                        # caido -- el fallback falla por la MISMA razon y la excepcion
-                        # se escapaba de resolve(), matando el render. La variante sin
-                        # size (load_default_imagefont en Pillow 12) devuelve el
-                        # bitmap incrustado y no abre ningun archivo.
+                        # Last resort WITHOUT size: modern Pillow's
+                        # load_default(size) opens a font through truetype
+                        # internally, so if truetype is what fails -- a corrupt TTF,
+                        # a network share down -- the fallback fails for the SAME
+                        # reason and the exception escaped resolve(), killing the
+                        # render. The size-less variant (load_default_imagefont in
+                        # Pillow 12) returns the embedded bitmap and opens no file.
                         getattr(ImageFont, "load_default_imagefont",
                                 ImageFont.load_default)):
             try:
@@ -230,12 +225,13 @@ class FontResolver:
         return resolved
 
     def _pick_cara(self, font) -> Cara | None:
-        """La cara para este Font: su familia, o la primera de `fallbacks` que exista.
+        """The face for this Font: its family, or the first of `fallbacks` that exists.
 
-        La cadena la declara el PERFIL, no el resolver: solo el que diseno el layout
-        sabe con que se parece a lo que queria. El resolver solo la recorre y anota
-        con que termino dibujando, porque un reemplazo silencioso es peor que ninguno
-        -- el usuario ve otra tipografia y no sabe por que.
+        The chain is declared by the PROFILE, not by the resolver: only whoever
+        designed the layout knows what looks like what they wanted. The resolver just
+        walks it and records what it ended up drawing with, because a silent
+        substitution is worse than none -- the user sees a different typeface and
+        does not know why.
         """
         cara = self._cara_de(font.family, font.bold)
         if cara is not None:
@@ -252,17 +248,17 @@ class FontResolver:
         entry = self.index().get(str(familia).lower())
         if not entry:
             return None
-        # `or next(iter(...))`: una familia de una sola cara devuelve esa cara aunque
-        # se haya pedido bold. Es lo correcto -- dibujar con la regular se parece mas
-        # a lo pedido que caer al fallback generico -- pero conviene saberlo al leer
-        # un panel donde el "bold" no se ve bold.
+        # `or next(iter(...))`: a single-face family returns that face even when bold
+        # was asked for. That is right -- drawing with the regular looks closer to
+        # what was asked than falling back to the generic font -- but it is worth
+        # knowing when reading a panel where the "bold" does not look bold.
         return entry.get("bold" if bold else "regular") or next(iter(entry.values()))
 
     def substitutions(self) -> dict:
-        """familia pedida -> familia con la que se dibujo.
+        """Family asked for -> family it was drawn with.
 
-        Es lo que explica lo que se ve en pantalla. "Falta X" solo dice que algo esta
-        mal; "falta X, se uso Y" dice exactamente que estas mirando.
+        This is what explains what is on screen. "X is missing" only says something
+        is wrong; "X is missing, Y was used" says exactly what you are looking at.
         """
         return dict(self._substitutions)
 
