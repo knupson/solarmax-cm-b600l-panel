@@ -1,13 +1,13 @@
-"""Editor visual del layout.
+"""The visual layout editor.
 
-`EditorState` es todo el comportamiento -- cargar, editar, validar, previsualizar,
-guardar -- y no importa Tkinter. La ventana de abajo solo ata controles a esos
-metodos. Es la misma division que entre `PanelApp` y `tray.py`, y por la misma
-razon: lo que tiene tests es la parte que puede estar mal.
+`EditorState` is all of the behaviour -- load, edit, validate, preview, save --
+and it does not import Tkinter. The window below it only wires controls to those
+methods. It is the same split as between `PanelApp` and `tray.py`, and for the
+same reason: what has tests is the part that can be wrong.
 
-El editor guarda con `loader.save()`, que escribe atomico, y el motor levanta el
-cambio en caliente. No hay ninguna comunicacion entre los dos procesos: el
-archivo ES el protocolo.
+The editor saves through `loader.save()`, which writes atomically, and the engine
+picks the change up live. There is no communication between the two processes:
+the file IS the protocol.
 """
 import argparse
 import json
@@ -24,17 +24,17 @@ from .metrics import METRICS, group_for, spec_for
 from .providers.setup import build_registry_without_sensors
 from .render.renderer import Renderer
 
-# Campos que son numeros. Todo lo que no este aca se guarda como texto: un
-# label con el texto "6000" no puede volverse el entero 6000, porque el
-# validador exige que `text` sea texto.
+# Fields that are numbers. Anything not here is stored as text: a label reading
+# "6000" must not become the integer 6000, because the validator requires `text` to
+# be a string.
 _INT_FIELDS = {"x", "y", "w", "h", "r", "radius", "thickness", "samples",
                "stroke_width", "size", "width", "height", "rotate",
                "brightness", "jpeg_quality"}
 _FLOAT_FIELDS = {"min", "max", "start_angle", "sweep", "fps", "angle", "at"}
 
-# Un widget nuevo tiene que validar apenas se agrega: si el default no valida,
-# el usuario ve un error que no cometio. Se completan con el primer alias de
-# fuente del layout y una metrica que siempre existe.
+# A new widget has to validate the moment it is added: if the default does not
+# validate, the user sees an error they did not make. They are completed with the
+# layout's first font alias and a metric that always exists.
 _TEMPLATES = {
     "text": {"metric": "cpu.load", "x": 24, "y": 24, "font": None,
              "color": "#FFFFFF", "format": "{:.0f}%"},
@@ -49,13 +49,13 @@ _TEMPLATES = {
 }
 
 
-# Valores de demostracion por metrica, para el preview del editor.
+# Demonstration values per metric, for the editor preview.
 #
-# A mano y no calculados: el 42% del rango declarado da cosas como "RAM usada
-# 107,5 G" (porque el spec admite hasta 256) o "5040 MT/s", que se ven como un
-# bug en vez de como un ejemplo. El punto del preview es juzgar el layout, y
-# para eso los numeros tienen que parecer reales -- incluido el largo, que es
-# lo que decide si un valor se pisa con el de al lado.
+# By hand and not computed: 42% of the declared range gives things like "RAM used
+# 107.5 G" (because the spec allows up to 256) or "5040 MT/s", which read as a bug
+# rather than as an example. The point of the preview is to judge the layout, and
+# for that the numbers have to look real -- including their length, which is what
+# decides whether a value collides with the one next to it.
 _DEMO = {
     "cpu.name": "INTEL CORE i5-12400F", "cpu.load": 55.5, "cpu.temp": 48.0,
     "cpu.clock": 4080.0, "cpu.vcore": 1.05, "cpu.vrm_temp": 41.0,
@@ -70,14 +70,15 @@ _DEMO = {
 
 
 def demo_sample() -> dict:
-    """Una muestra plausible para TODAS las metricas conocidas.
+    """A plausible sample for EVERY known metric.
 
-    El preview no puede estar lleno de "--": las metricas que esta maquina no
-    sirve (por falta de GSA1, de WinRing0, de lo que sea) igual tienen que
-    dibujarse con algo para poder juzgar el layout.
+    The preview cannot be full of "--": metrics this machine does not serve (for
+    lack of GSA1, of WinRing0, of whatever) still have to be drawn with something
+    so the layout can be judged.
 
-    Lo que no este en _DEMO cae a la mitad del rango del spec, para que una
-    metrica nueva aparezca con algo razonable sin tener que tocar esta tabla.
+    Anything not in _DEMO falls back to the middle of the spec range, so a new
+    metric appears with something reasonable without anybody having to touch this
+    table.
     """
     out = {}
     for mid, spec in METRICS.items():
@@ -89,7 +90,7 @@ def demo_sample() -> dict:
             lo = spec.min if spec.min is not None else 0.0
             hi = spec.max if spec.max is not None else lo + 100.0
             out[mid] = round(lo + (hi - lo) * 0.5, 2)
-    # disk.temp.N no esta en METRICS (es un patron), pero el perfil los usa.
+    # disk.temp.N is not in METRICS (it is a pattern), but the profiles use them.
     for n in range(4):
         out[f"disk.temp.{n}"] = 34.0 + n
     return out
@@ -98,11 +99,11 @@ def demo_sample() -> dict:
 class EditorState:
     """El layout en edicion: JSON crudo + validacion + preview.
 
-    Se trabaja sobre el dict crudo, no sobre el modelo tipado, porque el
-    usuario pasa por estados intermedios invalidos (un color a medio tipear) y
-    el modelo no los puede representar. `errors` dice si lo que hay ahora
-    valida; `preview()` sigue devolviendo el ultimo render valido mientras no
-    valide, igual que el panel mantiene el ultimo layout bueno.
+    It works on the raw dict, not on the typed model, because the user passes
+    through invalid intermediate states (a half-typed colour) and the model cannot
+    represent those. `errors` says whether what is there right now validates;
+    `preview()` keeps returning the last valid render while it does not, the same
+    way the panel keeps the last good layout.
     """
 
     def __init__(self, path):
@@ -111,11 +112,11 @@ class EditorState:
         self.errors: list[str] = []
         self.dirty = False
         self._sample = demo_sample()
-        self._last_good = None          # ultimo preview valido
-        self._cache_catalogo = None     # el catalogo cuesta consultar WMI
-        self._fuentes = None            # FontResolver, para medir cajas de texto
-        self._drag = None               # (id, offset x, offset y) del arrastre
-        self._historial = []            # copias del layout, para deshacer
+        self._last_good = None          # the last valid preview
+        self._cache_catalogo = None     # the catalogue costs a WMI query
+        self._fuentes = None            # FontResolver, to measure text boxes
+        self._drag = None               # (id, offset x, offset y) of the drag
+        self._historial = []            # copies of the layout, for undo
         self.reload()
 
     # --- carga y guardado ---
@@ -130,21 +131,21 @@ class EditorState:
             return
         self.errors = schema.validate(self.raw)
         self.dirty = False
-        self._historial = []      # lo que hay en disco es el nuevo punto cero
+        self._historial = []      # what is on disk is the new zero point
 
     def save(self) -> list[str]:
-        """Guarda solo si valida. Devuelve los errores que lo impidieron.
+        """Saves only if it validates. Returns whatever errors prevented it.
 
-        Nunca escribe un layout invalido: el motor lo rechazaria y se quedaria
-        con el anterior, asi que el usuario habria "guardado" algo que el panel
-        ignora sin decirle por que.
+        It never writes an invalid layout: the engine would reject it and keep the
+        previous one, so the user would have "saved" something the panel ignores
+        without being told why.
         """
         self.errors = schema.validate(self.raw)
         if self.errors:
             return list(self.errors)
-        # save_raw y no save(build(raw)): pasar por el modelo reescribe el
-        # archivo con el formato del serializador y el perfil se edita tambien
-        # a mano. Igual queda atomico.
+        # save_raw and not save(build(raw)): going through the model rewrites the
+        # file in the serialiser's formatting, and the profile is also edited by
+        # hand. It is still atomic.
         loader.save_raw(self.raw, self.path)
         self.dirty = False
         return []
@@ -164,17 +165,17 @@ class EditorState:
         return sorted(self.raw.get("fonts", {}))
 
     def metric_groups(self) -> dict:
-        """{dispositivo: [(id, etiqueta), ...]} para el selector de metricas.
+        """{device: [(id, label), ...]} for the metric selector.
 
-        Se consulta al registry, que es el unico que sabe que dispositivos hay
-        en ESTA maquina y como se llaman -- "vol.D.free" no sabe que la D se
-        llama JUEGOS. Si no hay backend de sensores (otra maquina, sin permisos,
-        sin DLLs), cae a las metricas registradas: el editor tiene que abrir
-        igual, con etiquetas genericas.
+        The registry is asked, because it is the only thing that knows which devices
+        exist on THIS machine and what they are called -- "vol.D.free" does not know
+        that D is called GAMES. With no sensor backend (another machine, no
+        permissions, no DLLs) it falls back to the registered metrics: the editor
+        has to open anyway, with generic labels.
 
-        Se agregan tambien las metricas que el perfil YA usa aunque el registry
-        no las ofrezca. Si no, cambiar la metrica de un widget en una maquina
-        que no la sirve la haria desaparecer del selector y no se podria volver
+        The metrics the profile ALREADY uses are added too, even when the registry
+        does not offer them. Otherwise, changing a widget's metric on a machine that
+        does not serve it would make it vanish from the selector with no way back
         atras.
         """
         catalogo, grupos = self._catalogo()
@@ -197,7 +198,7 @@ class EditorState:
         return dict(sorted(salida.items()))
 
     def _catalogo(self):
-        """(catalogo, grupos) del registry, o de METRICS si no hay backend."""
+        """(catalogue, groups) from the registry, or from METRICS with no backend."""
         if self._cache_catalogo is None:
             catalogo, grupos = {}, {}
             registry = None
@@ -205,7 +206,7 @@ class EditorState:
                 registry, _cliente = build_registry_without_sensors()
                 catalogo, grupos = registry.catalog(), registry.groups()
             except Exception:
-                # Sin backend: el editor abre igual con las metricas
+                # No backend: the editor opens anyway with the registered
                 # registradas y etiquetas genericas.
                 catalogo = {mid: spec for mid, spec in METRICS.items()}
                 grupos = {mid: group_for(mid) for mid in METRICS}
@@ -221,24 +222,24 @@ class EditorState:
 
     # --- deshacer ---
     #
-    # Se guarda una copia del layout crudo ANTES de cada cambio, no un diff: con
-    # 154 widgets el JSON son ~40 KB y copiarlo cuesta menos que razonar sobre
-    # como revertir cada tipo de operacion. Un diff serviria si el layout fuera
-    # grande de verdad; aca solo agregaria formas de equivocarse.
+    # A copy of the raw layout is kept BEFORE every change, not a diff: with 154
+    # widgets the JSON is ~40 KB and copying it costs less than reasoning about how
+    # to reverse each kind of operation. A diff would be worth it if the layout were
+    # genuinely large; here it would only add ways to get it wrong.
     MAX_UNDO = 60
 
     def _snapshot(self):
-        """Guarda el estado actual como punto de retorno.
+        """Stores the current state as a point to return to.
 
-        Topeado: sin limite, un arrastre de 300 px guardaria 300 copias, y el
-        editor terminaria con decenas de MB de historial por mover un widget.
+        Capped: unbounded, a 300 px drag would store 300 copies and the editor would
+        end up with tens of MB of history for moving one widget.
         """
         self._historial.append(json.dumps(self.raw, ensure_ascii=False))
         if len(self._historial) > self.MAX_UNDO:
             del self._historial[0]
 
     def undo(self) -> bool:
-        """Vuelve al punto anterior. False si no hay nada que deshacer."""
+        """Returns to the previous point. False if there is nothing to undo."""
         if not self._historial:
             return False
         self.raw = json.loads(self._historial.pop())
@@ -291,11 +292,11 @@ class EditorState:
         return ["family", "size", "bold"]
 
     def font_families(self) -> list[str]:
-        """Familias instaladas, para el combo.
+        """Installed families, for the combo box.
 
-        Tipear la familia a mano es como se escribe una que no existe: el
-        renderer cae a la fuente por defecto y el widget se ve distinto sin que
-        nada avise. FontResolver ya tiene el indice del sistema.
+        Typing the family by hand is how one that does not exist gets written: the
+        renderer falls back to the default font and the widget looks different with
+        nothing warning about it. FontResolver already has the system's index.
         """
         from .render.fonts import FontResolver
         if self._fuentes is None:
@@ -313,8 +314,8 @@ class EditorState:
         if clave == "size":
             fuentes[alias][clave] = _coerce("size", valor)
         elif clave == "bold":
-            # Desde un control de texto llega "true"/"false"; el validador
-            # exige un booleano de JSON, no la cadena.
+            # From a text control this arrives as "true"/"false"; the validator
+            # requires a JSON boolean, not the string.
             fuentes[alias][clave] = str(valor).strip().lower() in ("1", "true",
                                                                   "si", "sí", "yes")
         else:
@@ -343,9 +344,9 @@ class EditorState:
     def remove_font(self, alias) -> list[str]:
         """Se niega si algun widget lo usa.
 
-        Borrarlo dejaria el layout invalido -- "unknown font alias" --
-        y el motor rechazaria el perfil entero, quedandose con el anterior. El
-        usuario habria borrado una fuente y el panel no cambiaria.
+        Deleting it would leave the layout invalid -- "unknown font alias" -- and the
+        engine would reject the whole profile, keeping the previous one. The user
+        would have deleted a font and the panel would not change.
         """
         usuarios = self.font_users(alias)
         if usuarios:
@@ -364,9 +365,9 @@ class EditorState:
 
     # --- cajas, hit test y arrastre ---
     #
-    # Todo en coordenadas del PANEL (320x1480), no de la vista previa: la ventana
-    # convierte dividiendo por su escala. Asi esta logica no depende de como se
-    # este mostrando.
+    # Everything in PANEL coordinates (320x1480), not preview ones: the window
+    # converts by dividing by its scale. That way this logic does not depend on how
+    # it is being displayed.
 
     def _canvas(self):
         d = self.raw.get("designed_for") or {}
@@ -375,10 +376,10 @@ class EditorState:
     def widget_bbox(self, wid):
         """(x0, y0, x1, y1) de un widget, o None si no existe.
 
-        Para los textos se MIDE la fuente con el valor de demostracion en vez de
-        usar un radio fijo: el reloj de 74 px y una etiqueta de 14 no pueden
-        tener la misma zona sensible, y con un radio inventado agarrar el chico
-        al lado del grande seria imposible.
+        For texts the font is MEASURED with the demonstration value instead of using
+        a fixed radius: a 74 px clock and a 14 px label cannot have the same hit
+        area, and with an invented radius grabbing the small one next to the big one
+        would be impossible.
         """
         w = self.widget(wid)
         if w is None:
@@ -392,8 +393,8 @@ class EditorState:
             r = max(1, int(w.get("r", 1)))
             return (x - r, y - r, x + r, y + r)
         ancho, alto = self._medir_texto(w)
-        # El ancla del renderer es "la"/"ma"/"ra": el alto cuelga hacia abajo y
-        # el ancho se reparte segun la alineacion.
+        # The renderer's anchor is "la"/"ma"/"ra": the height hangs downwards and the
+        # width is distributed according to the alignment.
         alineacion = w.get("align", "left")
         if alineacion == "center":
             x0 = x - ancho // 2
@@ -404,7 +405,7 @@ class EditorState:
         return (x0, y, x0 + max(6, ancho), y + max(6, alto))
 
     def _medir_texto(self, w):
-        """(ancho, alto) del texto que este widget dibujaria."""
+        """(width, height) of the text this widget would draw."""
         from .render import widgets as W
         from .render.fonts import FontResolver
 
@@ -434,10 +435,10 @@ class EditorState:
         return max(1, caja[2] - caja[0]), max(1, caja[3] - caja[1])
 
     def hit_test(self, x, y):
-        """Id del widget bajo el punto, o None.
+        """The id of the widget under the point, or None.
 
-        Se recorre al REVES porque el orden de la lista es el orden de pintado:
-        el ultimo dibujado es el que el usuario ve arriba, y por lo tanto el que
+        It walks BACKWARDS because the list order is the paint order: the last one
+        drawn is the one the user sees on top, and therefore the one
         espera agarrar.
         """
         for w in reversed(self.raw.get("widgets") or []):
@@ -447,15 +448,15 @@ class EditorState:
         return None
 
     def begin_drag(self, wid, x, y):
-        """Empieza un arrastre. Guarda el offset dentro del widget para mover
-        por delta: reposicionar la esquina en el cursor haria saltar al widget
-        en cuanto se lo agarra desde cualquier lugar que no sea su esquina."""
+        """Starts a drag. It stores the offset inside the widget so it moves by
+        delta: putting the corner under the cursor would make the widget jump the
+        moment it is grabbed anywhere other than that corner."""
         w = self.widget(wid)
         if w is None:
             return
-        # El snapshot va aca y no en drag_to(): un arrastre dispara un cambio por
-        # pixel de mouse, y con uno por cambio deshacer un arrastre pediria
-        # cincuenta Ctrl+Z. El gesto entero es UN paso.
+        # The snapshot goes here and not in drag_to(): a drag fires one change per
+        # mouse pixel, and with one snapshot per change undoing a drag would take
+        # fifty Ctrl+Z presses. The whole gesture is ONE step.
         self._snapshot()
         self._drag = (wid, x - int(w.get("x", 0)), y - int(w.get("y", 0)))
 
@@ -467,8 +468,8 @@ class EditorState:
         if w is None:
             return []
         ancho, alto = self._canvas()
-        # Clampeado al lienzo: un widget arrastrado afuera desaparece del panel
-        # y no queda forma de volver a agarrarlo con el mouse.
+        # Clamped to the canvas: a widget dragged outside disappears from the panel
+        # and there is no way left to grab it with the mouse.
         w["x"] = max(0, min(ancho - 1, int(x - dx)))
         w["y"] = max(0, min(alto - 1, int(y - dy)))
         self.dirty = True
@@ -480,20 +481,20 @@ class EditorState:
 
     # --- reglas de color ---
     #
-    # En el JSON una regla es {"when": "> 90", "color": "#FF4D00"}: el comparador
-    # y el numero viajan juntos en un string. La UI necesita las tres piezas por
-    # separado -- un combo para el operador, un campo para el numero, otro para el
-    # color -- asi que aca se parten al leer y se vuelven a armar al escribir. Es
-    # el unico lugar del editor que traduce entre la forma del archivo y la forma
-    # de los controles, y esta aca en vez de en la ventana para que tenga tests.
+    # In the JSON a rule is {"when": "> 90", "color": "#FF4D00"}: the comparison and
+    # the number travel together in one string. The UI needs the three pieces
+    # separately -- a combo for the operator, a field for the number, another for the
+    # colour -- so they are split on read and reassembled on write. It is the only
+    # place in the editor that translates between the file's shape and the controls'
+    # shape, and it lives here rather than in the window so it can have tests.
     _RULE_RE = re.compile(r"^\s*(>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)\s*$")
 
     def rule_operators(self) -> list[str]:
-        """Los que el validador acepta, en orden de uso."""
+        """The ones the validator accepts, in order of use."""
         return [">", ">=", "<", "<="]
 
     def rules(self, wid) -> list[dict]:
-        """[{op, value, color}] del widget, con el comparador ya partido."""
+        """[{op, value, color}] for the widget, with the comparison already split."""
         w = self.widget(wid) or {}
         salida = []
         for r in w.get("rules") or []:
@@ -504,11 +505,11 @@ class EditorState:
         return salida
 
     def add_rule(self, wid) -> list[str]:
-        """Agrega una regla que ya valida.
+        """Adds a rule that already validates.
 
-        El umbral por defecto sale del spec de la metrica -- el 85% de su maximo
-        -- en vez de un 90 fijo: una regla ">= 90" sobre un voltaje de 1,05 V
-        nunca se dispara y el usuario no entiende por que su regla no hace nada.
+        The default threshold comes from the metric's spec -- 85% of its maximum --
+        rather than a fixed 90: a ">= 90" rule on a voltage of 1.05 V never fires and
+        the user cannot see why their rule does nothing.
         """
         w = self.widget(wid)
         if w is None:
@@ -533,12 +534,12 @@ class EditorState:
         return list(self.errors)
 
     def set_rule(self, wid, i, campo, valor) -> list[str]:
-        """Cambia una pieza de una regla. No escribe si queda invalida.
+        """Changes one piece of a rule. It does not write if the result is invalid.
 
-        A diferencia del resto de los campos del editor -- donde un valor a medio
-        tipear es legitimo y solo se reporta -- una regla mal armada rompe TODAS
-        las reglas de ese widget, porque el validador rechaza el layout entero.
-        Asi que aca se prueba primero y se descarta el cambio si no valida.
+        Unlike the rest of the editor's fields -- where a half-typed value is
+        legitimate and merely reported -- a malformed rule breaks ALL of that
+        widget's rules, because the validator rejects the whole layout. So here it is
+        tried first and the change is discarded if it does not validate.
         """
         reglas = (self.widget(wid) or {}).get("rules") or []
         if not 0 <= i < len(reglas):
@@ -552,10 +553,10 @@ class EditorState:
         reglas[i] = candidata
         errores = schema.validate(self.raw)
         if errores:
-            reglas[i] = anterior          # se revierte: una regla rota apaga todas
+            reglas[i] = anterior          # reverted: one broken rule kills them all
             self.errors = schema.validate(self.raw)
             return errores
-        reglas[i] = anterior              # para que el snapshot guarde el estado previo
+        reglas[i] = anterior              # so the snapshot stores the previous state
         self._snapshot()
         reglas[i] = candidata
         self.dirty = True
@@ -564,10 +565,10 @@ class EditorState:
 
     # --- fondo ---
     #
-    # Los campos que admite cada tipo salen de schema.BACKGROUND_KEYS, no de una
-    # lista escrita a mano aca: si la UI ofreciera un campo que el tipo no
-    # admite, escribiria una clave que el validador rechaza y el usuario veria
-    # un error que no cometio. `stops` se edita aparte porque es una lista.
+    # The fields each type accepts come from schema.BACKGROUND_KEYS, not from a list
+    # written by hand here: if the UI offered a field the type does not accept, it
+    # would write a key the validator rejects and the user would see an error they
+    # did not make. `stops` is edited separately because it is a list.
     _DEFAULTS_FONDO = {
         "color": "#0B0F17", "angle": 90.0, "fit": "cover", "src": "fondos",
         "name": "scroll", "speed": 20.0, "period": 6.0, "fps": 10.0,
@@ -576,7 +577,7 @@ class EditorState:
                       {"at": 1.0, "color": "#141A26"}]
 
     def background_fields(self, tipo=None) -> list[str]:
-        """Campos escalares que este tipo de fondo admite, en orden estable."""
+        """The scalar fields this background type accepts, in a stable order."""
         tipo = tipo or (self.raw.get("background") or {}).get("type", "solid")
         permitidas = schema.BACKGROUND_KEYS.get(tipo, {"type", "color"})
         orden = ["name", "color", "angle", "speed", "period", "src", "fit", "fps"]
@@ -590,12 +591,12 @@ class EditorState:
         return "stops" in schema.BACKGROUND_KEYS.get(tipo, set())
 
     def set_background_type(self, tipo) -> list[str]:
-        """Cambia el tipo y completa lo que ese tipo necesita.
+        """Changes the type and fills in whatever that type needs.
 
-        Se conservan las claves que el tipo nuevo tambien admite -- pasar de
-        'gradient' a 'procedural' no puede perder el degradado que el usuario ya
-        afino, que es justamente el punto de que procedural parta de ahi -- y se
-        descartan las que no, porque quedarian como claves desconocidas.
+        Keys the new type also accepts are kept -- going from 'gradient' to
+        'procedural' must not lose the gradient the user already tuned, which is
+        precisely the point of procedural starting from it -- and the rest are
+        dropped, because they would be left as unknown keys.
         """
         self._snapshot()
         viejo = dict(self.raw.get("background") or {})
@@ -622,16 +623,16 @@ class EditorState:
         self.errors = schema.validate(self.raw)
         return list(self.errors)
 
-    # --- paradas del degradado ---
+    # --- gradient stops ---
 
     def stops(self) -> list:
         return (self.raw.get("background") or {}).get("stops") or []
 
     def add_stop(self) -> list[str]:
-        """Agrega una parada en el medio del hueco mas grande.
+        """Adds a stop in the middle of the largest gap.
 
-        En el medio y no al final: una parada nueva encima de otra existente no
-        se ve, y el usuario no entiende que paso.
+        In the middle and not at the end: a new stop on top of an existing one is
+        invisible, and the user cannot tell what happened.
         """
         self._snapshot()
         stops = self.raw.setdefault("background", {}).setdefault("stops", [])
@@ -650,8 +651,8 @@ class EditorState:
         return list(self.errors)
 
     def remove_stop(self, i) -> list[str]:
-        """Nunca deja menos de dos: un degradado de una parada no es un
-        degradado y el validador lo rechaza."""
+        """It never leaves fewer than two: a one-stop gradient is not a gradient and
+        the validator rejects it."""
         stops = self.stops()
         if len(stops) <= 2:
             return ["a gradient needs at least two stops"]
@@ -699,14 +700,14 @@ class EditorState:
     # --- preview ---
 
     def preview(self) -> Image.Image:
-        """El frame tal como lo veria el panel. Con el layout invalido
-        devuelve el ultimo valido, o un lienzo vacio si nunca hubo uno."""
+        """The frame as the panel would see it. With an invalid layout it returns the
+        last valid one, or an empty canvas if there never was one."""
         if not self.errors:
             try:
                 layout = schema.build(self.raw)
                 self._last_good = Renderer(layout).frame(self._sample)
             except Exception:
-                pass                    # build/render fallo: queda el anterior
+                pass                    # build/render failed: the previous one stays
         if self._last_good is None:
             return Image.new("RGB", (320, 1480), (0, 0, 0))
         return self._last_good
@@ -718,11 +719,11 @@ ANIMADO = ("Animated background: the preview shows a single frame, so it looks "
 
 
 def _mismo_contenido(a, b) -> bool:
-    """Dos rutas con el mismo contenido.
+    """Two paths with the same content.
 
-    Compara tamano y despues bytes; para carpetas alcanza con la lista de nombres y
-    tamanos -- una secuencia de cuadros con los mismos nombres y tamanos es la misma
-    secuencia, y leer 300 PNG para confirmarlo no paga.
+    It compares size and then bytes; for folders the list of names and sizes is
+    enough -- a frame sequence with the same names and sizes is the same sequence,
+    and reading 300 PNGs to confirm it does not pay.
     """
     a, b = Path(a), Path(b)
     if a.is_dir() != b.is_dir():
@@ -734,9 +735,9 @@ def _mismo_contenido(a, b) -> bool:
         return censo(a) == censo(b)
     if a.stat().st_size != b.stat().st_size:
         return False
-    # Por trozos y no read_bytes(): un video de 900 MB comparado asi son 1,8 GB en
-    # memoria de golpe, para contestar una pregunta de si/no. En este proyecto ya
-    # hubo un episodio de consumo de RAM y no vale la pena repetirlo por comodidad.
+    # In chunks and not read_bytes(): a 900 MB video compared that way is 1.8 GB of
+    # memory at once, to answer a yes/no question. This project has already had one
+    # memory-consumption episode and it is not worth repeating for convenience.
     with a.open("rb") as fa, b.open("rb") as fb:
         while True:
             ta, tb = fa.read(1 << 20), fb.read(1 << 20)
@@ -747,13 +748,14 @@ def _mismo_contenido(a, b) -> bool:
 
 
 def pista_fondo(tipo) -> str:
-    """Aviso por tipo de fondo, o "" si no hace falta ninguno.
+    """The hint for a background type, or "" when none is needed.
 
-    Funcion de modulo y no metodo de la ventana: es texto puro, decidido por el
-    tipo y por si ffmpeg esta instalado, y asi se prueba sin abrir Tkinter.
+    A module function and not a method of the window: it is pure text, decided by
+    the type and by whether ffmpeg is installed, and that way it is tested without
+    opening Tkinter.
 
-    El de los animados importa: la vista previa es UN cuadro, asi que un fondo
-    que se mueve se ve quieto ahi y eso parece un bug.
+    The one for animated backgrounds matters: the preview is ONE frame, so a moving
+    background looks frozen there and that reads as a bug.
     """
     if tipo == "procedural":
         return ANIMADO
@@ -761,9 +763,9 @@ def pista_fondo(tipo) -> str:
         return (ANIMADO + " src is a folder of images, relative to "
                 "vmaxpanel/assets.")
     if tipo == "video":
-        # La ruta se consulta en cada llamada -- no se cachea al importar --
-        # porque el usuario puede instalar ffmpeg con el editor abierto, y la
-        # pista tiene que dejar de pedirlo cuando reabra la pestaña.
+        # The path is looked up on every call -- not cached at import -- because the
+        # user can install ffmpeg with the editor open, and the hint has to stop
+        # asking for it when they reopen the tab.
         from .render.video import COMO_INSTALAR, buscar_ffmpeg
         if buscar_ffmpeg() is None:
             return ANIMADO + " " + COMO_INSTALAR
@@ -773,11 +775,11 @@ def pista_fondo(tipo) -> str:
 
 
 def _coerce_fondo(clave, valor):
-    """Como _coerce, pero para las claves del fondo.
+    """Like _coerce, but for the background keys.
 
-    `fps` en el fondo es la cadencia de una secuencia y admite decimales; en el
-    panel es entero. Misma clave, tipo distinto segun donde este: de ahi que el
-    fondo tenga su propia conversion en vez de compartir la tabla.
+    `fps` on the background is a sequence's cadence and takes decimals; on the panel
+    it is an integer. Same key, different type depending on where it sits: hence the
+    background having its own conversion rather than sharing the table.
     """
     if clave in ("angle", "speed", "period", "fps"):
         s = str(valor).strip()
@@ -791,9 +793,9 @@ def _coerce_fondo(clave, valor):
 
 
 def _coerce(key, value):
-    """Convierte lo que vino de un control de texto al tipo que el schema
-    espera para esa clave. Lo que no es numerico se deja como texto: `text`,
-    `format` y los colores tienen que quedar str, incluso si parecen numeros.
+    """Converts what came out of a text control into the type the schema expects
+    for that key. Anything non-numeric is left as text: `text`, `format` and the
+    colours have to stay str, even when they look like numbers.
     """
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return value
@@ -805,10 +807,10 @@ def _coerce(key, value):
             try:
                 return int(float(s))
             except ValueError:
-                return s                # se guarda tal cual y el validador avisa
+                return s                # stored as-is and the validator warns
     if key in _FLOAT_FIELDS:
         if s == "":
-            return None                 # extremo abierto (min/max sin fijar)
+            return None                 # an open end (min/max left unset)
         try:
             return float(s)
         except ValueError:
@@ -817,11 +819,11 @@ def _coerce(key, value):
 
 
 # --------------------------------------------------------------------------
-# La ventana. Tkinter se importa adentro para que EditorState se pueda usar
-# (y testear) en una maquina sin Tk.
+# The window. Tkinter is imported inside so EditorState can be used (and tested)
+# on a machine without Tk.
 # --------------------------------------------------------------------------
 
-PREVIEW_SCALE = 0.36     # escala inicial, antes de que la ventana tenga tamano
+PREVIEW_SCALE = 0.36     # initial scale, before the window has a size
 
 
 class EditorWindow:
@@ -833,8 +835,8 @@ class EditorWindow:
         self.state = state
         self.root = tk.Tk()
         self.root.title(f"VMax Panel — {state.path.name}")
-        # El mismo icono que la bandeja, para que la ventana no salga con el
-        # generico de Python en la barra de tareas. Si falta, no pasa nada.
+        # The same icon as the tray, so the window does not appear with the generic
+        # Python one in the taskbar. If it is missing, nothing happens.
         try:
             icono = Path(__file__).resolve().parent / "assets" / "vmaxpanel.ico"
             if icono.exists():
@@ -848,30 +850,31 @@ class EditorWindow:
         self._metric_por_etiqueta = {}
         self._rule_rows = []
         self._rules_frame = None
-        # (tipo, clave) de cada campo con algo tipeado y sin confirmar. Ver
+        # (type, key) of every field with something typed and unconfirmed. See
         # _aplicar_pendientes().
         self._pendientes = set()
         self._build()
-        # El tamano inicial se pide explicito: sin esto Tkinter le da el minimo que
-        # necesitan los controles, la lista de widgets y las propiedades se comen el
-        # ancho, y la vista previa de un panel 320x1480 queda en una tirita de ~60 px.
-        # La escala responsive ya arreglaba el caso de maximizar; esto arregla el de
-        # abrir, que es el 100% de las veces.
+        # The initial size is requested explicitly: without this Tkinter gives it the
+        # minimum the controls need, the widget list and the properties eat the
+        # width, and the preview of a 320x1480 panel ends up a ~60 px strip. The
+        # responsive scale already fixed the maximised case; this fixes the opening
+        # case, which is 100% of the time.
         self.root.geometry(self._geometria_inicial(
             self.root.winfo_screenwidth(), self.root.winfo_screenheight()))
         self._refresh(select_first=True)
 
-    # Lo que necesita cada columna: la izquierda (lista + propiedades + mover) y la
-    # vista previa de un panel vertical con algo de aire. Medidos sobre la ventana real.
+    # What each column needs: the left one (list + properties + move) and the preview
+    # of a vertical panel with some room. Measured on the real window.
     ANCHO_CONTROLES = 700
     ANCHO_PREVIEW = 420
 
     @staticmethod
     def _geometria_inicial(ancho_pantalla, alto_pantalla) -> str:
-        """El "WxH" con el que conviene abrir, acotado a la pantalla.
+        """The "WxH" it is best to open with, bounded by the screen.
 
-        Acotado y no fijo: en una notebook 1366x768 pedir 1200x950 deja la barra de
-        acciones abajo del borde, o sea sin forma de guardar. El 85% deja lugar para la
+        Bounded and not fixed: on a 1366x768 laptop, asking for 1200x950 puts the
+        action bar below the edge, which is to say with no way to save. 85% leaves
+        room for the
         barra de tareas.
         """
         ancho = min(EditorWindow.ANCHO_CONTROLES + EditorWindow.ANCHO_PREVIEW,
@@ -884,16 +887,17 @@ class EditorWindow:
     def _build(self):
         tk, ttk = self.tk, self.ttk
         raiz = ttk.Frame(self.root, padding=8)
-        # El pie se empaqueta ANTES que raiz aunque se llene despues: pack reparte
-        # el espacio en orden, y raiz va con expand=True. Al revés, raiz se queda con
-        # todo y el pie -- justo el que tiene Guardar -- puede quedar fuera de la
-        # ventana.
+        # The footer is packed BEFORE the root even though it is filled afterwards:
+        # pack distributes the space in order, and the root goes with expand=True.
+        # The other way around, the root takes everything and the footer -- the one
+        # with Save on it -- can end up outside the window.
         self._pie = ttk.Frame(self.root)
         self._pie.pack(side="bottom", fill="x")
         raiz.pack(fill="both", expand=True)
 
-        # Pestanas: el fondo y el panel no son widgets, y meterlos en la misma
-        # columna obligaria a elegir entre ver la lista o ver el fondo.
+        # Tabs: the background and the panel are not widgets, and putting them in the
+        # same column would force a choice between seeing the list and seeing the
+        # background.
         self.tabs = ttk.Notebook(raiz)
         self.tabs.pack(side="left", fill="both", expand=True)
         tab_widgets = ttk.Frame(self.tabs, padding=6)
@@ -934,12 +938,12 @@ class EditorWindow:
             ttk.Button(flechas, text=texto, width=4,
                        command=lambda a=dx, b=dy: self._move(a, b)).pack(side="left")
 
-        # La barra de acciones y la barra de estado van en el PIE, fuera del
-        # Notebook. Estaban dentro de la pestana Widgets, y desde la pestana Fondo
-        # no habia entonces ni boton de guardar ni un solo mensaje: el usuario
-        # cambiaba el fondo, no encontraba donde aplicarlo, reiniciaba el motor --
-        # que relee el archivo, donde el cambio nunca llego -- y el cambio se
-        # perdia. Reportado tal cual: "no hay boton de aplicar ni guarda".
+        # The action bar and the status bar live in the FOOTER, outside the Notebook.
+        # They used to be inside the Widgets tab, and from the Background tab there
+        # was then neither a save button nor a single message: the user changed the
+        # background, could not find where to apply it, restarted the engine -- which
+        # re-reads the file, where the change never arrived -- and the change was
+        # lost. Reported verbatim: "there is no apply button and it does not save".
         self._acciones = ttk.Frame(self._pie, padding=(8, 0, 8, 8))
         self._acciones.pack(side="bottom", fill="x")
         ttk.Button(self._acciones, text="Save",
@@ -964,12 +968,13 @@ class EditorWindow:
         self.canvas = tk.Label(self.der, borderwidth=1, relief="solid",
                                anchor="n")
         self.canvas.pack(fill="both", expand=True)
-        # El <Configure> se escucha en el CONTENEDOR, no en el Label: cambiar la
-        # imagen cambia el tamano del Label y eso dispararia otro Configure,
+        # The <Configure> is listened for on the CONTAINER, not on the Label:
+        # changing the image changes the Label size and that would fire another
+        # Configure,
         # o sea un bucle de redibujo.
         self.der.bind("<Configure>", self._on_resize)
-        # Arrastrar sobre la vista previa: es la forma natural de posicionar, y
-        # la lista de 47 nombres obliga a saber de memoria como se llama cada
+        # Dragging on the preview: it is the natural way to position things, and a
+        # list of 47 names requires remembering what each one
         # cosa.
         self.canvas.bind("<Button-1>", self._on_preview_press)
         self.canvas.bind("<B1-Motion>", self._on_preview_drag)
@@ -982,21 +987,21 @@ class EditorWindow:
                                 ("<Up>", (0, -1)), ("<Down>", (0, 1))):
             self.root.bind(tecla, lambda e, a=dx, b=dy: self._nudge(a, b))
 
-    # --- arrastre sobre la vista previa ---
+    # --- dragging on the preview ---
 
     def _offset_preview(self):
-        """(x, y) de la esquina de la imagen dentro del Label.
+        """(x, y) of the image's corner inside the Label.
 
-        El Label esta anclado al norte y llena su hueco, asi que la imagen queda
-        centrada horizontalmente: sin descontar ese margen, el clic cae varios
-        pixeles corrido y agarra el widget de al lado.
+        The Label is anchored north and fills its slot, so the image ends up
+        horizontally centred: without subtracting that margin, the click lands
+        several pixels off and grabs the widget next door.
         """
         ancho_label = self.canvas.winfo_width()
         ancho_img = self._preview_img.width() if self._preview_img else 0
         return max(0, (ancho_label - ancho_img) // 2), 0
 
     def _a_panel(self, px, py):
-        """Coordenadas del Label -> coordenadas del panel (320x1480)."""
+        """Label coordinates -> panel coordinates (320x1480)."""
         ox, oy = self._offset_preview()
         k = self._escala or 1.0
         return int(round((px - ox) / k)), int(round((py - oy) / k))
@@ -1010,8 +1015,8 @@ class EditorWindow:
         x, y = self._a_panel(evento.x, evento.y)
         wid = self.state.hit_test(x, y)
         if wid is None:
-            # Un clic al vacio NO deselecciona: el panel de propiedades se
-            # vaciaria y el usuario perderia lo que estaba editando.
+            # A click on empty space does NOT deselect: the properties panel would
+            # empty out and the user would lose what they were editing.
             return
         ids = self.state.widget_ids()
         self.lista.selection_clear(0, "end")
@@ -1029,7 +1034,7 @@ class EditorWindow:
 
     def _on_preview_release(self, _evento=None):
         self.state.end_drag()
-        # Los campos x/y muestran el valor viejo hasta que se repintan.
+        # The x/y fields show the old value until they are repainted.
         self._show_props()
 
     # --- pestana Fondo ---
@@ -1098,9 +1103,9 @@ class EditorWindow:
                 self._bg_fields[clave] = var
             control.grid(row=fila, column=1, sticky="w", padx=4)
             if clave == "src":
-                # Al lado del campo, no en otra parte: es lo que la mayoria va a
-                # usar en vez de tipear una ruta, y tiene que estar donde se ve el
-                # valor que reemplaza.
+                # Beside the field, not somewhere else: it is what most people will
+                # use instead of typing a path, and it has to be where the value it
+                # replaces is visible.
                 self._btn_asset = ttk.Button(self._bg_campos, text="Choose…",
                                              width=9, command=self._pedir_asset)
                 self._btn_asset.grid(row=fila, column=2, padx=(2, 0))
@@ -1108,10 +1113,10 @@ class EditorWindow:
         self._show_stops()
         self._bg_hint.config(text=pista_fondo(tipo))
 
-    # --- elegir el archivo del fondo ---
+    # --- choosing the background file ---
 
     def _pedir_asset(self):
-        """Diálogo para elegir el video, la imagen o la carpeta del fondo."""
+        """Dialog for choosing the background's video, image or folder."""
         from tkinter import filedialog
         tipo = self._bg_type.get()
         if tipo == "sequence":
@@ -1128,13 +1133,15 @@ class EditorWindow:
             self._usar_asset(Path(elegido))
 
     def _usar_asset(self, origen, assets_dir=None):
-        """Deja `origen` disponible como asset y lo pone en `src`. -> nombre | None.
+        """Makes `origen` available as an asset and writes it into `src`.
+        -> name | None.
 
-        **Copia el archivo adentro de vmaxpanel/assets si esta afuera**, y eso es
-        todo el punto: `safe_asset_path` rechaza cualquier ruta que se escape de ese
-        directorio -- con razon, el proceso corre elevado --, asi que elegir un video
-        del Escritorio SOLO puede funcionar copiandolo. Sin esto el editor guardaria
-        una ruta que el motor rechaza y el fondo quedaria en color plano sin que nada
+        **It copies the file into vmaxpanel/assets when it is outside**, and that is
+        the whole point: `safe_asset_path` rejects any path escaping that directory
+        -- rightly so, the process runs elevated -- so choosing a video from the
+        Desktop can ONLY work by copying it. Without this the editor would save a
+        path the engine rejects and the background would sit at a flat colour with
+        nothing
         lo explique.
         """
         import shutil
@@ -1168,8 +1175,8 @@ class EditorWindow:
     def _ya_esta_adentro(origen, raiz):
         """El nombre relativo si `origen` ya vive bajo `raiz`, o None.
 
-        Con / y no con os.sep: va a un JSON que se comparte entre maquinas, y
-        safe_asset_path normaliza las dos formas pero el archivo se lee mejor asi.
+        With / and not os.sep: it goes into a JSON shared between machines, and
+        safe_asset_path normalises both forms, but the file reads better this way.
         """
         try:
             return origen.resolve().relative_to(raiz.resolve()).as_posix()
@@ -1178,11 +1185,12 @@ class EditorWindow:
 
     @staticmethod
     def _copiar_asset(origen, raiz, shutil):
-        """Copia (archivo o carpeta) y devuelve el nombre que quedo.
+        """Copies (a file or a folder) and returns the name it ended up with.
 
-        Si el nombre ya existe con OTRO contenido se renombra a `-2`: pisar el asset
-        de otro perfil es destruir trabajo por un nombre repetido. Si existe con el
-        MISMO contenido se reusa, para que tocar el boton dos veces no deje dos
+        If the name already exists with DIFFERENT content it is renamed to `-2`:
+        overwriting another profile's asset destroys work over a repeated name. If it
+        exists with the SAME content it is reused, so pressing the button twice does
+        not leave two
         copias identicas.
         """
         destino = raiz / origen.name
@@ -1207,7 +1215,7 @@ class EditorWindow:
         self._draw_preview()
         self._show_errors()
 
-    # --- paradas del degradado ---
+    # --- gradient stops ---
 
     def _show_stops(self):
         ttk = self.ttk
@@ -1291,7 +1299,7 @@ class EditorWindow:
             hijo.destroy()
         self._font_rows = {}
         if self._familias is None:
-            # Una sola vez: indexar las fuentes del sistema recorre directorios.
+            # Once only: indexing the system fonts walks directories.
             self._familias = self.state.font_families()
         for fila, alias in enumerate(self.state.fonts()):
             spec = self.state.raw["fonts"][alias]
@@ -1392,22 +1400,22 @@ class EditorWindow:
         return self.lista.get(sel[0]) if sel else None
 
     def _on_select(self):
-        """Cambio de seleccion en la lista.
+        """Selection changed in the list.
 
-        Faltaba entero: el bind existia y este metodo no, asi que cada clic
-        levantaba una AttributeError que Tkinter imprime a stderr y se come.
-        Bajo pythonw -- que es como lo abre la bandeja -- eso no va a ninguna
-        parte: el panel de propiedades se quedaba mostrando el primer widget
-        para siempre, sin ningun error a la vista.
+        This was missing entirely: the bind existed and this method did not, so every
+        click raised an AttributeError that Tkinter prints to stderr and swallows.
+        Under pythonw -- which is how the tray opens it -- that goes nowhere: the
+        properties panel just kept showing the first widget forever, with no visible
+        error at all.
         """
         self._show_props()
         self._show_errors()
 
     def _report_error(self, exc_type, exc, tb):
-        """Excepcion de un callback de Tkinter, a la vista en vez de perdida.
+        """An exception from a Tkinter callback, made visible instead of lost.
 
-        El default imprime a stderr y sigue, que bajo pythonw es un fallo
-        invisible. Se muestra en la barra de estado y se re-emite al log.
+        The default prints to stderr and carries on, which under pythonw is an
+        invisible failure. It is shown in the status bar and re-emitted to the log.
         """
         texto = f"internal error: {exc_type.__name__}: {exc}"
         try:
@@ -1443,30 +1451,30 @@ class EditorWindow:
             self.estado.config(text=f"{marca} no errors", foreground="#006000")
 
     def _escala_disponible(self) -> float:
-        """La escala mas grande a la que el frame entero entra en su hueco.
+        """The largest scale at which the whole frame fits in its slot.
 
-        Se mide el contenedor y no la ventana: asi la vista previa aprovecha lo
-        que sobra cuando el usuario maximiza, que es todo el punto de un editor
-        -- juzgar un layout en miniatura no sirve.
+        The container is measured and not the window: that way the preview uses
+        whatever is spare when the user maximises, which is the whole point of an
+        editor -- judging a layout in miniature is useless.
 
-        Tope en 1.0: mas alla es upscaling borroso, y 1480 px de alto no entran
-        en una pantalla de 1080 de todos modos.
+        Capped at 1.0: beyond that is blurry upscaling, and 1480 px of height does
+        not fit on a 1080 screen anyway.
         """
-        alto = self.der.winfo_height() - 28          # el rotulo "Vista previa"
-        ancho = self.der.winfo_width() - 6           # el borde del Label
+        alto = self.der.winfo_height() - 28          # the "Preview" label
+        ancho = self.der.winfo_width() - 6           # the Label's border
         d = self.state.raw.get("designed_for") or {}
         pw = float(d.get("width") or 320) or 320
         ph = float(d.get("height") or 1480) or 1480
         if alto <= 1 or ancho <= 1:
-            return PREVIEW_SCALE                    # todavia sin geometria real
+            return PREVIEW_SCALE                    # no real geometry yet
         return max(0.05, min(1.0, ancho / pw, alto / ph))
 
     def _on_resize(self, _evento=None):
-        """Redibuja solo si la escala cambio de verdad.
+        """Redraws only if the scale really changed.
 
-        Un resize dispara muchos <Configure> seguidos y cada redibujo implica
-        reescalar una imagen de 320x1480 y convertirla a PhotoImage. El umbral
-        del 2% corta el ruido sin que se note el salto.
+        A resize fires many <Configure> events in a row and each redraw means
+        rescaling a 320x1480 image and converting it to a PhotoImage. The 2%
+        threshold cuts the noise without the jump being noticeable.
         """
         nueva = self._escala_disponible()
         if abs(nueva - self._escala) / max(nueva, self._escala) > 0.02:
@@ -1474,17 +1482,18 @@ class EditorWindow:
             self._draw_preview()
 
     def _draw_preview(self):
-        # El titulo se actualiza aca y no en cada mutacion: _draw_preview() es el
-        # camino comun de TODAS -- mover, editar un campo, cambiar el fondo, deshacer
-        # -- asi que es el unico lugar donde no hay que acordarse de agregarlo.
+        # The title is updated here and not on every mutation: _draw_preview() is the
+        # common path of ALL of them -- moving, editing a field, changing the
+        # background, undoing -- so it is the one place nobody has to remember to add
+        # it to.
         self._marcar_titulo()
         img = self.state.preview()
         self._escala = self._escala_disponible()
         dims = (max(1, int(img.width * self._escala)),
                 max(1, int(img.height * self._escala)))
         chico = img.resize(dims, Image.LANCZOS)
-        # PhotoImage sin referencia viva se recolecta y el Label queda en
-        # blanco: el clasico de Tkinter con imagenes.
+        # A PhotoImage with no live reference gets collected and the Label goes
+        # blank: the classic Tkinter-with-images trap.
         self._preview_img = _to_photoimage(chico, self.tk)
         self.canvas.config(image=self._preview_img)
 
@@ -1510,8 +1519,8 @@ class EditorWindow:
                 continue
             var = self.tk.StringVar(value="" if valor is None else str(valor))
             entrada = self.ttk.Entry(self.props, textvariable=var, width=32)
-            # sticky="w", sin weight en la columna: con la ventana maximizada,
-            # un campo que se expande deja una caja de 1500 px para escribir
+            # sticky="w", with no weight on the column: with the window maximised, a
+            # field that expands leaves a 1500 px box for typing
             # "18".
             entrada.grid(row=fila, column=1, sticky="w", padx=4)
             entrada.bind("<FocusOut>", lambda e, k=clave: self._apply(k))
@@ -1523,16 +1532,17 @@ class EditorWindow:
     # --- reglas de color ---
 
     def _show_rules(self, fila_base):
-        """El editor de reglas, debajo de las propiedades.
+        """The rules editor, below the properties.
 
-        Solo para los widgets de texto: son los unicos que tienen reglas en este
-        motor, y mostrar la seccion en una barra prometeria algo que no existe.
+        Only for text widgets: they are the only ones with rules in this
+        engine, and showing the section on a bar would promise something that does
+        not exist.
         """
         ttk = self.ttk
-        # No hay que destruir nada aca: _show_props() ya borro todos los hijos de
-        # self.props, y el marco de reglas es uno de ellos. La version anterior
-        # guardaba una referencia y le pedia los hijos a un widget ya destruido,
-        # que es "bad window path name".
+        # Nothing has to be destroyed here: _show_props() already deleted every child
+        # of self.props, and the rules frame is one of them. An earlier version kept
+        # a reference and asked an already-destroyed widget for its children, which
+        # is "bad window path name".
         self._rule_rows = []
         wid = self._selected()
         w = self.state.widget(wid) if wid else None
@@ -1576,9 +1586,9 @@ class EditorWindow:
         control = self._rule_rows[i][campo]
         valor = control.get()
         errores = self.state.set_rule(wid, i, campo, valor)
-        # Se repinta siempre: una regla rechazada se revierte en el estado, asi
-        # que el control tiene que volver a mostrar el valor que quedo y no el
-        # que el usuario tipeo.
+        # It always repaints: a rejected rule is reverted in the state, so the
+        # control has to go back to showing the value that stuck and not the one the
+        # user typed.
         self._show_props()
         self._draw_preview()
         if errores:
@@ -1611,12 +1621,11 @@ class EditorWindow:
     _ENCABEZADO = "——"
 
     def _metric_picker(self, fila, actual):
-        """Combo de metricas con etiqueta amigable, agrupado por dispositivo.
+        """A metric combo with friendly labels, grouped by device.
 
-        Era un campo de texto libre: para poner el espacio libre de la D habia
-        que saber de memoria que el id es `vol.D.free`. Los encabezados de grupo
-        entran como items no seleccionables porque ttk.Combobox no tiene grupos
-        de verdad; _on_pick_metric() los ignora.
+        It used to be a free text field: to place D's free space you had to remember
+        that the id is `vol.D.free`. The group headings go in as non-selectable items
+        because ttk.Combobox has no real groups; _on_pick_metric() ignores them.
         """
         opciones, self._metric_por_etiqueta = [], {}
         for dispositivo, entradas in self.state.metric_groups().items():
@@ -1643,8 +1652,8 @@ class EditorWindow:
             return
         mid = self._metric_por_etiqueta.get(combo.get())
         if mid is None:
-            # Un encabezado de grupo, o algo que no esta en el catalogo: se
-            # repone lo que el widget ya tenia en vez de escribir basura.
+            # A group heading, or something not in the catalogue: whatever the widget
+            # already had is put back instead of writing garbage.
             actual = (self.state.widget(wid) or {}).get("metric")
             actuales = [t for t, m in self._metric_por_etiqueta.items() if m == actual]
             if actuales:
@@ -1655,8 +1664,8 @@ class EditorWindow:
         self._show_errors()
 
     def _font_picker(self, fila, actual):
-        """Los alias de fuente son un conjunto cerrado del propio layout: un
-        combo evita el error de tipear un alias que no existe."""
+        """The font aliases are a closed set belonging to the layout itself: a combo
+        prevents the mistake of typing an alias that does not exist."""
         combo = self.ttk.Combobox(self.props, values=self.state.fonts(),
                                   width=20, state="readonly")
         combo.set(actual or "")
@@ -1681,11 +1690,11 @@ class EditorWindow:
         self._show_errors()
 
     def _nudge(self, dx, dy):
-        """Flechas del teclado: mueven el widget, salvo que estes escribiendo.
+        """Arrow keys: they move the widget, unless you are typing.
 
-        El bind es de ventana, asi que sin este filtro la flecha llega a los
-        dos lados: corriges un digito en el campo `x` y de paso el widget se
-        desplaza un pixel. Es corrupcion del layout sin que se note.
+        The bind is on the window, so without this filter the arrow reaches both
+        places: you correct a digit in the `x` field and the widget shifts a pixel
+        along with it. That is layout corruption nobody notices.
         """
         foco = self.root.focus_get()
         if foco is not None and foco.winfo_class() in ("TEntry", "Entry"):
@@ -1726,22 +1735,23 @@ class EditorWindow:
                                foreground="#006000")
 
     def _pendiente_al_tipear(self, var, tipo, clave):
-        """Marca (tipo, clave) como sin confirmar en cuanto cambia el texto.
+        """Marks (type, key) as unconfirmed as soon as the text changes.
 
-        Se sigue la VARIABLE y no el teclado: un trace de escritura cubre tipear,
-        pegar con el mouse, arrastrar texto y el autocompletado; `<KeyRelease>` solo
-        cubre teclas -- y encima no se puede simular sin keysym, asi que tampoco se
+        The VARIABLE is followed and not the keyboard: a write trace covers typing,
+        pasting with the mouse, dragging text and autocompletion; `<KeyRelease>` only
+        covers keys -- and on top of that cannot be simulated without a keysym, so it
+        also cannot be
         podia probar.
 
-        El trace se agrega DESPUES de crear la variable con su valor inicial, asi
-        que reconstruir un panel no marca nada: solo lo marca un cambio posterior,
-        que es siempre del usuario.
+        The trace is added AFTER creating the variable with its initial value, so
+        rebuilding a panel marks nothing: only a later change marks it, and that is
+        always the user's.
 
-        Es lo que permite confirmar al guardar SOLO lo que el usuario toco. Las dos
-        alternativas son peores: releer todos los controles resucita valores viejos
-        de las pestanas que no estan a la vista -- deshacer un cambio de fondo y
-        guardar lo volveria a aplicar --, y depender del foco del sistema falla justo
-        cuando la ventana no tiene el foco.
+        This is what allows committing ONLY what the user touched on save. Both
+        alternatives are worse: re-reading every control resurrects old values from
+        tabs that are not on screen -- undoing a background change and saving would
+        reapply it -- and depending on system focus fails exactly when the window
+        does not have the focus.
         """
         var.trace_add("write",
                       lambda *_, t=tipo, k=clave: self._pendientes.add((t, k)))
@@ -1749,12 +1759,13 @@ class EditorWindow:
     def _aplicar_pendientes(self):
         """Confirma lo tipeado y no aplicado, antes de guardar.
 
-        Los Entry aplican con <Return> o <FocusOut>. Un clic directo en Guardar no
-        siempre dispara ninguno de los dos -- depende de si el boton toma el foco --
-        y entonces se guardaba el valor VIEJO del campo recien escrito.
-        Silenciosamente, que es lo peor: el archivo queda valido, el panel lo
-        recarga y no cambia nada. Es el bug que reporto el usuario: cambiar el fondo,
-        no encontrar donde aplicarlo, y que reiniciar el motor "ignore" el cambio.
+        Entries apply on <Return> or <FocusOut>. A direct click on Save does not
+        always fire either of them -- it depends on whether the button takes focus --
+        and then the OLD value of the field just typed into was saved. Silently,
+        which is the worst part: the file stays valid, the panel reloads it and
+        nothing changes. It is the bug the user reported: change the background, fail
+        to find where to apply it, and watch restarting the engine "ignore" the
+        change.
         """
         handlers = {"widget": self._apply, "bg": self._apply_bg,
                     "panel": self._apply_panel}
@@ -1765,26 +1776,27 @@ class EditorWindow:
             try:
                 handler(clave)
             except Exception:
-                # Un control que ya no existe (cambio la seleccion, se rearmo la
-                # pestana) no puede impedir guardar el resto.
+                # A control that no longer exists (the selection changed, the tab was
+                # rebuilt) must not stop the rest from being saved.
                 pass
         self._pendientes.clear()
 
     def _marcar_titulo(self):
-        """El titulo dice si hay cambios sin guardar.
+        """The title says whether there are unsaved changes.
 
-        Sin esa senal, reiniciar el motor desde la bandeja parece ignorar la edicion
-        -- y lo que pasa es que la edicion nunca llego al disco, porque el motor
-        relee el archivo. Es exactamente el sintoma que reporto el usuario.
+        Without that signal, restarting the engine from the tray looks like it is
+        ignoring the edit -- when what is happening is that the edit never reached
+        the disk, because the engine re-reads the file. It is exactly the symptom the
+        user reported.
         """
         base = f"Layout editor — {self.state.path.name}"
         self.root.title(base + (" • unsaved changes" if self.state.dirty
                                 else ""))
 
     def _undo(self):
-        """Ctrl+Z. Repinta TODO: deshacer puede haber cambiado el fondo, las
-        fuentes o la lista de widgets, no solo el campo que se estaba editando.
-        Sin repintar, los controles siguen mostrando el valor deshecho."""
+        """Ctrl+Z. It repaints EVERYTHING: an undo may have changed the background,
+        the fonts or the widget list, not only the field being edited. Without
+        repainting, the controls keep showing the undone value."""
         if not self.state.undo():
             self.estado.config(text="there is nothing to undo",
                                foreground="#606060")
@@ -1792,24 +1804,25 @@ class EditorWindow:
         self._refresh()
 
     def _discard(self):
-        # Lo tipeado y no confirmado tambien se descarta: es justo lo que el boton
-        # promete, y dejarlo pendiente lo haria reaparecer en el proximo guardado.
+        # Anything typed and unconfirmed is discarded too: it is exactly what the
+        # button promises, and leaving it pending would make it reappear on the next
+        # save.
         self._pendientes.clear()
         self.state.reload()
         self._refresh(select_first=True)
 
     # --- exportar / importar ---
     #
-    # La logica vive en bundle.py; aca esta el pegamento y los dos mensajes que
-    # importan: por que no se exporto, y donde quedo lo que se importo.
+    # The logic lives in bundle.py; here is the glue and the two messages that
+    # matter: why it was not exported, and where what was imported ended up.
 
     def _carpetas(self):
-        """(perfiles, assets) del proyecto.
+        """The project's (profiles, assets).
 
-        Se derivan del paquete y no del perfil abierto: el perfil puede estar en
-        cualquier parte -- los tests lo abren desde un tmp_path -- pero los assets
-        de un bundle siempre van a vmaxpanel/assets, que es el unico lugar donde el
-        motor los busca.
+        They are derived from the package and not from the open profile: the profile
+        can be anywhere -- the tests open it from a tmp_path -- but a bundle's assets
+        always go to vmaxpanel/assets, which is the only place the engine looks for
+        them.
         """
         from .cli import assets_dir, profiles_dir
         return profiles_dir(), assets_dir()
@@ -1827,17 +1840,17 @@ class EditorWindow:
     def _exportar_a(self, destino):
         destino = Path(destino)
         if self.state.dirty:
-            # Exportar lee el ARCHIVO, no lo que hay en pantalla. Con cambios sin
-            # guardar el bundle llevaria la version vieja, y ese error no se nota
-            # hasta que otra persona lo abre.
+            # Exporting reads the FILE, not what is on screen. With unsaved changes
+            # the bundle would carry the old version, and that error is not noticed
+            # until somebody else opens it.
             self.estado.config(text="there are unsaved changes: save first, then "
                                     "export", foreground="#803000")
             return
         if destino.exists():
-            # asksaveasfilename ya pregunta, pero este metodo tambien se llama
-            # directo: pisar un bundle que el usuario quizas ya compartio no puede
-            # depender de que el dialogo haya preguntado.
-            self.estado.config(text=f"{destino.name} ya existe: elegí otro nombre",
+            # asksaveasfilename already asks, but this method is also called
+            # directly: overwriting a bundle the user may already have shared cannot
+            # depend on the dialog having asked.
+            self.estado.config(text=f"{destino.name} already exists: pick another name",
                                foreground="#803000")
             return
         try:
@@ -1860,7 +1873,7 @@ class EditorWindow:
             self._importar_de(Path(origen))
 
     def _importar_de(self, origen, profiles_dir=None, assets_dir=None):
-        """Importa y pasa a editar el perfil importado.
+        """Imports and switches to editing the imported profile.
 
         Importar y no abrirlo dejaria al usuario adivinando si funciono.
         """
@@ -1875,10 +1888,10 @@ class EditorWindow:
         self.state.reload()
         self._refresh(select_first=True)
         faltan = info["fuentes_faltantes"]
-        aviso = (f" Ojo: no tenés {', '.join(faltan)}, se ve distinto."
+        aviso = (f" Careful: you do not have {', '.join(faltan)}, so it looks different."
                  if faltan else "")
         self.estado.config(
-            text=f"importado en {info['profile'].name}, y abierto.{aviso}",
+            text=f"imported as {info['profile'].name}, and opened.{aviso}",
             foreground="#803000" if faltan else "#006000")
 
     def run(self):
@@ -1888,10 +1901,10 @@ class EditorWindow:
 def _to_photoimage(img, tk):
     """PIL -> PhotoImage.
 
-    Se prefiere `ImageTk` de Pillow, pero no se depende de el: viene en el
-    paquete y aun asi puede faltar segun como este compilado el binding de Tk.
-    El respaldo es PNG en base64, que Tk 8.6 lee nativo -- PPM tambien seria
-    nativo como archivo, pero PhotoImage(data=...) no lo reconoce.
+    Pillow's `ImageTk` is preferred, but not depended on: it ships with the package
+    and can still be absent depending on how Tk's binding was compiled. The fallback
+    is base64 PNG, which Tk 8.6 reads natively -- PPM would also be native as a
+    file, but PhotoImage(data=...) does not recognise it.
     """
     try:
         from PIL import ImageTk

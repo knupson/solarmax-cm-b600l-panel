@@ -535,7 +535,7 @@ def test_exporting_over_an_existing_file_refuses(ventana, tmp_path):
     destino.write_bytes(b"algo")
     ventana._exportar_a(destino)
     assert destino.read_bytes() == b"algo"
-    assert "ya existe" in ventana.estado.cget("text")
+    assert "already exists" in ventana.estado.cget("text")
 
 
 def test_importing_from_the_editor_loads_the_imported_profile(ventana, tmp_path):
@@ -549,7 +549,7 @@ def test_importing_from_the_editor_loads_the_imported_profile(ventana, tmp_path)
     ventana._importar_de(zip_, profiles_dir=destino_p, assets_dir=tmp_path / "a2")
     assert ventana.state.path.parent == destino_p
     assert ventana.state.raw["name"]
-    assert "importado" in ventana.estado.cget("text").lower()
+    assert "imported" in ventana.estado.cget("text").lower()
 
 
 def test_a_bad_bundle_reports_in_the_status_bar_and_keeps_editing(ventana, tmp_path):
