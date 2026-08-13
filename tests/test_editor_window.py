@@ -272,7 +272,7 @@ def test_the_window_has_tabs_for_widgets_background_and_panel(ventana):
     """El fondo, las fuentes y el panel no son widgets: meterlos en la misma
     columna obligaria a elegir entre ver la lista o ver el fondo."""
     pestanas = [ventana.tabs.tab(i, "text") for i in range(len(ventana.tabs.tabs()))]
-    assert pestanas == ["Widgets", "Fondo", "Fuentes", "Panel"]
+    assert pestanas == ["Widgets", "Background", "Fonts", "Panel"]
 
 
 def test_the_background_tab_shows_the_fields_of_the_current_type(ventana):
@@ -325,7 +325,7 @@ def test_an_animated_background_shows_a_hint_about_the_preview(ventana):
     ventana._bg_type.set("procedural")
     ventana._on_pick_bg_type()
     ventana.root.update()
-    assert "anima" in ventana._bg_hint.cget("text").lower()
+    assert "animate" in ventana._bg_hint.cget("text").lower()
 
 
 def test_clicking_the_preview_selects_that_widget(ventana):
@@ -380,7 +380,7 @@ def test_screen_and_panel_coordinates_round_trip(ventana):
 
 def test_there_is_a_fonts_tab(ventana):
     pestanas = [ventana.tabs.tab(i, "text") for i in range(len(ventana.tabs.tabs()))]
-    assert pestanas == ["Widgets", "Fondo", "Fuentes", "Panel"]
+    assert pestanas == ["Widgets", "Background", "Fonts", "Panel"]
 
 
 def test_the_fonts_tab_lists_one_row_per_alias(ventana):
@@ -506,7 +506,7 @@ def test_exporting_with_unsaved_changes_refuses_and_says_why(ventana, tmp_path):
     destino = tmp_path / "no-deberia.vmaxpanel"
     ventana._exportar_a(destino)
     assert not destino.exists()
-    assert "guard" in ventana.estado.cget("text").lower()
+    assert "unsaved" in ventana.estado.cget("text").lower()
 
 
 def test_exporting_over_an_existing_file_refuses(ventana, tmp_path):
@@ -605,12 +605,12 @@ def test_discarding_also_drops_what_was_typed_but_not_applied(ventana):
 def test_unsaved_changes_are_visible_in_the_title(ventana):
     """Sin señal de "hay cambios sin guardar", reiniciar el motor desde la bandeja
     parece ignorar la edición -- y en realidad la edición nunca llegó al disco."""
-    assert "sin guardar" not in ventana.root.title()
+    assert "unsaved" not in ventana.root.title()
     seleccionar(ventana, "cpu-load")
     ventana._move(3, 0)
-    assert "sin guardar" in ventana.root.title()
+    assert "unsaved" in ventana.root.title()
     ventana._save()
-    assert "sin guardar" not in ventana.root.title()
+    assert "unsaved" not in ventana.root.title()
 
 
 # --- elegir el archivo del fondo ---
@@ -705,7 +705,7 @@ def test_the_choose_button_appears_only_for_backgrounds_with_a_file(ventana):
     """Un `solid` no tiene archivo que elegir; un `video` sí. El botón sigue al
     campo `src`, así que aparece exactamente cuando ese campo existe."""
     def hay_boton():
-        return any("Elegir" in str(c.cget("text"))
+        return any("Choose" in str(c.cget("text"))
                    for c in ventana._bg_campos.winfo_children()
                    if c.winfo_class() == "TButton")
 

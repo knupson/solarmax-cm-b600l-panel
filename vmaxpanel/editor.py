@@ -38,7 +38,7 @@ _FLOAT_FIELDS = {"min", "max", "start_angle", "sweep", "fps", "angle", "at"}
 _TEMPLATES = {
     "text": {"metric": "cpu.load", "x": 24, "y": 24, "font": None,
              "color": "#FFFFFF", "format": "{:.0f}%"},
-    "label": {"text": "NUEVO", "x": 24, "y": 24, "font": None, "color": "#FFFFFF"},
+    "label": {"text": "NEW", "x": 24, "y": 24, "font": None, "color": "#FFFFFF"},
     "bar": {"metric": "cpu.load", "x": 24, "y": 24, "w": 200, "h": 16,
             "radius": 4, "fill": "#3987E5", "track": "#242834"},
     "arc": {"metric": "cpu.load", "x": 160, "y": 160, "r": 60, "thickness": 8,
@@ -125,7 +125,7 @@ class EditorState:
             self.raw = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as e:
             self.raw = {}
-            self.errors = [f"no se pudo leer el perfil: {e}"]
+            self.errors = [f"could not read the profile: {e}"]
             self.dirty = False
             return
         self.errors = schema.validate(self.raw)
@@ -251,7 +251,7 @@ class EditorState:
     def set_field(self, wid, key, value) -> list[str]:
         w = self.widget(wid)
         if w is None:
-            return [f"no existe el widget {wid!r}"]
+            return [f"there is no widget {wid!r}"]
         self._snapshot()
         w[key] = _coerce(key, value)
         self.dirty = True
@@ -262,13 +262,13 @@ class EditorState:
         if tipo not in _TEMPLATES:
             return [f"tipo desconocido {tipo!r}"]
         if wid in self.widget_ids():
-            return [f"ya hay un widget con id {wid!r}"]
+            return [f"there is already a widget with id {wid!r}"]
         self._snapshot()
         nuevo = {"id": wid, "type": tipo, **_TEMPLATES[tipo]}
-        if nuevo.get("font", "sin-alias") is None:
+        if nuevo.get("font", "no-alias") is None:
             aliases = self.fonts()
             if not aliases:
-                return ["el layout no tiene ninguna fuente definida"]
+                return ["the layout defines no fonts at all"]
             nuevo["font"] = aliases[0]
         self.raw.setdefault("widgets", []).append(nuevo)
         self.dirty = True
@@ -308,7 +308,7 @@ class EditorState:
     def set_font_field(self, alias, clave, valor) -> list[str]:
         fuentes = self.raw.setdefault("fonts", {})
         if alias not in fuentes:
-            return [f"no existe el alias de fuente {alias!r}"]
+            return [f"there is no font alias {alias!r}"]
         self._snapshot()
         if clave == "size":
             fuentes[alias][clave] = _coerce("size", valor)
@@ -326,10 +326,10 @@ class EditorState:
     def add_font(self, alias) -> list[str]:
         alias = str(alias).strip()
         if not alias:
-            return ["el alias no puede estar vacio"]
+            return ["the alias cannot be empty"]
         fuentes = self.raw.setdefault("fonts", {})
         if alias in fuentes:
-            return [f"ya existe el alias {alias!r}"]
+            return [f"the alias {alias!r} already exists"]
         self._snapshot()
         fuentes[alias] = dict(self._FUENTE_DEFAULT)
         self.dirty = True
@@ -343,19 +343,19 @@ class EditorState:
     def remove_font(self, alias) -> list[str]:
         """Se niega si algun widget lo usa.
 
-        Borrarlo dejaria el layout invalido -- "alias de fuente desconocido" --
+        Borrarlo dejaria el layout invalido -- "unknown font alias" --
         y el motor rechazaria el perfil entero, quedandose con el anterior. El
         usuario habria borrado una fuente y el panel no cambiaria.
         """
         usuarios = self.font_users(alias)
         if usuarios:
-            return [f"la fuente {alias!r} la usan {len(usuarios)} widgets "
+            return [f"font {alias!r} is used by {len(usuarios)} widgets "
                     f"({', '.join(usuarios[:3])}{'...' if len(usuarios) > 3 else ''})"]
         fuentes = self.raw.get("fonts") or {}
         if alias not in fuentes:
-            return [f"no existe el alias {alias!r}"]
+            return [f"there is no alias {alias!r}"]
         if len(fuentes) <= 1:
-            return ["el layout necesita al menos una fuente"]
+            return ["the layout needs at least one font"]
         self._snapshot()
         del fuentes[alias]
         self.dirty = True
@@ -512,7 +512,7 @@ class EditorState:
         """
         w = self.widget(wid)
         if w is None:
-            return [f"no existe el widget {wid!r}"]
+            return [f"there is no widget {wid!r}"]
         spec = spec_for(w.get("metric", ""))
         techo = spec.max if (spec and spec.max) else 100.0
         self._snapshot()
@@ -525,7 +525,7 @@ class EditorState:
     def remove_rule(self, wid, i) -> list[str]:
         reglas = (self.widget(wid) or {}).get("rules") or []
         if not 0 <= i < len(reglas):
-            return [f"no existe la regla {i}"]
+            return [f"there is no rule {i}"]
         self._snapshot()
         del reglas[i]
         self.dirty = True
@@ -542,7 +542,7 @@ class EditorState:
         """
         reglas = (self.widget(wid) or {}).get("rules") or []
         if not 0 <= i < len(reglas):
-            return [f"no existe la regla {i}"]
+            return [f"there is no rule {i}"]
         actual = self.rules(wid)[i]
         nuevo = dict(actual)
         nuevo[campo] = str(valor).strip()
@@ -654,9 +654,9 @@ class EditorState:
         degradado y el validador lo rechaza."""
         stops = self.stops()
         if len(stops) <= 2:
-            return ["un degradado necesita al menos dos paradas"]
+            return ["a gradient needs at least two stops"]
         if not 0 <= i < len(stops):
-            return [f"no existe la parada {i}"]
+            return [f"there is no stop {i}"]
         self._snapshot()
         del stops[i]
         self.dirty = True
@@ -666,7 +666,7 @@ class EditorState:
     def set_stop(self, i, clave, valor) -> list[str]:
         stops = self.stops()
         if not 0 <= i < len(stops):
-            return [f"no existe la parada {i}"]
+            return [f"there is no stop {i}"]
         self._snapshot()
         stops[i][clave] = float(valor) if clave == "at" else str(valor).strip()
         self.dirty = True
@@ -688,7 +688,7 @@ class EditorState:
     def move_widget(self, wid, dx, dy) -> list[str]:
         w = self.widget(wid)
         if w is None:
-            return [f"no existe el widget {wid!r}"]
+            return [f"there is no widget {wid!r}"]
         self._snapshot()
         w["x"] = int(w.get("x", 0)) + int(dx)
         w["y"] = int(w.get("y", 0)) + int(dy)
@@ -712,9 +712,9 @@ class EditorState:
         return self._last_good
 
 
-ANIMADO = ("Fondo animado: la vista previa muestra un solo cuadro, así que acá "
-           "se ve quieto. En el panel se anima. Conviene subir los fps del "
-           "panel (pestaña Panel) para que se note.")
+ANIMADO = ("Animated background: the preview shows a single frame, so it looks "
+           "frozen here. On the panel it animates. Raising the panel fps "
+           "(Panel tab) makes it more visible.")
 
 
 def _mismo_contenido(a, b) -> bool:
@@ -758,7 +758,7 @@ def pista_fondo(tipo) -> str:
     if tipo == "procedural":
         return ANIMADO
     if tipo == "sequence":
-        return (ANIMADO + " src es una carpeta con las imágenes, relativa a "
+        return (ANIMADO + " src is a folder of images, relative to "
                 "vmaxpanel/assets.")
     if tipo == "video":
         # La ruta se consulta en cada llamada -- no se cachea al importar --
@@ -767,8 +767,8 @@ def pista_fondo(tipo) -> str:
         from .render.video import COMO_INSTALAR, buscar_ffmpeg
         if buscar_ffmpeg() is None:
             return ANIMADO + " " + COMO_INSTALAR
-        return (ANIMADO + " src es un video relativo a vmaxpanel/assets: mp4, "
-                "webm, mkv, gif, lo que ffmpeg sepa abrir.")
+        return (ANIMADO + " src is a video relative to vmaxpanel/assets: mp4, "
+                "webm, mkv, gif, whatever ffmpeg can open.")
     return ""
 
 
@@ -901,8 +901,8 @@ class EditorWindow:
         self.tab_fuentes = ttk.Frame(self.tabs, padding=6)
         self.tab_panel = ttk.Frame(self.tabs, padding=6)
         self.tabs.add(tab_widgets, text="Widgets")
-        self.tabs.add(self.tab_fondo, text="Fondo")
-        self.tabs.add(self.tab_fuentes, text="Fuentes")
+        self.tabs.add(self.tab_fondo, text="Background")
+        self.tabs.add(self.tab_fuentes, text="Fonts")
         self.tabs.add(self.tab_panel, text="Panel")
 
         izq = ttk.Frame(tab_widgets)
@@ -917,7 +917,7 @@ class EditorWindow:
         for tipo in ("text", "label", "bar", "rect"):
             ttk.Button(botones, text=f"+{tipo}", width=6,
                        command=lambda t=tipo: self._add(t)).pack(side="left")
-        ttk.Button(izq, text="Borrar", command=self._remove).pack(fill="x")
+        ttk.Button(izq, text="Delete", command=self._remove).pack(fill="x")
 
         centro = ttk.Frame(tab_widgets, padding=(12, 0))
         centro.pack(side="left", fill="both", expand=True)
@@ -926,7 +926,7 @@ class EditorWindow:
 
         flechas = ttk.Frame(centro)
         flechas.pack(fill="x", pady=6)
-        ttk.Label(flechas, text="Mover:").pack(side="left")
+        ttk.Label(flechas, text="Move:").pack(side="left")
         for texto, (dx, dy) in (("←", (-1, 0)), ("→", (1, 0)),
                                 ("↑", (0, -1)), ("↓", (0, 1)),
                                 ("←10", (-10, 0)), ("→10", (10, 0)),
@@ -942,13 +942,13 @@ class EditorWindow:
         # perdia. Reportado tal cual: "no hay boton de aplicar ni guarda".
         self._acciones = ttk.Frame(self._pie, padding=(8, 0, 8, 8))
         self._acciones.pack(side="bottom", fill="x")
-        ttk.Button(self._acciones, text="Guardar",
+        ttk.Button(self._acciones, text="Save",
                    command=self._save).pack(side="left")
-        ttk.Button(self._acciones, text="Descartar cambios",
+        ttk.Button(self._acciones, text="Discard changes",
                    command=self._discard).pack(side="left", padx=4)
-        ttk.Button(self._acciones, text="Exportar…",
+        ttk.Button(self._acciones, text="Export…",
                    command=self._pedir_exportar).pack(side="left")
-        ttk.Button(self._acciones, text="Importar…",
+        ttk.Button(self._acciones, text="Import…",
                    command=self._pedir_importar).pack(side="left", padx=4)
         self.estado = ttk.Label(self._pie, text="", wraplength=900,
                                 justify="left", padding=(8, 0))
@@ -960,7 +960,7 @@ class EditorWindow:
 
         self.der = ttk.Frame(raiz)
         self.der.pack(side="left", fill="both", expand=True)
-        ttk.Label(self.der, text="Vista previa").pack(anchor="w")
+        ttk.Label(self.der, text="Preview").pack(anchor="w")
         self.canvas = tk.Label(self.der, borderwidth=1, relief="solid",
                                anchor="n")
         self.canvas.pack(fill="both", expand=True)
@@ -1038,7 +1038,7 @@ class EditorWindow:
         ttk = self.ttk
         cab = ttk.Frame(self.tab_fondo)
         cab.pack(fill="x")
-        ttk.Label(cab, text="Tipo").pack(side="left")
+        ttk.Label(cab, text="Type").pack(side="left")
         self._bg_type = self.tk.StringVar()
         combo = ttk.Combobox(cab, textvariable=self._bg_type, width=16,
                              state="readonly", values=self.state.background_types())
@@ -1101,7 +1101,7 @@ class EditorWindow:
                 # Al lado del campo, no en otra parte: es lo que la mayoria va a
                 # usar en vez de tipear una ruta, y tiene que estar donde se ve el
                 # valor que reemplaza.
-                self._btn_asset = ttk.Button(self._bg_campos, text="Elegir…",
+                self._btn_asset = ttk.Button(self._bg_campos, text="Choose…",
                                              width=9, command=self._pedir_asset)
                 self._btn_asset.grid(row=fila, column=2, padx=(2, 0))
 
@@ -1116,13 +1116,13 @@ class EditorWindow:
         tipo = self._bg_type.get()
         if tipo == "sequence":
             elegido = filedialog.askdirectory(
-                parent=self.root, title="Carpeta con los cuadros de la secuencia")
+                parent=self.root, title="Folder holding the sequence frames")
         else:
             filtros = ([("Video", "*.mp4 *.webm *.mkv *.gif *.avi *.mov")]
                        if tipo == "video" else
                        [("Imagen", "*.png *.jpg *.jpeg *.bmp *.gif")])
             elegido = filedialog.askopenfilename(
-                parent=self.root, title="Archivo del fondo",
+                parent=self.root, title="Background file",
                 filetypes=filtros + [("Todos", "*.*")])
         if elegido:
             self._usar_asset(Path(elegido))
@@ -1141,7 +1141,7 @@ class EditorWindow:
         origen = Path(origen)
         destino_raiz = Path(assets_dir) if assets_dir else self._carpetas()[1]
         if not origen.exists():
-            self.estado.config(text=f"no existe {origen.name}", foreground="#A00000")
+            self.estado.config(text=f"{origen.name} does not exist", foreground="#A00000")
             return None
         try:
             destino_raiz.mkdir(parents=True, exist_ok=True)
@@ -1151,7 +1151,7 @@ class EditorWindow:
             else:
                 nombre = self._copiar_asset(origen, destino_raiz, shutil)
         except OSError as e:
-            self.estado.config(text=f"no se pudo copiar {origen.name}: {e}",
+            self.estado.config(text=f"could not copy {origen.name}: {e}",
                                foreground="#A00000")
             return None
 
@@ -1161,7 +1161,7 @@ class EditorWindow:
         self._pendientes.discard(("bg", "src"))
         self._draw_preview()
         self._show_errors()
-        self.estado.config(text=f"fondo: {nombre}", foreground="#006000")
+        self.estado.config(text=f"background: {nombre}", foreground="#006000")
         return nombre
 
     @staticmethod
@@ -1216,7 +1216,7 @@ class EditorWindow:
         self._stop_rows = []
         if not self.state.has_stops():
             return
-        ttk.Label(self._bg_stops, text="Paradas del degradado").grid(
+        ttk.Label(self._bg_stops, text="Gradient stops").grid(
             row=0, column=0, columnspan=4, sticky="w", pady=(6, 2))
         for i, parada in enumerate(self.state.stops()):
             fila = i + 1
@@ -1235,7 +1235,7 @@ class EditorWindow:
             ttk.Button(self._bg_stops, text="−", width=3,
                        command=lambda j=i: self._remove_stop(j)).grid(row=fila, column=3)
             self._stop_rows.append({"at": at, "color": color})
-        ttk.Button(self._bg_stops, text="+ parada",
+        ttk.Button(self._bg_stops, text="+ stop",
                    command=self._add_stop).grid(row=len(self._stop_rows) + 1,
                                                 column=0, columnspan=3,
                                                 sticky="w", pady=4)
@@ -1267,11 +1267,11 @@ class EditorWindow:
     def _build_fuentes(self):
         ttk = self.ttk
         ttk.Label(self.tab_fuentes,
-                  text="Las fuentes se piden por FAMILIA, no por archivo: el "
-                       "perfil se comparte y Consolas no se redistribuye.\n"
-                       "Una familia que no esté instalada cae a la fuente por "
-                       "defecto sin avisar, de ahí que el combo\nofrezca solo "
-                       "las que hay en esta máquina.",
+                  text="Fonts are requested by FAMILY, not by file: profiles get "
+                       "shared and Consolas is not redistributable.\n"
+                       "A family that is not installed falls back to the "
+                       "default font silently, which is why the combo\nonly "
+                       "offers the ones present on this machine.",
                   justify="left", foreground="#606060").pack(anchor="w",
                                                              pady=(0, 8))
         self._font_grid = ttk.Frame(self.tab_fuentes)
@@ -1311,7 +1311,7 @@ class EditorWindow:
                 entrada.bind(evento, lambda e, a=alias: self._apply_font(a, "size"))
 
             bold = self.tk.BooleanVar(value=bool(spec.get("bold")))
-            ttk.Checkbutton(self._font_grid, text="negrita", variable=bold,
+            ttk.Checkbutton(self._font_grid, text="bold", variable=bold,
                             command=lambda a=alias: self._apply_font(a, "bold")
                             ).grid(row=fila, column=3, padx=4)
 
@@ -1359,8 +1359,8 @@ class EditorWindow:
         ttk = self.ttk
         self._panel_fields = {}
         ttk.Label(self.tab_panel,
-                  text="El panel refresca a 60 Hz: por encima de eso los cuadros "
-                       "se descartan.\nCosto medido: 1 fps ≈ 1% de un núcleo, "
+                  text="The panel refreshes at 60 Hz: above that, frames are "
+                       "discarded.\nMeasured cost: 1 fps ≈ 1% of one core, "
                        "30 ≈ 17%, 60 ≈ 37%.",
                   justify="left", foreground="#606060").pack(anchor="w", pady=(0, 8))
         campos = ttk.Frame(self.tab_panel)
@@ -1409,7 +1409,7 @@ class EditorWindow:
         El default imprime a stderr y sigue, que bajo pythonw es un fallo
         invisible. Se muestra en la barra de estado y se re-emite al log.
         """
-        texto = f"error interno: {exc_type.__name__}: {exc}"
+        texto = f"internal error: {exc_type.__name__}: {exc}"
         try:
             self.estado.config(text=texto, foreground="#B00000")
         except Exception:
@@ -1440,7 +1440,7 @@ class EditorWindow:
             self.estado.config(text=f"{marca} " + " / ".join(self.state.errors[:3]),
                                foreground="#B00000")
         else:
-            self.estado.config(text=f"{marca} sin errores", foreground="#006000")
+            self.estado.config(text=f"{marca} no errors", foreground="#006000")
 
     def _escala_disponible(self) -> float:
         """La escala mas grande a la que el frame entero entra en su hueco.
@@ -1542,7 +1542,7 @@ class EditorWindow:
         marco = ttk.Frame(self.props)
         marco.grid(row=fila_base, column=0, columnspan=3, sticky="w", pady=(10, 0))
         self._rules_frame = marco
-        ttk.Label(marco, text="COLOR SEGÚN EL VALOR", foreground="#606060").grid(
+        ttk.Label(marco, text="COLOUR BY VALUE", foreground="#606060").grid(
             row=0, column=0, columnspan=4, sticky="w")
         for i, regla in enumerate(self.state.rules(wid)):
             op = ttk.Combobox(marco, width=4, state="readonly",
@@ -1565,7 +1565,7 @@ class EditorWindow:
                        command=lambda j=i: self._remove_rule(j)).grid(row=i + 1,
                                                                      column=3)
             self._rule_rows.append({"op": op, "value": valor, "color": color})
-        ttk.Button(marco, text="+ regla", command=self._add_rule).grid(
+        ttk.Button(marco, text="+ rule", command=self._add_rule).grid(
             row=len(self._rule_rows) + 1, column=0, columnspan=3, sticky="w",
             pady=(4, 0))
 
@@ -1777,8 +1777,8 @@ class EditorWindow:
         -- y lo que pasa es que la edicion nunca llego al disco, porque el motor
         relee el archivo. Es exactamente el sintoma que reporto el usuario.
         """
-        base = f"Editor de layout — {self.state.path.name}"
-        self.root.title(base + (" • cambios sin guardar" if self.state.dirty
+        base = f"Layout editor — {self.state.path.name}"
+        self.root.title(base + (" • unsaved changes" if self.state.dirty
                                 else ""))
 
     def _undo(self):
@@ -1830,8 +1830,8 @@ class EditorWindow:
             # Exportar lee el ARCHIVO, no lo que hay en pantalla. Con cambios sin
             # guardar el bundle llevaria la version vieja, y ese error no se nota
             # hasta que otra persona lo abre.
-            self.estado.config(text="hay cambios sin guardar: guardá primero y "
-                                    "después exportá", foreground="#803000")
+            self.estado.config(text="there are unsaved changes: save first, then "
+                                    "export", foreground="#803000")
             return
         if destino.exists():
             # asksaveasfilename ya pregunta, pero este metodo tambien se llama

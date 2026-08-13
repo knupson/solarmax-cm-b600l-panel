@@ -615,7 +615,7 @@ def test_the_sequence_hint_explains_that_src_is_a_folder():
     'sequence' junto con 'procedural' y devolvia antes, asi que el usuario nunca
     veia la unica linea que le explicaba que src es una carpeta."""
     from vmaxpanel import editor
-    assert "carpeta" in editor.pista_fondo("sequence")
+    assert "folder" in editor.pista_fondo("sequence")
 
 
 def test_a_static_background_has_no_hint():
