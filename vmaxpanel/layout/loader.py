@@ -1,7 +1,7 @@
 """Carga, guardado y recarga en caliente de perfiles.
 
-Invariante: un layout invalido NUNCA reemplaza al que esta andando. El panel no
-se queda negro por un JSON mal escrito.
+Invariant: an invalid layout NEVER replaces the one that is running. The panel
+does not go black over a badly written JSON.
 """
 import decimal
 import hashlib
@@ -42,8 +42,8 @@ def to_dict(layout: Layout) -> dict:
     d = asdict(layout)
     d["designed_for"] = {"width": layout.designed_for.width,
                          "height": layout.designed_for.height}
-    # fallbacks solo si hay: la enorme mayoria de los alias no la usa y una clave
-    # vacia en cada uno ensucia el archivo que el usuario abre a mano.
+    # fallbacks only when present: the vast majority of aliases do not use it, and
+    # an empty key on every one clutters the file the user opens by hand.
     d["fonts"] = {a: ({"family": f.family, "size": f.size, "bold": f.bold}
                       | ({"fallbacks": list(f.fallbacks)} if f.fallbacks else {}))
                   for a, f in layout.fonts.items()}
@@ -53,49 +53,49 @@ def to_dict(layout: Layout) -> dict:
 
 
 def _background_dict(bg) -> dict:
-    """El fondo, con exactamente las claves que su tipo admite.
+    """The background, with exactly the keys its type accepts.
 
-    Derivado de schema.BACKGROUND_KEYS y no escrito a mano por tipo: la version
-    anterior tenia una rama else que emitia src/fit para todo lo que no fuera
-    solid ni gradient, asi que al aparecer 'procedural' -- que no lleva ninguna
-    de las dos -- save() empezo a escribir un fondo que load() rechazaba. Con
-    las claves derivadas, agregar un tipo nuevo no puede romper el roundtrip.
+    Derived from schema.BACKGROUND_KEYS rather than written by hand per type: an
+    earlier version had an else branch emitting src/fit for anything that was
+    neither solid nor gradient, so when 'procedural' appeared -- which carries
+    neither -- save() started writing a background load() rejected. With derived
+    keys, adding a new type cannot break the round trip.
     """
     permitidas = schema.BACKGROUND_KEYS.get(bg.type)
     if permitidas is None:
         permitidas = {"type", "color"}
     if bg.type == "gradient":
         # El validador ACEPTA color en un gradient (por tolerancia, ver
-        # BACKGROUND_KEYS) pero el modelo no lo lee: emitirlo agrega al archivo una
-        # clave que el usuario no escribio y que no hace nada. La tolerancia al leer
+        # BACKGROUND_KEYS) but the model does not read it: emitting it adds a key to
+        # the file that the user never wrote and that does nothing. Tolerance on read
         # no obliga a ensuciar al escribir.
         permitidas = permitidas - {"color"}
     out = {"type": bg.type}
     for clave in sorted(permitidas - {"type"}):
         valor = getattr(bg, clave, None)
         if valor is None:
-            continue            # un src sin definir no puede escribirse como null
+            continue            # an undefined src cannot be written as null
         out[clave] = valor
     return out
 
 
 def _widget_dict(w) -> dict:
-    # Se serializan TODOS los campos del dataclass, no solo los que difieren
-    # del default. Omitir un campo cuando su valor coincide con el default
-    # rompe el roundtrip apenas ese campo es obligatorio (p.ej. "color" en un
-    # TextWidget cuyo color final es el mismo #FFFFFF con el que arranca la
-    # clase): validate() lo marca como "falta el campo obligatorio". Como
-    # todos los campos de un dataclass de widget son claves permitidas por
+    # EVERY field of the dataclass is serialised, not only the ones differing from
+    # the default. Omitting a field when its value matches the default breaks the
+    # round trip as soon as that field is required (e.g. "color" on a TextWidget
+    # whose final colour is the same #FFFFFF the class starts with): validate()
+    # flags it as a missing required field. Since every field of a widget dataclass
+    # is a key allowed by
     # schema.py (allowed_keys = cls.__dataclass_fields__), emitirlos todos
-    # nunca puede disparar el error de "clave desconocida".
+    # it can never trigger the "unknown key" error.
     #
-    # La unica excepcion son los campos que default a None, que es como el
-    # modelo dice "esto no esta puesto": un rect con fill y sin stroke
-    # emitia "stroke": null, y null no es un #RRGGBB, asi que save() escribia
-    # un archivo que load() rechazaba -- el editor de fase 3 guarda por aca.
-    # Se omiten en vez de aflojar la validacion: un null escrito a mano sigue
-    # siendo un error, porque en un campo con default no-None (bar.fill,
-    # text.color) significaria "no dibujes nada" sin decirlo.
+    # The one exception is fields defaulting to None, which is how the model says
+    # "this is not set": a rect with fill and no stroke emitted "stroke": null, and
+    # null is not a #RRGGBB, so save() wrote a file load() rejected -- and the
+    # editor saves through here. They are omitted rather than loosening the
+    # validation: a hand-written null is still an error, because on a field with a
+    # non-None default (bar.fill, text.color) it would mean "draw nothing" without
+    # saying so.
     d = {k: v for k, v in asdict(w).items()
          if not (v is None and _defaults_to_none(type(w), k))}
     if "rules" in d:
@@ -110,15 +110,14 @@ def _defaults_to_none(cls, field_name) -> bool:
 
 
 def _format_rule_value(value: float) -> str:
-    """Representa un umbral de regla en punto fijo, nunca en notacion cientifica.
+    """Renders a rule threshold in fixed point, never in scientific notation.
 
-    repr(value) es la representacion mas corta que hace roundtrip exacto por
-    float(), pero para magnitudes muy grandes o muy chicas cae en notacion
-    cientifica (p.ej. "1e+16"), que schema._RULE_RE no reconoce (":g" es
-    todavia peor: cae en cientifica ya desde 1e6 y redondea a 6 cifras
-    significativas, perdiendo precision). Decimal reubica el punto sin
-    agregar ni perder digitos, asi que el resultado sigue siendo el mismo
-    valor exacto que repr(value) ya garantizaba.
+    repr(value) is the shortest representation that round-trips exactly through
+    float(), but for very large or very small magnitudes it falls into scientific
+    notation (e.g. "1e+16"), which schema._RULE_RE does not recognise (":g" is
+    worse still: it goes scientific from 1e6 and rounds to 6 significant figures,
+    losing precision). Decimal moves the point without adding or dropping digits,
+    so the result is still the same exact value repr(value) already guaranteed.
     """
     s = repr(value)
     if "e" in s or "E" in s:
@@ -136,22 +135,21 @@ def save(layout: Layout, path):
 
 
 def save_raw(raw: dict, path):
-    """Escribe un layout ya en forma de dict, sin pasar por el modelo.
+    """Writes a layout already in dict form, without going through the model.
 
-    Es lo que usa el editor: pasar por `to_dict(build(raw))` reescribe el
-    archivo con el orden y el formato del serializador, y el perfil se edita
-    tambien a mano -- el formato compacto de dos lineas por widget es parte
-    del valor. Guardar el crudo tampoco puede perder nada por el camino.
+    This is what the editor uses: going through `to_dict(build(raw))` rewrites the
+    file in the serialiser's own order and formatting, and the profile is also
+    edited by hand -- the compact two-lines-per-widget layout is part of the value.
+    Saving the raw dict also cannot lose anything along the way.
 
     El caller es responsable de haber validado. Se escribe a un temporal y se
-    reemplaza: atomico, asi que el motor nunca lee un archivo a medio escribir.
+    then replaces: atomic, so the engine never reads a half-written file.
 
-    El temporal lleva el pid y un contador, no un nombre fijo: hay mas de un
-    escritor posible -- la bandeja cambiando el fps y el editor guardando -- y
-    con `<perfil>.tmp` compartido dos escrituras simultaneas se pisan el
-    temporal y una de las dos puede terminar escribiendo un archivo mezclado.
-    Si el reemplazo falla, el temporal se borra en vez de quedar tirado al lado
-    del perfil.
+    The temp file carries the pid and a counter, not a fixed name: there is more
+    than one possible writer -- the tray changing the fps and the editor saving --
+    and with a shared `<profile>.tmp` two simultaneous writes clobber each other
+    and one of them can end up writing a mixed file. If the replace fails, the temp
+    file is deleted rather than left lying beside the profile.
     """
     global _serie_tmp
     _serie_tmp += 1
@@ -169,13 +167,13 @@ def save_raw(raw: dict, path):
 
 
 def dumps_layout(raw) -> str:
-    """JSON con un widget por linea, como esta escrito el perfil a mano.
+    """JSON with one widget per line, the way the profile is written by hand.
 
-    `json.dump(indent=2)` pone cada clave en su propia linea y convierte un
-    perfil de 120 lineas en uno de 535: el archivo se sigue editando a mano y
-    esa diferencia importa. Cada widget y cada alias de fuente se emiten
-    compactos en una linea; el resto va con sangria normal. Sigue siendo JSON
-    valido -- lo unico que cambia es donde caen los saltos de linea.
+    `json.dump(indent=2)` puts every key on its own line and turns a 120-line
+    profile into a 535-line one: the file is still edited by hand and that
+    difference matters. Each widget and each font alias is emitted compactly on one
+    line; everything else gets normal indentation. It is still valid JSON -- the
+    only thing that changes is where the line breaks fall.
     """
     def compacto(obj):
         return json.dumps(obj, ensure_ascii=False, separators=(", ", ": "))
@@ -206,7 +204,7 @@ def dumps_layout(raw) -> str:
 
 
 class ProfileStore:
-    """Mantiene el layout activo y lo recarga cuando el archivo cambia."""
+    """Holds the active layout and reloads it when the file changes."""
 
     def __init__(self, path):
         self.path = path
@@ -224,18 +222,17 @@ class ProfileStore:
         return self.errors
 
     def _fingerprint(self):
-        """Huella del contenido del archivo, no su mtime.
+        """A fingerprint of the file's contents, not its mtime.
 
-        El criterio original era `st_mtime_ns`, y dos escrituras que caen en
-        el mismo tick del filesystem lo dejan igual: la segunda se perdia
-        entera. Con el editor de fase 3 guardando de a dos veces seguidas eso
-        deja al panel mostrando la version intermedia sin ninguna forma de
-        recuperarse hasta la edicion siguiente.
+        The original rule was `st_mtime_ns`, and two writes landing in the same
+        filesystem tick leave it unchanged: the second was lost entirely. With the
+        editor saving twice in a row, that leaves the panel showing the
+        intermediate version with no way to recover until the next edit.
 
-        Cuesta una lectura del perfil por vuelta de polling en vez de un
-        stat. Son unos pocos KB a 1-10 fps; el stat tambien era I/O, y la
-        alternativa (mtime + tamano) sigue perdiendo el caso mas comun de
-        edicion a mano, que es cambiar un color por otro del mismo largo.
+        It costs one read of the profile per polling round instead of a stat. That
+        is a few KB at 1-10 fps; the stat was I/O too, and the alternative (mtime +
+        size) still misses the commonest hand-editing case, which is changing one
+        colour for another of the same length.
         """
         try:
             with open(self.path, "rb") as f:
