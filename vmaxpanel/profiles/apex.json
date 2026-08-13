@@ -2,7 +2,7 @@
   "version": 1,
   "name": "Apex",
   "designed_for": {"width": 320, "height": 1480},
-  "panel": {"rotate": 180, "brightness": 100, "fps": 30, "jpeg_quality": 88},
+  "panel": {"rotate": 180, "brightness": 100, "fps": 1, "jpeg_quality": 88},
   "fonts": {
     "hero": {"family": "Bahnschrift", "size": 66, "fallbacks": ["Segoe UI", "Tahoma", "Arial"]},
     "big": {"family": "Bahnschrift", "size": 46, "fallbacks": ["Segoe UI", "Tahoma", "Arial"]},
