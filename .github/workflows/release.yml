@@ -1,0 +1,60 @@
+# Publishes a GitHub release when a version tag is pushed.
+#
+#     git tag -a v1.0.0 -m "..."
+#     git push origin v1.0.0
+#
+# ci.yml only runs on pushes to main and on pull requests, so a tag would
+# otherwise be released without anything having been run against it. The suite
+# runs here first and a failure stops the release.
+#
+# The release notes come from docs/releases/<tag>.md when that file exists, and
+# are generated from the commit log when it does not.
+#
+# gh is preinstalled on GitHub runners and GITHUB_TOKEN is issued per run, so
+# publishing needs no third-party action and no stored secret.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # gh needs the history to generate notes
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run the test suite
+        run: python -m pytest -q
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $notas = "docs/releases/$tag.md"
+          if (Test-Path $notas) {
+            Write-Host "Release notes from $notas"
+            gh release create $tag --title $tag --notes-file $notas
+          } else {
+            Write-Host "$notas not found; generating notes from the commit log"
+            gh release create $tag --title $tag --generate-notes
+          }
