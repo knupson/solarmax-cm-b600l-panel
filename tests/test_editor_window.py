@@ -773,3 +773,149 @@ def test_the_initial_size_fits_a_small_screen(ventana):
     pedido = ventana._geometria_inicial(1366, 768)
     ancho, alto = (int(v) for v in pedido.split("+")[0].split("x"))
     assert ancho <= 1366 and alto <= 768
+
+
+# --- zoom, selection box and grid on the preview ---
+
+
+def ajustada(ventana):
+    """The window sized so the preview has real geometry, fitted, zoom cleared."""
+    ventana.root.geometry("1200x900")
+    ventana._zoom = None
+    ventana._draw_preview()
+    ventana.root.update()
+    return ventana
+
+
+def test_control_and_the_wheel_zoom_the_preview(ventana):
+    ajustada(ventana)
+    antes = ventana._escala
+    ventana.canvas.event_generate("<Control-MouseWheel>", x=60, y=200, delta=120)
+    ventana.root.update()
+    assert ventana._escala > antes
+    ventana.canvas.event_generate("<Control-MouseWheel>", x=60, y=200, delta=-120)
+    ventana.canvas.event_generate("<Control-MouseWheel>", x=60, y=200, delta=-120)
+    ventana.root.update()
+    assert ventana._escala < antes
+
+
+def test_the_wheel_on_its_own_scrolls_and_does_not_zoom(ventana):
+    """The panel is 1480 px tall, so scrolling is what the wheel is for here.
+    Zoom is the modified gesture, as in every other editor."""
+    ajustada(ventana)
+    ventana._zoom_a(2.0)               # tall enough that there is somewhere to go
+    ventana.root.update()
+    escala = ventana._escala
+    arriba = ventana.canvas.yview()[0]
+    ventana.canvas.event_generate("<MouseWheel>", x=60, y=200, delta=-120)
+    ventana.root.update()
+    assert ventana._escala == escala
+    assert ventana.canvas.yview()[0] > arriba
+
+
+def test_the_zoom_survives_a_redraw(ventana):
+    """The regression this feature is built on: _draw_preview() used to recompute
+    the scale from the container on EVERY call, and it is the common path of every
+    edit. A zoom would have been wiped by the next keystroke."""
+    ajustada(ventana)
+    ventana._zoom_a(2.0)
+    ventana.root.update()
+    ventana.state.set_field("cpu-load", "x", ventana.state.widget("cpu-load")["x"] + 4)
+    ventana._draw_preview()
+    ventana.root.update()
+    assert ventana._escala == pytest.approx(2.0)
+
+
+def test_control_zero_goes_back_to_fitting(ventana):
+    ajustada(ventana)
+    cabe = ventana._escala
+    ventana._zoom_a(3.0)
+    ventana.root.update()
+    ventana._ajustar_zoom()
+    ventana.root.update()
+    assert ventana._zoom is None
+    assert ventana._escala == pytest.approx(cabe)
+
+
+def test_the_selected_widget_is_outlined_on_the_preview(ventana):
+    """Without it there is no way to tell which of 47 widgets the properties panel
+    is describing, which is the whole reason the preview is there."""
+    ajustada(ventana)
+    seleccionar(ventana, "cpu-bar")
+    ventana.root.update()
+    marcas = ventana.canvas.find_withtag("seleccion")
+    assert marcas, "the selected widget is not outlined"
+    caja = ventana.state.widget_bbox("cpu-bar")
+    x0, y0, x1, y1 = ventana.canvas.coords(marcas[0])
+    k = ventana._escala
+    ox, oy = ventana._offset_preview()      # a narrow frame is centred in its slot
+    assert x0 == pytest.approx(caja[0] * k + ox, abs=2)
+    assert y0 == pytest.approx(caja[1] * k + oy, abs=2)
+    assert x1 == pytest.approx(caja[2] * k + ox, abs=2)
+
+
+def test_the_outline_follows_the_selection(ventana):
+    ajustada(ventana)
+    seleccionar(ventana, "cpu-load")
+    ventana.root.update()
+    primera = ventana.canvas.coords(ventana.canvas.find_withtag("seleccion")[0])
+    seleccionar(ventana, "gpu-load")
+    ventana.root.update()
+    segunda = ventana.canvas.coords(ventana.canvas.find_withtag("seleccion")[0])
+    assert primera != segunda
+
+
+def test_the_outline_is_not_part_of_the_rendered_frame(ventana):
+    """It is a canvas item and not pixels painted into the image: what --save writes
+    and what the panel receives must be the layout, not the editor's furniture."""
+    ajustada(ventana)
+    seleccionar(ventana, "cpu-bar")
+    ventana._grilla.set(True)
+    ventana._draw_preview()
+    ventana.root.update()
+    for tag in ("seleccion", "grilla"):
+        items = ventana.canvas.find_withtag(tag)
+        assert items, tag
+        # Canvas items, drawn over the frame. If these were painted into the image
+        # instead, the editor's own furniture would reach the panel.
+        assert ventana.canvas.type(items[0]) in ("rectangle", "line")
+    assert ventana.canvas.type(ventana.canvas.find_withtag("frame")[0]) == "image"
+    ventana._grilla.set(False)
+
+
+def test_the_grid_turns_on_and_off(ventana):
+    ajustada(ventana)
+    assert not ventana.canvas.find_withtag("grilla"), "the grid starts off"
+    ventana._grilla.set(True)
+    ventana._draw_preview()
+    ventana.root.update()
+    assert len(ventana.canvas.find_withtag("grilla")) > 10
+    ventana._grilla.set(False)
+    ventana._draw_preview()
+    ventana.root.update()
+    assert not ventana.canvas.find_withtag("grilla")
+
+
+def test_the_grid_is_not_written_into_the_profile(ventana):
+    """A view preference, not layout data. The profile gets shared and exported."""
+    ajustada(ventana)
+    ventana._grilla.set(True)
+    ventana._draw_preview()
+    ventana.root.update()
+    assert "grid" not in json.dumps(ventana.state.raw)
+    assert ventana.state.dirty is False
+
+
+def test_clicking_while_scrolled_selects_the_right_widget(ventana):
+    """The bug this whole change makes possible: with the preview scrolled, a click
+    at the same screen position is a DIFFERENT panel point. Miss the offset and
+    every click grabs the widget next door."""
+    ajustada(ventana)
+    ventana._zoom_a(1.5)
+    ventana.canvas.yview_moveto(0.3)
+    ventana.root.update()
+    w = ventana.state.widget("gpu-load")
+    px, py = ventana._a_pantalla(w["x"] + 5, w["y"] + 20)
+    ventana.canvas.event_generate("<Button-1>", x=px, y=py)
+    ventana.root.update()
+    assert ventana._selected() == "gpu-load"

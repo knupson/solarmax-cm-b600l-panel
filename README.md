@@ -178,6 +178,20 @@ The editor saves atomically and the engine picks the change up live. There is no
 the two processes: **the file is the protocol**. The editor never saves an invalid layout,
 because the engine would reject it and the user would have "saved" something the panel ignores.
 
+The preview is a real working surface, not a thumbnail. Click a widget to select it, drag it
+to move it, and:
+
+| Gesture | What it does |
+|---|---|
+| Wheel / Shift+wheel | Scrolls. The panel is 1480 px tall, so this is the one used most |
+| **Ctrl+wheel** | Zooms, keeping the point under the cursor still. 5% to 400% |
+| **Ctrl+0** | Back to fitting the window |
+| **Grid** checkbox | A 20/100 px grid over the frame. Off by default |
+
+The grid and the outline around the selected widget are drawn **over** the frame and never
+into it, so what `--save` writes and what the panel receives stay the layout alone. Neither is
+written to the profile: they are view preferences, and the profile gets shared.
+
 The design notes are in `docs/superpowers/specs/2026-08-12-vmax-panel-fase3-design.md`,
 including **why there is no Windows service**: a service runs in session 0, and from there it
 cannot show a tray icon or a window at all.

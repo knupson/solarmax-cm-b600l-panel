@@ -5,6 +5,8 @@ way the tray does with PanelApp.
 """
 import json
 
+import pytest
+
 from PIL import Image, ImageChops
 
 from vmaxpanel.editor import EditorState, demo_sample
@@ -689,3 +691,68 @@ def test_every_widget_appears_exactly_once(tmp_path):
     st = state_for(tmp_path)
     en_arbol = [wid for _, filas in st.widget_tree() for wid, _ in filas]
     assert sorted(en_arbol) == sorted(st.widget_ids())
+
+
+# --- the preview's zoom and grid ---
+#
+# Pure arithmetic on purpose, the same reason theme.py keeps its palette out of Tk:
+# what goes wrong here is the formula, not the widget, and a formula can be checked
+# without opening a window.
+
+
+def test_the_wheel_zooms_in_and_out():
+    from vmaxpanel import editor
+    assert editor.zoom_step(1.0, hacia_arriba=True) > 1.0
+    assert editor.zoom_step(1.0, hacia_arriba=False) < 1.0
+
+
+def test_the_zoom_stops_at_its_limits():
+    """Without a ceiling a few flicks of the wheel ask Pillow to scale a 320x1480
+    frame to something enormous and the editor stops answering."""
+    from vmaxpanel import editor
+    k = 1.0
+    for _ in range(100):
+        k = editor.zoom_step(k, hacia_arriba=True)
+    assert k == editor.ZOOM_MAX
+    for _ in range(200):
+        k = editor.zoom_step(k, hacia_arriba=False)
+    assert k == editor.ZOOM_MIN
+
+
+def test_zooming_keeps_the_point_under_the_cursor_still():
+    """Zoom that ignores the pointer walks away from whatever you were looking at:
+    you aim at a widget, zoom, and it is off screen.
+
+    A panel point at 200 px, drawn at scale 2 with the pointer 50 px into the
+    viewport, has to sit 400-50 = 350 px from the document's origin.
+    """
+    from vmaxpanel import editor
+    f = editor.vista_tras_zoom(200, 2.0, puntero=50, total=1000)
+    assert f == pytest.approx(0.35)
+
+
+def test_the_view_never_leaves_the_document():
+    """A fraction outside 0..1 is what xview_moveto refuses, and the preview stays
+    frozen at the edge with no error anywhere."""
+    from vmaxpanel import editor
+    assert editor.vista_tras_zoom(0, 1.0, puntero=500, total=1000) == 0.0
+    assert editor.vista_tras_zoom(5000, 1.0, puntero=0, total=1000) == 1.0
+    # No document to scroll: no division by zero either.
+    assert editor.vista_tras_zoom(10, 1.0, puntero=0, total=0) == 0.0
+
+
+def test_the_grid_lines_cover_the_whole_panel():
+    from vmaxpanel import editor
+    verticales, horizontales = editor.lineas_grilla(320, 1480, 20)
+    assert verticales[0] == 0 and horizontales[0] == 0
+    assert verticales[-1] == 320                    # reaches the far edge
+    assert horizontales[-1] == 1480
+    assert verticales[1] - verticales[0] == 20
+
+
+def test_a_grid_with_no_spacing_draws_nothing():
+    """range() with step 0 raises, and it would do it inside a redraw -- where
+    Tkinter swallows the exception and the preview simply stops updating."""
+    from vmaxpanel import editor
+    assert editor.lineas_grilla(320, 1480, 0) == ([], [])
+    assert editor.lineas_grilla(320, 1480, -5) == ([], [])

@@ -496,8 +496,8 @@ class EditorState:
         """The id of the widget under the point, or None.
 
         It walks BACKWARDS because the list order is the paint order: the last one
-        drawn is the one the user sees on top, and therefore the one
-        espera agarrar.
+        drawn is the one the user sees on top, and therefore the one they expect
+        to grab.
         """
         for w in reversed(self.raw.get("widgets") or []):
             caja = self.widget_bbox(w.get("id"))
@@ -883,6 +883,57 @@ def _coerce(key, value):
 
 PREVIEW_SCALE = 0.36     # initial scale, before the window has a size
 
+# Manual zoom. The ceiling is 4x and not the 1.0 that _escala_disponible() uses:
+# that cap exists because *fitting* beyond 1:1 is blurry upscaling nobody asked
+# for, but zooming in is asked for -- it is how you place a widget to the pixel.
+# The floor keeps the whole 1480 px panel visible on any window.
+ZOOM_MIN, ZOOM_MAX = 0.05, 4.0
+ZOOM_PASO = 1.15         # per wheel notch; ~5 notches to double
+
+# Two densities. One alone either does not help you line anything up or turns the
+# preview into graph paper: the fine one measures, the heavy one gives the eye
+# something to count.
+GRILLA_FINA, GRILLA_GRUESA = 20, 100
+
+
+def zoom_step(escala: float, hacia_arriba: bool) -> float:
+    """The scale after one notch of the wheel, clamped.
+
+    Multiplicative and not additive: a fixed +0.1 is imperceptible when zoomed out
+    and a huge jump when zoomed in.
+    """
+    k = escala * (ZOOM_PASO if hacia_arriba else 1 / ZOOM_PASO)
+    return max(ZOOM_MIN, min(ZOOM_MAX, k))
+
+
+def vista_tras_zoom(punto_panel: float, escala: float, puntero: float,
+                    total: float) -> float:
+    """Scroll fraction that leaves `punto_panel` under the pointer after zooming.
+
+    Zoom that ignores the pointer walks away from whatever the user was looking at.
+    The point sits `punto_panel * escala` from the document's origin, and it has to
+    end up `puntero` pixels into the viewport, so the origin goes to the difference.
+
+    Clamped to 0..1 because that is what xview_moveto accepts; outside it the view
+    silently stops moving.
+    """
+    if total <= 0:
+        return 0.0
+    return max(0.0, min(1.0, (punto_panel * escala - puntero) / total))
+
+
+def lineas_grilla(ancho: int, alto: int, paso: int):
+    """(vertical xs, horizontal ys) of the grid, in PANEL coordinates.
+
+    Guarded against a non-positive step: range() raises on 0, and it would do it
+    inside a redraw, where Tkinter swallows the exception and the preview just
+    stops updating with nothing in the log.
+    """
+    if paso <= 0:
+        return [], []
+    return (list(range(0, int(ancho) + 1, paso)),
+            list(range(0, int(alto) + 1, paso)))
+
 
 class EditorWindow:
     def __init__(self, state: EditorState):
@@ -903,6 +954,12 @@ class EditorWindow:
             pass
         self._preview_img = None
         self._escala = PREVIEW_SCALE
+        # None means "fit to the container", which is what the editor does until
+        # somebody turns the wheel. Once set it OUTRANKS the fit, and it has to
+        # survive every redraw -- see _draw_preview().
+        self._zoom = None
+        self._sel_rect = None
+        self._doc = (1, 1)          # scrollregion, for the zoom anchoring
         self._fields = {}
         self._pickers = {}
         self._metric_por_etiqueta = {}
@@ -1060,34 +1117,57 @@ class EditorWindow:
 
         self.der = ttk.Frame(raiz)
         self.der.pack(side="left", fill="both", expand=True)
-        ttk.Label(self.der, text="Preview", style="Hint.TLabel").pack(
-            anchor="w", pady=(0, 4))
-        # A classic tk.Label and not a ttk one, because ttk.Label cannot hold an
-        # image that changes size cleanly. Classic widgets are outside the ttk
-        # theme, so its colours are handed over by hand -- otherwise the preview
-        # sits in a white box on a dark window, which is exactly how the old
-        # Listbox looked.
-        self.canvas = tk.Label(self.der, borderwidth=1, relief="flat",
-                               anchor="n",
-                               background=self.palette["surface"],
-                               highlightthickness=1,
-                               highlightbackground=self.palette["border"])
-        self.canvas.pack(fill="both", expand=True)
-        # The <Configure> is listened for on the CONTAINER, not on the Label:
-        # changing the image changes the Label size and that would fire another
-        # Configure,
-        # o sea un bucle de redibujo.
+        cabecera = ttk.Frame(self.der)
+        cabecera.pack(fill="x", pady=(0, 4))
+        ttk.Label(cabecera, text="Preview", style="Hint.TLabel").pack(side="left")
+        # Off by default. A grid helps place things and gets in the way of judging
+        # how the layout LOOKS, which is the other half of what the preview is for.
+        self._grilla = tk.BooleanVar(value=False)
+        ttk.Checkbutton(cabecera, text="Grid", variable=self._grilla,
+                        command=self._draw_preview).pack(side="right")
+        self._zoom_lbl = ttk.Label(cabecera, text="", style="Hint.TLabel")
+        self._zoom_lbl.pack(side="right", padx=(0, 12))
+
+        # A tk.Canvas and not the tk.Label it used to be: zoomed past the point
+        # where the frame fits, the surplus needs somewhere to go, and the canvas
+        # brings the scroll region with it. It also lets the grid and the selection
+        # outline be canvas ITEMS -- drawn over the frame, never into it, so what
+        # --save writes and what the panel receives stay the layout alone.
+        # Classic widgets are outside the ttk theme, so its colours are handed over
+        # by hand or the preview sits in a white box on a dark window.
+        marco_prev = ttk.Frame(self.der)
+        marco_prev.pack(fill="both", expand=True)
+        self.canvas = tk.Canvas(marco_prev, borderwidth=0,
+                                background=self.palette["surface"],
+                                highlightthickness=1,
+                                highlightbackground=self.palette["border"])
+        vsb = ttk.Scrollbar(marco_prev, orient="vertical", command=self.canvas.yview)
+        hsb = ttk.Scrollbar(marco_prev, orient="horizontal", command=self.canvas.xview)
+        self.canvas.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+        marco_prev.rowconfigure(0, weight=1)
+        marco_prev.columnconfigure(0, weight=1)
+        # The <Configure> is listened for on the CONTAINER, not on the canvas:
+        # changing the image changes what the canvas holds and that would fire
+        # another Configure -- a redraw loop.
         self.der.bind("<Configure>", self._on_resize)
         # Dragging on the preview: it is the natural way to position things, and a
-        # list of 47 names requires remembering what each one
-        # cosa.
+        # list of 47 names means remembering what each one is called.
         self.canvas.bind("<Button-1>", self._on_preview_press)
         self.canvas.bind("<B1-Motion>", self._on_preview_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_preview_release)
+        # Plain wheel scrolls and Ctrl+wheel zooms, as in every other editor. With
+        # 1480 px of panel, scrolling is the gesture used most.
+        self.canvas.bind("<MouseWheel>", self._on_wheel)
+        self.canvas.bind("<Shift-MouseWheel>", self._on_wheel_h)
+        self.canvas.bind("<Control-MouseWheel>", self._on_wheel_zoom)
 
         self.root.report_callback_exception = self._report_error
         self.root.bind("<Control-s>", lambda e: self._save())
         self.root.bind("<Control-z>", lambda e: self._undo())
+        self.root.bind("<Control-Key-0>", self._ajustar_zoom)
         for tecla, (dx, dy) in (("<Left>", (-1, 0)), ("<Right>", (1, 0)),
                                 ("<Up>", (0, -1)), ("<Down>", (0, 1))):
             self.root.bind(tecla, lambda e, a=dx, b=dy: self._nudge(a, b))
@@ -1095,26 +1175,67 @@ class EditorWindow:
     # --- dragging on the preview ---
 
     def _offset_preview(self):
-        """(x, y) of the image's corner inside the Label.
+        """(x, y) of the image's corner inside the canvas's document.
 
-        The Label is anchored north and fills its slot, so the image ends up
-        horizontally centred: without subtracting that margin, the click lands
-        several pixels off and grabs the widget next door.
+        A frame narrower than its slot is centred, which means a click lands
+        several pixels off and grabs the widget next door unless that margin is
+        subtracted. Zoomed in there is no margin: the frame is the wider one.
         """
-        ancho_label = self.canvas.winfo_width()
+        ancho_canvas = self.canvas.winfo_width()
         ancho_img = self._preview_img.width() if self._preview_img else 0
-        return max(0, (ancho_label - ancho_img) // 2), 0
+        return max(0, (ancho_canvas - ancho_img) // 2), 0
 
     def _a_panel(self, px, py):
-        """Label coordinates -> panel coordinates (320x1480)."""
+        """Viewport coordinates -> panel coordinates (320x1480).
+
+        canvasx/canvasy and not the raw event: with the preview scrolled, the same
+        screen position is a DIFFERENT panel point, and every click would grab the
+        widget next door. This is the whole reason the scroll offset exists here.
+        """
         ox, oy = self._offset_preview()
         k = self._escala or 1.0
-        return int(round((px - ox) / k)), int(round((py - oy) / k))
+        dx, dy = self.canvas.canvasx(px), self.canvas.canvasy(py)
+        return int(round((dx - ox) / k)), int(round((dy - oy) / k))
 
     def _a_pantalla(self, x, y):
         ox, oy = self._offset_preview()
         k = self._escala or 1.0
-        return int(round(x * k)) + ox, int(round(y * k)) + oy
+        dx = int(round(x * k)) + ox - int(self.canvas.canvasx(0))
+        dy = int(round(y * k)) + oy - int(self.canvas.canvasy(0))
+        return dx, dy
+
+    # --- zoom ---
+
+    def _on_wheel(self, evento):
+        self.canvas.yview_scroll(-1 if evento.delta > 0 else 1, "units")
+        return "break"
+
+    def _on_wheel_h(self, evento):
+        self.canvas.xview_scroll(-1 if evento.delta > 0 else 1, "units")
+        return "break"
+
+    def _on_wheel_zoom(self, evento):
+        # The panel point under the cursor is read BEFORE the scale changes: it is
+        # the thing the user is looking at, and it has to stay put.
+        x, y = self._a_panel(evento.x, evento.y)
+        self._zoom_a(zoom_step(self._escala, evento.delta > 0),
+                     ancla=(x, y, evento.x, evento.y))
+        return "break"
+
+    def _zoom_a(self, k, ancla=None):
+        self._zoom = max(ZOOM_MIN, min(ZOOM_MAX, k))
+        self._draw_preview()
+        if ancla:
+            x, y, px, py = ancla
+            ancho, alto = self._doc
+            self.canvas.xview_moveto(vista_tras_zoom(x, self._escala, px, ancho))
+            self.canvas.yview_moveto(vista_tras_zoom(y, self._escala, py, alto))
+
+    def _ajustar_zoom(self, _evento=None):
+        """Back to fitting the container. Ctrl+0, as everywhere else."""
+        self._zoom = None
+        self._draw_preview()
+        return "break"
 
     def _on_preview_press(self, evento):
         x, y = self._a_panel(evento.x, evento.y)
@@ -1577,6 +1698,8 @@ class EditorWindow:
         """
         self._show_props()
         self._show_errors()
+        # So the outline on the preview follows the selection.
+        self._draw_preview()
 
     def _report_error(self, exc_type, exc, tb):
         """An exception from a Tkinter callback, made visible instead of lost.
@@ -1635,8 +1758,11 @@ class EditorWindow:
         Capped at 1.0: beyond that is blurry upscaling, and 1480 px of height does
         not fit on a 1080 screen anyway.
         """
-        alto = self.der.winfo_height() - 32          # the "Preview" label and its gap
-        ancho = self.der.winfo_width() - 6           # the Label's border
+        # The header row plus the horizontal scrollbar, and the vertical one plus
+        # the canvas border. Measured allowances rather than the canvas's own size:
+        # asking the canvas would feed its size back into the scale that sets it.
+        alto = self.der.winfo_height() - 52
+        ancho = self.der.winfo_width() - 22
         d = self.state.raw.get("designed_for") or {}
         pw = float(d.get("width") or 320) or 320
         ph = float(d.get("height") or 1480) or 1480
@@ -1651,6 +1777,8 @@ class EditorWindow:
         rescaling a 320x1480 image and converting it to a PhotoImage. The 2%
         threshold cuts the noise without the jump being noticeable.
         """
+        if self._zoom is not None:
+            return              # the user set the scale by hand; resizing is not a vote
         nueva = self._escala_disponible()
         if abs(nueva - self._escala) / max(nueva, self._escala) > 0.02:
             self._escala = nueva
@@ -1663,14 +1791,77 @@ class EditorWindow:
         # it to.
         self._marcar_titulo()
         img = self.state.preview()
-        self._escala = self._escala_disponible()
+        # A manual zoom OUTRANKS the fit. Recomputing it unconditionally here is
+        # what made zooming impossible before: this method runs on every edit, so
+        # the next keystroke wiped whatever the wheel had set.
+        self._escala = (self._escala_disponible() if self._zoom is None
+                        else self._zoom)
         dims = (max(1, int(img.width * self._escala)),
                 max(1, int(img.height * self._escala)))
         chico = img.resize(dims, Image.LANCZOS)
-        # A PhotoImage with no live reference gets collected and the Label goes
+        # A PhotoImage with no live reference gets collected and the preview goes
         # blank: the classic Tkinter-with-images trap.
         self._preview_img = _to_photoimage(chico, self.tk)
-        self.canvas.config(image=self._preview_img)
+        self.canvas.delete("all")
+        ox, oy = self._offset_preview()
+        self.canvas.create_image(ox, oy, anchor="nw", image=self._preview_img,
+                                 tags="frame")
+        self._doc = (ox * 2 + dims[0], dims[1])
+        self.canvas.configure(scrollregion=(0, 0, self._doc[0], self._doc[1]))
+        self._dibujar_grilla(ox, oy)
+        self._dibujar_seleccion(ox, oy)
+        self._zoom_lbl.config(text=f"{self._escala * 100:.0f}%")
+
+    def _dibujar_grilla(self, ox, oy):
+        """The grid, over the frame and never into it.
+
+        The fine step is dropped below 12 px on screen: at the scale the preview
+        opens at it lands 11 px apart, and a solid mesh that close hides the layout
+        it is supposed to help position -- which was visible the moment somebody
+        looked at a capture instead of at the passing tests.
+
+        It is also stippled. Tk canvas lines have no alpha, and a flat `muted` grey
+        over a mostly-black panel is louder than the design underneath; a gray25
+        stipple reads as roughly a quarter of the ink.
+        """
+        if not self._grilla.get():
+            return
+        k = self._escala or 1.0
+        d = self.state.raw.get("designed_for") or {}
+        pw, ph = int(d.get("width") or 320), int(d.get("height") or 1480)
+        pasos = [(GRILLA_GRUESA, self.palette["accent"], "")]
+        if GRILLA_FINA * k >= 12:
+            pasos.insert(0, (GRILLA_FINA, self.palette["muted"], "gray25"))
+        for paso, color, trama in pasos:
+            verticales, horizontales = lineas_grilla(pw, ph, paso)
+            for x in verticales:
+                sx = x * k + ox
+                self.canvas.create_line(sx, oy, sx, ph * k + oy, fill=color,
+                                        stipple=trama, tags="grilla")
+            for y in horizontales:
+                sy = y * k + oy
+                self.canvas.create_line(ox, sy, pw * k + ox, sy, fill=color,
+                                        stipple=trama, tags="grilla")
+
+    def _dibujar_seleccion(self, ox, oy):
+        """Outlines the selected widget.
+
+        Without it there is no telling which of a hundred widgets the properties
+        panel is describing, which is most of what the preview is for. No resize
+        handles: there is no resize gesture, and drawing them would promise one.
+        """
+        self._sel_rect = None
+        wid = self._selected()
+        if not wid:
+            return
+        caja = self.state.widget_bbox(wid)
+        if not caja:
+            return
+        k = self._escala or 1.0
+        self._sel_rect = self.canvas.create_rectangle(
+            caja[0] * k + ox, caja[1] * k + oy,
+            caja[2] * k + ox, caja[3] * k + oy,
+            outline=self.palette["accent"], width=2, tags="seleccion")
 
     def _show_props(self):
         for hijo in self.props.winfo_children():
