@@ -1,16 +1,16 @@
-"""Readings that need MSR access through a ring0 driver.
+"""Last-resort explanation for `cpu.power` and `cpu.fan`.
 
-WinRing0 is blocked on Windows: StartService returns 0xE1
-(ERROR_VIRUS_INFECTED) because the driver is on the vulnerable-driver
-blocklist. No attempt is made to load it.
+It serves nothing. Both metrics come from LibreHardwareMonitor -- package power
+from RAPL through `cpulhm`, fan RPM from the board SuperIO through `mobo` -- and
+this provider sits below them in the priority order, so it only ever speaks on a
+machine where that DLL is absent. Its job is to say WHY the reading is missing
+instead of leaving the editor showing "--" for no stated reason.
 
-The provider exists anyway so the editor can explain WHY a metric is absent,
-instead of showing "--" for no stated reason. On a machine where such a driver
-did load, this is where the reading would be implemented.
-
-Note that CPU package power and fan RPM, which this module was originally
-written for, are now served without any ring0 driver at all: LibreHardwareMonitor
-reads RAPL directly and the fans come off the board SuperIO.
+This module used to claim that WinRing0 was blocked by Windows and that MSR
+access was therefore impossible. Both halves were wrong: the driver was loading
+(under the service name `R0powershell`, which is why looking for "WinRing0" found
+nothing), and the readings work. LibreHardwareMonitor 0.9.5+ uses PawnIO instead
+and needs no blocklisted driver at all.
 """
 from .base import Provider
 
@@ -20,8 +20,8 @@ class MsrProvider(Provider):
 
     def probe(self) -> bool:
         self.unavailable_reason = (
-            "needs MSR access through a ring0 driver (WinRing0), blocked by "
-            "the Windows vulnerable-driver blocklist")
+            "comes from the optional LibreHardwareMonitor DLL, which is not "
+            "installed: see `--diagnose`")
         return False
 
     def metrics(self) -> set[str]:

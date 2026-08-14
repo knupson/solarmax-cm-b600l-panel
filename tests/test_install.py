@@ -15,6 +15,31 @@ from vmaxpanel import install
 from tests.test_schema import MINIMAL
 
 
+@pytest.fixture(autouse=True)
+def _sin_hardware_lento(monkeypatch):
+    """Stubs the two checks that talk to the real machine.
+
+    `--diagnose` enumerates kernel drivers through PowerShell and builds the real
+    sensor registry, which waits on the sidecar. Left alone, that put every test
+    calling diagnosticar() at 6-14 s -- over a minute of CI across the Python
+    matrix, spent re-measuring the runner's hardware rather than this code.
+
+    Tests that are ABOUT those checks call the functions directly with their own
+    stubs, so they are unaffected.
+    """
+    monkeypatch.setattr(install, "_servicios_ring0", lambda: [])
+    from vmaxpanel.providers import setup as _setup
+
+    class _RegistroVacio:
+        def catalog(self):
+            return {}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(_setup, "build_registry", lambda *a, **k: (_RegistroVacio(), None))
+
+
 class FakeRunner:
     """Collects the commands and returns whatever code it is told to."""
 
@@ -376,7 +401,14 @@ def test_the_sensors_check_says_where_to_get_the_dll(perfil, monkeypatch):
                    if c.nombre == "sensors").detalle
     assert "LibreHardwareMonitor" in detalle
     assert "github" in detalle.lower()
-    assert "HidSharp" in detalle, "without HidSharp beside it, LHM.Open() fails"
+    # It used to insist on naming HidSharp: with 0.9.3 the set was exactly two DLLs
+    # and Open() failed without it. 0.9.6 ships 28 plus per-language subfolders, so
+    # naming one is worse than useless -- somebody copies that one and it still
+    # fails. The message now says to copy them all, and names the minimum version,
+    # because 0.9.5 is where WinRing0 gives way to PawnIO.
+    assert "0.9.5" in detalle
+    assert "ALL" in detalle or "all" in detalle
+    assert "PawnIO" in detalle
 
 
 def test_the_sensors_check_lists_what_is_lost_without_it(perfil, monkeypatch):
@@ -594,3 +626,26 @@ def test_the_diagnostic_notices_the_driver_is_loaded_right_now(tmp_path):
 def test_no_sensor_dll_means_no_ring0_question(tmp_path):
     c = install._chequeo_ring0(tmp_path / "no-esta.dll", servicios=lambda: [])
     assert c.ok is True
+
+
+def test_the_diagnostic_reports_the_dll_version(tmp_path, monkeypatch):
+    """Inferring the build from which driver strings are present is indirect: it
+    answers "which driver would this load" but not "what am I running". The version
+    is the fact, and 0.9.5 is the line where WinRing0 gives way to PawnIO.
+    """
+    dll = _dll_falso(tmp_path, b"P\x00a\x00w\x00n\x00I\x00O\x00")
+    monkeypatch.setattr(install, "_version_dll", lambda p: "0.9.6.0")
+    c = install._chequeo_ring0(dll, servicios=lambda: [])
+    assert c.ok is True
+    assert "0.9.6" in c.detalle
+
+
+def test_an_old_dll_is_called_out_by_version_even_without_the_driver_string(tmp_path,
+                                                                           monkeypatch):
+    """A build older than 0.9.5 is worth flagging on its version alone, whatever the
+    string scan finds -- the scan is a heuristic over a binary, the version is not."""
+    dll = _dll_falso(tmp_path, b"nada relevante")
+    monkeypatch.setattr(install, "_version_dll", lambda p: "0.9.3.0")
+    c = install._chequeo_ring0(dll, servicios=lambda: [])
+    assert c.ok is None
+    assert "0.9.3" in c.detalle and "0.9.5" in c.detalle

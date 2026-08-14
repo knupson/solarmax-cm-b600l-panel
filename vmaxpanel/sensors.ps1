@@ -65,28 +65,32 @@ try {
     $comp = New-Object LibreHardwareMonitor.Hardware.Computer
     $comp.IsGpuEnabled = $true
     $comp.IsStorageEnabled = $true
-    # CPU y placa: estaban APAGADOS, y por eso el proyecto tenia documentado que
-    # package power y fan de CPU "no se pueden leer". Se pueden, pero NO gratis.
+    # CPU y placa habilitados: de aca salen package power, las temperaturas por
+    # nucleo, los RPM de los fans y las temperaturas de placa.
     #
-    # Aca decia que 0.9.3.0 lee RAPL "sin cargar ningun driver ring0, verificado
-    # con la lista de servicios abierta, no hay WinRing0". Era FALSO. WinRing0
-    # nombra su servicio segun el proceso ANFITRION: desde este sidecar queda como
-    # `R0powershell`, escrito como `powershell.sys` al lado de powershell.exe.
-    # Buscar un servicio llamado "WinRing0" no devuelve nada y da un visto bueno
-    # falso. IsCpuEnabled es lo que dispara esa carga.
+    # ESTADO ACTUAL: con LibreHardwareMonitor 0.9.5 o mas nuevo esto no carga ningun
+    # driver de la lista de bloqueo. El acceso a MSR y a los puertos LPC va por
+    # PawnIO, cuyos modulos viajan embebidos en el ensamblado; PawnIO tiene que estar
+    # instalado en el sistema. `--diagnose` informa cual usa el DLL que haya puesto.
     #
-    # WinRing0 esta en la lista de drivers vulnerables de Windows: lectura y
-    # escritura arbitraria de kernel para cualquier proceso local. La salida es una
-    # build de LibreHardwareMonitor que use PawnIO. `--diagnose` mira el DLL y dice
-    # cual de los dos usa.
+    # HISTORIA, porque explica dos verificaciones que dieron falsos OK y conviene no
+    # repetirlas. Hasta 0.9.3 esto cargaba WinRing0 -- lista de drivers vulnerables
+    # de Windows, lectura y escritura arbitraria de kernel, certificado vencido en
+    # 2008 -- y el proyecto documentaba lo contrario:
     #
-    # Apagar IsCpuEnabled NO evita la carga, y se probo: con TODOS los subsistemas
-    # deshabilitados, Computer.Open() carga igual el driver. Medido en Windows
-    # PowerShell 5.1 contra este mismo DLL --
-    #     antes: False / tras Open() sin subsistemas: True / tras Close(): False
-    # -- asi que apagarlos solo costaba metricas a cambio de nada. Con un DLL de
-    # esta generacion, usar LibreHardwareMonitor ES cargar WinRing0. La unica
-    # salida real es una build que use PawnIO.
+    #   1. Se verifico buscando un servicio llamado "WinRing0" y no aparecio. Pero
+    #      WinRing0 nombra su servicio segun el proceso ANFITRION: desde este sidecar
+    #      quedaba como `R0powershell`, escrito como `powershell.sys` al lado de
+    #      powershell.exe.
+    #   2. Se intento evitarlo apagando IsCpuEnabled. No sirve: medido en Windows
+    #      PowerShell 5.1 contra el DLL 0.9.3, con TODOS los subsistemas apagados --
+    #      antes False / tras Open() True / tras Close() False. Open() lo cargaba
+    #      igual, asi que apagar subsistemas solo costaba metricas.
+    #
+    # La leccion que queda: mirar un solo lugar y creerle al resultado negativo es el
+    # modo de falla de este proyecto, porque produce evidencia positiva de que todo
+    # esta bien. Comprobar con:
+    #     Get-CimInstance Win32_SystemDriver | Where-Object { $_.Name -match '^R0' }
     #
     # Lo que ese experimento SI da es la mitigacion: Close() lo descarga. El driver
     # quedaba residente para siempre solo porque nunca cerrabamos.
@@ -246,7 +250,15 @@ while ($true) {
                     if ($null -ne $l.'gpu.load' -or $null -ne $l.'gpu.temp') { $lhmOk = $true }
                 }
                 'Storage' {
+                    # Los NVMe llaman a su sensor 'Composite Temperature' y los SATA
+                    # 'Temperature'. Con LibreHardwareMonitor 0.9.3 los dos daban
+                    # 'Temperature'; al pasar a 0.9.6 los dos NVMe de esta maquina
+                    # empezaron a reportar 'Composite Temperature' y sus dos
+                    # lecturas se fueron a null sin que nada avisara -- el panel
+                    # mostraba guiones y `--estado` no decia nada, porque la clave
+                    # se emite igual. Se prueban los dos nombres.
                     $t = Sensor $hw 'Temperature' 'Temperature'
+                    if ($null -eq $t) { $t = Sensor $hw 'Temperature' 'Composite Temperature' }
                     # El indice sale de la POSICION del disco en la enumeracion,
                     # no de cuantos contestaron. Antes se incrementaba solo
                     # cuando habia lectura, asi que un SSD que falla una vuelta

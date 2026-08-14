@@ -112,7 +112,11 @@ def test_msr_provider_is_unavailable_with_a_real_reason():
     m = MsrProvider()
     assert m.id == "msr"
     assert m.probe() is False
-    assert "WinRing0" in m.unavailable_reason
+    # The reason names the DLL, not a kernel driver. It used to say "WinRing0 is
+    # blocked by the Windows blocklist", which was wrong twice over: the driver was
+    # loading (as `R0powershell`), and from LibreHardwareMonitor 0.9.5 on there is no
+    # WinRing0 at all -- MSR access goes through PawnIO.
+    assert "LibreHardwareMonitor" in m.unavailable_reason
     assert m.metrics() == {"cpu.power", "cpu.fan"}
 
 
@@ -124,7 +128,7 @@ def test_registry_over_sidecar_marks_unserved_metrics_unavailable():
     assert sample["cpu.power"] is UNAVAILABLE
     assert sample["cpu.clock"] == 4080
     assert "Gigabyte" in r.unavailable()["cpu.temp"]
-    assert "WinRing0" in r.unavailable()["cpu.power"]
+    assert "LibreHardwareMonitor" in r.unavailable()["cpu.power"]
 
 
 def test_stale_client_reports_not_fresh(monkeypatch):

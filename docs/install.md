@@ -86,15 +86,18 @@ power. They are not in the repo. Download LibreHardwareMonitor from
 [its releases page](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases) and
 copy **both** `LibreHardwareMonitorLib.dll` and `HidSharp.dll` into `vmaxpanel/lib/`.
 
-**Which build you take matters.** LibreHardwareMonitor reads CPU and motherboard sensors
-through a kernel driver, and older builds — 0.9.3 and earlier — use **WinRing0**, which is on
-Microsoft's vulnerable-driver blocklist: it hands arbitrary kernel read/write to any local
-process, and its certificate expired in 2008. Newer builds use **PawnIO**, which is signed and
-runs verified modules. Take a recent release.
+**Take 0.9.5 or newer, and copy every DLL in the release.** Two reasons:
 
-Measured, not assumed: the driver loads on `Computer.Open()` **with every sensor category
-disabled**, so there is no setting that avoids it — only a different build does. Stopping the
-panel unloads it again.
+- **Security.** Builds up to 0.9.3 reach CPU and motherboard sensors through **WinRing0**, on
+  Microsoft's vulnerable-driver blocklist — arbitrary kernel read/write for any local process,
+  certificate expired in 2008. From 0.9.5 that is gone and the access goes through **PawnIO**,
+  which is signed and runs verified modules. Measured on 0.9.3: the driver loads on
+  `Computer.Open()` *with every sensor category disabled*, so no setting avoids it — only a
+  newer build does. PawnIO must be installed on the system
+  (`winget install --id=namazso.PawnIO -e`); its modules travel inside the DLL.
+- **It is no longer two files.** 0.9.3 needed `LibreHardwareMonitorLib.dll` and `HidSharp.dll`.
+  0.9.6 ships 28 DLLs plus per-language subfolders, and a missing one makes `Open()` fail with
+  nothing useful said. Copy the lot.
 
 After copying the DLLs, check what you ended up with:
 

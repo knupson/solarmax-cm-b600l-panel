@@ -34,8 +34,9 @@ edited in a graphical editor with a working preview.
 - **Backgrounds**: solid, gradient, image, procedural, image sequence and video.
 - **Sensors**: CPU, GPU, RAM, disks, network, fans, temperatures and voltages, from WMI, PDH
   and Gigabyte's GSA1 ACPI-WMI interface — none of which needs a kernel driver. The readings
-  that come from the **optional** LibreHardwareMonitor DLL do need one; pick a build that uses
-  PawnIO and `--diagnose` will confirm it. See [Security](SECURITY.md).
+  that come from the **optional** LibreHardwareMonitor DLL do need one; take 0.9.5 or newer,
+  which uses PawnIO rather than a blocklisted driver, and `--diagnose` will confirm it. See
+  [Security](SECURITY.md).
 - **Export and import**: a profile and its assets travel as a single `.vmaxpanel` file.
 - **Autostart**: a scheduled task brings the tray up at every logon.
 - Panel geometry and COM port **autodetected** — nothing about the hardware is hardcoded, so it

@@ -13,8 +13,14 @@ daemon/panel.pid
 
 # DLLs de terceros: se redistribuyen aparte, con su aviso de licencia
 # (LibreHardwareMonitorLib MPL-2.0, HidSharp MIT)
-daemon/*.dll
-vmaxpanel/lib/*.dll
+#
+# El directorio ENTERO y no "*.dll": LibreHardwareMonitor 0.9.6 son 28 DLLs mas
+# ensamblados satelite de idioma en subcarpetas (de/, es/, ja/...), y un patron de
+# un solo nivel no los alcanza. Con la regla vieja, 22 DLLs de terceros entraban en
+# el siguiente `git add -A`. vmaxpanel/lib/ existe solo para binarios de terceros,
+# asi que se ignora completo.
+vmaxpanel/lib/
+daemon/**/*.dll
 
 # Consolas es de Microsoft: no se redistribuye
 daemon/assets/consola.ttf

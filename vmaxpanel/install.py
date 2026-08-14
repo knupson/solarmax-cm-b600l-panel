@@ -92,9 +92,12 @@ COMO_SENSORES = (
     "optional. Without it the panel still works (clock, CPU load, temperature and "
     "VCORE via GSA1, RAM, disks, processes) but there is NO GPU, no per-core "
     "temperature, no package power, no disk temperatures and no fan RPM. To get "
-    "them: download LibreHardwareMonitor from https://github.com/LibreHardwareMonitor/"
-    "LibreHardwareMonitor/releases and copy LibreHardwareMonitorLib.dll AND "
-    "HidSharp.dll (both: without HidSharp beside it, Open() fails) into vmaxpanel/lib/")
+    "them: download LibreHardwareMonitor 0.9.5 or newer from https://github.com/"
+    "LibreHardwareMonitor/LibreHardwareMonitor/releases and copy the DLLs from the "
+    "release into vmaxpanel/lib/. Copy them ALL: 0.9.3 needed two, 0.9.6 ships 28 "
+    "plus per-language subfolders, and a missing one makes Open() fail. 0.9.5+ also "
+    "needs PawnIO on the system (winget install --id=namazso.PawnIO -e); its modules "
+    "travel inside the assembly, so there is nothing else to install")
 
 EN_USO = ("the port is in use: another process already has it (the tray running, "
           "or LCD Control). Close whichever is spare; only one at a time can "
@@ -130,7 +133,7 @@ def _detectar_panel(port=None):
         link.close()
 
 
-def diagnosticar(profile_path, port=None, registro=None) -> list:
+def diagnosticar(profile_path, port=None, registro=None, servicios=None) -> list:
     """Everything the panel needs in order to work, as a list."""
     checks = [
         Chequeo("python", sys.version_info >= (3, 11),
@@ -167,7 +170,7 @@ def diagnosticar(profile_path, port=None, registro=None) -> list:
     except OSError as e:
         checks.append(Chequeo("profile", False, f"could not read {ruta}: {e}"))
 
-    checks.append(_chequeo_ring0())
+    checks.append(_chequeo_ring0(servicios=servicios))
 
     if lay is not None:
         checks.append(_chequeo_metricas(lay, registro))
@@ -213,13 +216,51 @@ def _servicios_ring0():
     return filas
 
 
+# The release where WinRing0 was dropped for PawnIO.
+LHM_MINIMA = (0, 9, 5)
+
+
+def _version_dll(ruta):
+    """The DLL's file version as a string, or None. Windows only."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        ver = ctypes.windll.version
+        n = ver.GetFileVersionInfoSizeW(str(ruta), None)
+        if not n:
+            return None
+        buf = ctypes.create_string_buffer(n)
+        if not ver.GetFileVersionInfoW(str(ruta), 0, n, buf):
+            return None
+        p = ctypes.c_void_p()
+        largo = wintypes.UINT()
+        if not ver.VerQueryValueW(buf, "\\", ctypes.byref(p), ctypes.byref(largo)):
+            return None
+        # VS_FIXEDFILEINFO: dwFileVersionMS/LS are the third and fourth DWORDs.
+        campos = (ctypes.c_uint32 * 4).from_address(p.value)
+        ms, ls = campos[2], campos[3]
+        return f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
+    except Exception:
+        return None
+
+
+def _muy_vieja(version) -> bool:
+    try:
+        partes = tuple(int(x) for x in str(version).split(".")[:3])
+    except (TypeError, ValueError):
+        return False
+    return partes < LHM_MINIMA
+
+
 def _chequeo_ring0(dll=DLL_SENSORES, servicios=None) -> Chequeo:
     """Which kernel driver the supplied sensor DLL would load for MSR access.
 
     Builds up to 0.9.3 use WinRing0, on the Windows vulnerable-driver blocklist:
     arbitrary kernel read/write for any local process that can open it, signed with
-    a certificate that expired in 2008. Newer builds use PawnIO, which is signed
-    and runs verified modules instead.
+    a certificate that expired in 2008. **0.9.5 and newer use PawnIO instead**, and
+    drop WinRing0 entirely -- there is no fallback, so the string is simply absent
+    from the assembly. PawnIO is signed and runs verified modules, which ship
+    embedded in the DLL.
 
     A warning and never a block. Refusing to install unloads nothing, and a check
     with no way forward just teaches people to skip the diagnostic.
@@ -242,8 +283,23 @@ def _chequeo_ring0(dll=DLL_SENSORES, servicios=None) -> Chequeo:
     pawnio = "PawnIO" in texto
     winring = "WinRing0" in texto
 
+    version = _version_dll(dll)
+    etiqueta = f" (LibreHardwareMonitor {version})" if version else ""
+
+    # The version outranks the string scan: scanning a binary answers "which driver
+    # would this load", the version answers "what am I running", and only the second
+    # one is a fact rather than a heuristic.
+    if _muy_vieja(version):
+        aviso = (f"the sensor DLL is LibreHardwareMonitor {version}, older than "
+                 f"0.9.5 -- the release where WinRing0 gives way to PawnIO. WinRing0 "
+                 f"is on the Windows vulnerable-driver blocklist. Upgrade: "
+                 f"https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases")
+        if vivos:
+            aviso += ". " + _COMO_SACAR_RING0.format(vivos="; ".join(vivos))
+        return Chequeo("ring0", None, aviso)
+
     if pawnio and not winring:
-        detalle = "the sensor DLL uses PawnIO (signed, verified modules)"
+        detalle = f"the sensor DLL uses PawnIO (signed, verified modules){etiqueta}"
         if vivos:
             return Chequeo("ring0", None, detalle + ". But a WinRing0 service is "
                            + _COMO_SACAR_RING0.format(vivos="; ".join(vivos)))
@@ -252,8 +308,9 @@ def _chequeo_ring0(dll=DLL_SENSORES, servicios=None) -> Chequeo:
     if winring:
         aviso = ("the sensor DLL loads WinRing0 for MSR access. It is on the Windows "
                  "vulnerable-driver blocklist -- arbitrary kernel read/write for any "
-                 "local process, certificate expired in 2008. Use a "
-                 "LibreHardwareMonitor build that uses PawnIO instead")
+                 "local process, certificate expired in 2008. Upgrade to "
+                 "LibreHardwareMonitor 0.9.5 or newer, which uses PawnIO: "
+                 "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases")
         if vivos:
             aviso += ". " + _COMO_SACAR_RING0.format(vivos="; ".join(vivos))
         return Chequeo("ring0", None, aviso)

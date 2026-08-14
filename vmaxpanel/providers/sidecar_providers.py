@@ -129,12 +129,15 @@ class _DinamicoPorInstancia(_SidecarProvider):
 class CpuLhmProvider(_DinamicoPorInstancia):
     """CPU por LibreHardwareMonitor: package power y por nucleo.
 
-    `cpu.power` was documented in this project as impossible to read, because
-    WinRing0 is on the Windows driver blocklist and without MSR there is no RAPL.
-    That conclusion was wrong for this DLL: LHM 0.9.3.0 reads it without loading
-    any driver -- verified by listing the services with the object open -- and the
-    sidecar had simply never turned `IsCpuEnabled` on.
-    Comprobado ademas contra carga real: 11 W en reposo, 46 W al 43%.
+    `cpu.power` was documented in this project as impossible to read, on the
+    grounds that WinRing0 was blocked and without MSR there is no RAPL. Both halves
+    were wrong: the reading works, and the driver was in fact loading -- under the
+    service name `R0powershell`, which is why looking for a service called
+    "WinRing0" found nothing and reported a false all-clear.
+
+    From LibreHardwareMonitor 0.9.5 on there is no WinRing0 at all: MSR access goes
+    through PawnIO, whose modules ship embedded in the assembly. Checked against
+    real load: 11 W idle, 46 W at 43%.
     """
 
     id = "cpulhm"

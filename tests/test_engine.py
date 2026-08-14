@@ -113,7 +113,7 @@ def test_state_lists_unavailable_metrics_with_reasons(tmp_path):
                  EngineConfig(profile_path=path, max_iterations=1),
                  link_factory=lambda: PanelLink(FakeTransport()), clock=FakeClock())
     eng.run()
-    assert "WinRing0" in eng.state()["unavailable"]["cpu.power"]
+    assert "LibreHardwareMonitor" in eng.state()["unavailable"]["cpu.power"]
 
 
 def test_frame_rate_respects_the_layout_fps(tmp_path):

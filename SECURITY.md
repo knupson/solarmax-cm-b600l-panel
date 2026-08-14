@@ -65,9 +65,16 @@ Two things were measured against this DLL rather than assumed, and both matter:
   no cleanup. The engine now asks the sidecar to close and waits before killing it, so stopping
   the panel takes the driver with it. Exposure lasts while the panel runs, not forever.
 
-**Use a LibreHardwareMonitor build that uses PawnIO instead.** PawnIO is a signed, sandboxed
-driver whose modules are verified, and it replaces WinRing0 for MSR access. `python -m
-vmaxpanel --diagnose` inspects the DLL you supplied and says which of the two it uses.
+**Use LibreHardwareMonitor 0.9.5 or newer.** From that release WinRing0 is gone entirely --
+there is no fallback, and the string is simply absent from the assembly. MSR and LPC access go
+through **PawnIO**, a signed driver that runs verified modules; the modules ship embedded in the
+DLL, so the only extra requirement is PawnIO itself on the system
+(`winget install --id=namazso.PawnIO -e`). `python -m vmaxpanel --diagnose` inspects the DLL you
+supplied and says which of the two it uses.
+
+Verified on 0.9.6: no `WinRing0` string in the assembly, no `R0*` service with the panel
+running, and not one reading lost — per-core temperatures, fan RPM, board temperatures and
+package power all still arrive.
 
 Nothing here is redistributed by this repository, so which build is installed is the user's
 choice -- which is exactly why the diagnostic reports it rather than assuming.

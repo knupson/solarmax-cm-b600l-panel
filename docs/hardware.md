@@ -33,8 +33,9 @@ Only one process can hold the port. The engine reconnects on its own, backing of
 Everything is read-only. **The optional sensor DLL is the exception worth knowing about:**
 LibreHardwareMonitor reads CPU package power and per-core figures through MSRs, and builds up
 to 0.9.3 load **WinRing0** to get there -- a driver on the Windows vulnerable-driver blocklist.
-Use a build that uses PawnIO instead; `python -m vmaxpanel --diagnose` says which one you have
-and whether such a driver is loaded right now. Everything else here needs no kernel driver. Elevation is required for the GSA1 readings
+Use **0.9.5 or newer**, where that is replaced by PawnIO — signed, running verified modules
+that ship inside the DLL. `python -m vmaxpanel --diagnose` says which one you have and whether
+such a driver is loaded right now. Everything else here needs no kernel driver. Elevation is required for the GSA1 readings
 and for NVMe SMART, which is why the autostart task runs elevated.
 
 | Reading | Source |
