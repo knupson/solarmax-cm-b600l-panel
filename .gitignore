@@ -34,3 +34,6 @@ transcript/
 !research/spike_*.py
 
 preview*.png
+
+# Permisos de Claude Code por maquina, no del proyecto
+.claude/settings.local.json
