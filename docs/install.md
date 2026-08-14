@@ -17,10 +17,21 @@ Python dependencies are `Pillow`, `pyserial` and `psutil`. They are installed fo
 
 ## The installer
 
-Download the release, unzip it, then run `install.ps1` from **an administrator PowerShell**
-in the folder it came in:
+Download the release and **unblock the zip before extracting it**: right-click it, Properties,
+tick **Unblock**, OK. Windows marks anything downloaded from the internet, the mark is copied
+to every extracted file, and a marked script is refused as unsigned.
+
+Then right-click **`install.cmd`** and choose **Run as administrator**.
+
+`install.cmd` is a wrapper around `install.ps1`. It exists because a `.ps1` cannot be run by
+double-clicking -- Windows opens it in Notepad -- and because Windows refuses to run scripts
+at all under its default execution policy. The wrapper bypasses that for its own process only
+and changes nothing on the machine.
+
+From a console it is the same thing, and the flags below work on either:
 
 ```powershell
+.\install.cmd                 # or, if scripts are already allowed:
 .\install.ps1
 ```
 

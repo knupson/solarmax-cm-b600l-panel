@@ -44,7 +44,12 @@ jobs:
       - name: Run the test suite
         run: python -m pytest -q
 
+      # Only for a tag. On a manual workflow_dispatch GITHUB_REF_NAME is the
+      # BRANCH, so without this the step would publish a release literally called
+      # "main" and create a tag to match. Dispatch stays available for re-running
+      # the suite against a tag.
       - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh

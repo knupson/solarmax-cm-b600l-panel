@@ -44,7 +44,7 @@ body:
     attributes:
       label: Motherboard and GPU
       description: Sensors depend on these. Both appear in the diagnostic output.
-      placeholder: B760M D3HP + RX 6800 XT
+      placeholder: e.g. B550 AORUS ELITE + RTX 4070
 
   - type: textarea
     id: log

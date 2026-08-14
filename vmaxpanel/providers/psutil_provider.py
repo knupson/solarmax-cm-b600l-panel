@@ -7,14 +7,28 @@ at 100 for any real load above roughly 61%.
 import platform
 import time
 
+import locale
+
 import psutil
 
 from ..metrics import MetricSpec, short_cpu_name, slug, spec_for
 from .base import Provider
 
-DIAS = ["LUN", "MAR", "MIE", "JUE", "VIE", "SAB", "DOM"]
-MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO",
-         "SEP", "OCT", "NOV", "DIC"]
+# The date follows the machine's regional settings. It used to come from
+# hardcoded Spanish tables, so every profile -- including the English ones --
+# showed a Spanish date as the largest text on the panel.
+#
+# The setlocale call is what makes strftime read Windows' settings at all: without
+# it Python stays in the "C" locale and %a/%b are always English. Only LC_TIME is
+# touched, so number formatting elsewhere is unaffected. It is best effort: on a
+# locale the C runtime will not accept, %a/%b fall back to English, which is a
+# worse date but not a broken panel.
+FORMATO_FECHA = "%a %d %b"
+
+try:
+    locale.setlocale(locale.LC_TIME, "")
+except locale.Error:
+    pass
 
 _SERVED = {
     "cpu.name", "cpu.name_short", "cpu.load", "cpu.clock",
@@ -75,9 +89,11 @@ class PsutilProvider(Provider):
         }
 
     def _date(self, t):
+        # Uppercased only on the default: the panel's fonts are used uppercase
+        # throughout. An explicit format is honoured exactly as written.
         if self._date_fmt:
             return time.strftime(self._date_fmt, t)
-        return f"{DIAS[t.tm_wday]} {t.tm_mday} {MESES[t.tm_mon - 1]}"
+        return time.strftime(FORMATO_FECHA, t).upper()
 
     def _net_rate(self):
         c = psutil.net_io_counters()

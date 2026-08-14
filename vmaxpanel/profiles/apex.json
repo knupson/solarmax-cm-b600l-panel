@@ -1424,8 +1424,9 @@
     },
     {
       "id": "mb-sufijo",
-      "type": "label",
-      "text": "B760M D3HP",
+      "type": "text",
+      "metric": "mb.name",
+      "format": "{}",
       "x": 300,
       "y": 1388,
       "font": "micro",

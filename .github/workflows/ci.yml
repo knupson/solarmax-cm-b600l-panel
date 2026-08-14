@@ -20,12 +20,19 @@ on:
 jobs:
   pytest:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The declared floor and the newest. Testing only the newest let syntax
+        # that does not exist on 3.11 through, and 3.11 is what README,
+        # docs/install.md and install.ps1 all promise works.
+        python-version: ['3.11', '3.13']
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Install dependencies

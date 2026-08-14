@@ -23,7 +23,7 @@ class _SidecarProvider(Provider):
         return set(self.served)
 
     def read(self):
-        """Levanta en vez de devolver datos viejos.
+        """Raises instead of returning stale data.
 
         Registry.read() turns the exception into a degraded metric, with the reason
         visible in state()["unavailable"], and serves it again on its own when the
@@ -40,7 +40,7 @@ class _SidecarProvider(Provider):
         """
         if not self._c.fresh:
             raise RuntimeError(f"the sidecar has delivered no data for more "
-                               f"de {STALE_AFTER:.0f} s")
+                               f"than {STALE_AFTER:.0f} s")
         if not self._c.caps().get(self.namespace, False):
             raise RuntimeError(self.reason)
         return self._c.namespace(self.namespace)
@@ -92,7 +92,7 @@ class SmbiosProvider(_SidecarProvider):
 
     id = "smbios"
     namespace = "smbios"
-    served = {"mem.speed"}
+    served = {"mem.speed", "mb.name"}
     reason = "could not read Win32_PhysicalMemory"
 
 

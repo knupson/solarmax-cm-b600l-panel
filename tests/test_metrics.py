@@ -221,3 +221,12 @@ def test_every_metric_spec_is_complete():
         assert isinstance(spec.kind, str) and spec.kind, mid
         if spec.max is not None and spec.min is not None:
             assert spec.max > spec.min, mid
+
+
+def test_the_motherboard_model_is_a_known_metric():
+    """It was a hand-written label in Apex reading the author's own board, which
+    every other machine would have displayed as its own."""
+    from vmaxpanel import metrics
+    from vmaxpanel.metrics import is_metric
+    assert is_metric("mb.name")
+    assert metrics.spec_for("mb.name").kind == "text"

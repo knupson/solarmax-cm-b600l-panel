@@ -174,9 +174,22 @@ def test_smbios_provider_serves_the_memory_speed():
                        "caps": {"gsa1": True, "pdh": True, "lhm": True,
                                 "smbios": True}})
     p = SmbiosProvider(c)
-    assert p.metrics() == {"mem.speed"}
+    assert "mem.speed" in p.metrics()
     assert p.probe() is True
     assert p.read()["mem.speed"] == 5600
+
+
+def test_smbios_provider_serves_the_motherboard_model():
+    """A profile that cannot read the board writes it by hand, and then it is wrong
+    on every other machine. Apex shipped "B760M D3HP" as a label for exactly this
+    reason, so the metric has to exist before the label can go."""
+    c, _ = client_for({**SAMPLE, "smbios": {"mem.speed": 5600,
+                                            "mb.name": "B550 AORUS ELITE"},
+                       "caps": {"gsa1": True, "pdh": True, "lhm": True,
+                                "smbios": True}})
+    p = SmbiosProvider(c)
+    assert "mb.name" in p.metrics()
+    assert p.read()["mb.name"] == "B550 AORUS ELITE"
 
 
 def test_smbios_provider_is_unavailable_without_the_capability():

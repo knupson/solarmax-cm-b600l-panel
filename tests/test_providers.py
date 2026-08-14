@@ -78,3 +78,35 @@ def test_psutil_serves_the_clock_with_seconds():
     assert len(valor) == 8 and valor.count(":") == 2
     hh, mm, ss = valor.split(":")
     assert all(x.isdigit() and len(x) == 2 for x in (hh, mm, ss))
+
+
+def test_the_date_follows_the_machines_locale_and_not_a_hardcoded_table():
+    """The date was built from hardcoded Spanish tables (DIAS/MESES), so every user
+    of every profile -- including the English Apex and Vitals -- saw a Spanish date
+    as the largest text on the panel. The `date_fmt` escape hatch was dead code:
+    both call sites in providers/setup.py construct the provider with no argument.
+
+    strftime under LC_TIME follows Windows' regional settings, so a Spanish machine
+    still reads Spanish and an English one reads English.
+    """
+    import locale
+    import time
+
+    from vmaxpanel.providers import psutil_provider as pp
+
+    assert not hasattr(pp, "DIAS"), "the hardcoded Spanish table is still there"
+    assert not hasattr(pp, "MESES"), "the hardcoded Spanish table is still there"
+
+    p = pp.PsutilProvider()
+    p.probe()
+    t = time.localtime()
+    locale.setlocale(locale.LC_TIME, "")
+    assert p._date(t) == time.strftime("%a %d %b", t).upper()
+
+
+def test_an_explicit_date_format_still_wins():
+    from vmaxpanel.providers.psutil_provider import PsutilProvider
+    import time
+    p = PsutilProvider(date_fmt="%Y-%m-%d")
+    t = time.localtime()
+    assert p._date(t) == time.strftime("%Y-%m-%d", t)

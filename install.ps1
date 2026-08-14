@@ -83,8 +83,11 @@ foreach ($candidato in @(
             "-c", "import sys; print('%d.%d' % sys.version_info[:2])")) 2>$null
     } catch { continue }
     if ($LASTEXITCODE -ne 0 -or -not $v) { continue }
-    $partes = "$v".Trim().Split(".")
-    if ([int]$partes[0] -eq 3 -and [int]$partes[1] -ge 11) {
+    # Matched before casting: a `python` on PATH that prints something else and
+    # exits 0 -- a shim, a wrapper -- used to kill the script at step 1 with a raw
+    # .NET "Cannot convert value ... to type System.Int32".
+    if ("$v".Trim() -notmatch '^(\d+)\.(\d+)') { continue }
+    if ([int]$Matches[1] -eq 3 -and [int]$Matches[2] -ge 11) {
         $pythonExe = $cmd.Source
         $pythonArgs = $candidato.args
         Ok "Python $("$v".Trim()) ($($cmd.Source))"
@@ -119,8 +122,10 @@ if (-not (Test-Path "requirements.txt")) {
 }
 
 Invoke-Py -m pip install --quiet --upgrade pip
-Invoke-Py -m pip install --quiet -r requirements.txt
-if ($LASTEXITCODE -ne 0) { Fatal "pip could not install the dependencies (see the output above)." }
+Invoke-Py -m pip install -r requirements.txt
+if ($LASTEXITCODE -ne 0) {
+    Fatal "pip could not install the dependencies. If the errors above mention a timeout or a name that could not be resolved, check the internet connection."
+}
 Ok "psutil, pyserial and pillow are in place"
 
 # --- diagnostic --------------------------------------------------------------
@@ -183,7 +188,7 @@ if (-not $esAdmin) {
     Write-Host "  The panel reads temperatures and disk health, and those need elevation."
     Write-Host ""
     Write-Host "  Right-click PowerShell, choose 'Run as administrator', then:"
-    Write-Host "      cd $PSScriptRoot" -ForegroundColor White
+    Write-Host "      cd `"$PSScriptRoot`"" -ForegroundColor White
     Write-Host "      .\install.ps1" -ForegroundColor White
     Write-Host ""
     exit 1

@@ -370,13 +370,16 @@ def _matar(pid) -> bool:
 def es_mio(linea, yo=None) -> bool:
     """True if that command line is one of the panel's processes.
 
-    It excludes the process doing the asking: `python -m vmaxpanel --stop` matches
-    "-m vmaxpanel" and would kill itself before finishing off the rest.
+    It does NOT try to recognise the caller here. That used to be done by looking
+    for the literal "--parar", which stopped working the moment the English alias
+    shipped: `python -m vmaxpanel --stop` matches "-m vmaxpanel", so the sweep
+    killed its own process at exit 15 -- before printing anything, and before
+    reaching the sidecar, which is the one thing the command exists to get rid of.
+
+    A flag spelling is a proxy for "this is me"; the pid is the fact. parar()
+    skips its own pid instead.
     """
-    baja = linea.lower()
-    if "--parar" in baja:
-        return False
-    return any(m.lower() in baja for m in _MIOS)
+    return any(m.lower() in linea.lower() for m in _MIOS)
 
 
 def parar(runner=None, matar=None, listar=None) -> tuple:
@@ -409,7 +412,10 @@ def parar(runner=None, matar=None, listar=None) -> tuple:
         lineas.append(f"task {TAREA} was not running")
 
     muertos, opacos, tercos = [], [], []
+    yo = os.getpid()
     for pid, linea in listar():
+        if pid == yo:
+            continue                    # never the process running this sweep
         if linea is None:
             # No command line: psutil could not read it. That happens with a
             # higher-integrity process -- the tray runs elevated -- and skipping it

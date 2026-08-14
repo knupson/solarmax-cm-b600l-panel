@@ -1,17 +1,17 @@
-# Dependencias de VMax Panel. Tres, y no crecen: la bandeja es ctypes/Win32 y el
-# editor es Tkinter, los dos de la biblioteca estandar, justo para no sumar nada mas.
+# VMax Panel's dependencies. Three, and they do not grow: the tray is ctypes/Win32
+# and the editor is Tkinter, both standard library, precisely so nothing else is added.
 #
-# Las versiones son minimos verificados, no pines: esto se reparte a otras maquinas y
-# clavar una version exacta obliga a bajar una rueda que quizas no existe para su
-# Python. Probado con Pillow 12.2, pyserial 3.5 y psutil 7.2.
-Pillow>=10.1        # render de los frames. 10.1 es donde load_default(size) aparece
-pyserial>=3.5       # el puerto del panel
-psutil>=5.9         # CPU, RAM, red, discos y el chequeo de procesos de --parar
+# These are verified minimums, not pins. This gets installed on other people's
+# machines, and pinning an exact version forces them to fetch a wheel that may not
+# exist for their Python. Tested with Pillow 12.2, pyserial 3.5 and psutil 7.2.
+Pillow>=10.1        # renders the frames. 10.1 is where load_default(size) appears
+pyserial>=3.5       # the panel's port
+psutil>=5.9         # CPU, RAM, network, disks, and the process check behind --stop
 
-# NO estan aca, a proposito:
-#   - LibreHardwareMonitorLib.dll y HidSharp.dll: son de terceros (MPL-2.0 y MIT) y no
-#     se redistribuyen. Son OPCIONALES -- sin ellas el panel anda, pero sin GPU,
-#     por-nucleo, temperaturas de disco ni RPM. `python -m vmaxpanel --diagnostico`
-#     dice de donde bajarlas.
-#   - ffmpeg: opcional, solo para fondos de video. Tambien lo dice el diagnostico.
-#   - pytest: solo para correr los tests (pip install pytest).
+# Deliberately NOT here:
+#   - LibreHardwareMonitorLib.dll and HidSharp.dll: third-party (MPL-2.0 and MIT) and
+#     not redistributed. They are OPTIONAL -- the panel runs without them, but with no
+#     GPU, per-core, disk temperature or fan RPM readings. `python -m vmaxpanel
+#     --diagnose` says where to download them.
+#   - ffmpeg: optional, only for video backgrounds. The diagnostic covers it too.
+#   - pytest: only needed to run the tests (pip install pytest).

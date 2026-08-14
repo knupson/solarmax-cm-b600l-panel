@@ -406,3 +406,42 @@ def test_the_task_gets_an_absolute_profile_path(tmp_path, monkeypatch):
     ruta = args.split("--profile ", 1)[1].split(" --log")[0]
     assert Path(ruta).is_absolute(), f"quedo relativa: {ruta!r}"
     assert Path(ruta) == (tmp_path / relativo).resolve()
+
+
+def test_stop_does_not_kill_the_process_that_is_running_it():
+    """The sweep matched its own command line and terminated itself mid-run.
+
+    es_mio() excluded the caller by looking for the literal "--parar". The English
+    alias --stop shipped later, so `python -m vmaxpanel --stop` matched "-m
+    vmaxpanel", killed its own pid, and died at exit 15 before printing the report
+    -- and before it got to the sidecar, which is the whole reason the command
+    exists: a surviving sensors.ps1 holds LibreHardwareMonitorLib.dll and blocks
+    the directory.
+
+    A flag string is a proxy for "this is me". The pid is the fact.
+    """
+    import os
+    yo = os.getpid()
+    muertos = []
+    procesos = [(yo, f"python.exe -m vmaxpanel --stop"),
+                (4321, "pythonw.exe -u -m vmaxpanel.tray --profile apex.json")]
+
+    code, lineas = install.parar(
+        runner=lambda cmd: (0, ""),
+        matar=lambda pid: (muertos.append(pid), True)[1],
+        listar=lambda: procesos)
+
+    assert yo not in muertos, "--stop killed the process running it"
+    assert 4321 in muertos, "it must still kill the real panel processes"
+
+
+def test_stop_recognises_its_own_process_by_either_spelling():
+    """Both flag spellings are live aliases, so neither may be the thing that
+    identifies the caller."""
+    import os
+    for grafia in ("--stop", "--parar"):
+        muertos = []
+        install.parar(runner=lambda cmd: (0, ""),
+                      matar=lambda pid: (muertos.append(pid), True)[1],
+                      listar=lambda: [(os.getpid(), f"python.exe -m vmaxpanel {grafia}")])
+        assert os.getpid() not in muertos, grafia

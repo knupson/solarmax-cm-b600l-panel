@@ -32,6 +32,12 @@ $cpuName = (Get-CimInstance Win32_Processor | Select-Object -First 1).Name
 # --- velocidad de la RAM: una sola vez, SMBIOS no cambia mientras Windows corre ---
 # ConfiguredClockSpeed es la velocidad a la que esta corriendo; Speed es la del
 # SPD. Se prefiere la configurada y se cae a la otra si la placa no la reporta.
+# El modelo de la placa: una sola vez, tampoco cambia. Estaba horneado como
+# etiqueta en el perfil Apex, asi que en cualquier otra maquina el panel mostraba
+# con total seguridad una placa que no era la instalada.
+$boardName = (Get-CimInstance Win32_BaseBoard | Select-Object -First 1).Product
+if ($boardName) { $boardName = "$boardName".Trim().ToUpper() } else { $boardName = "" }
+
 $mem = Get-CimInstance Win32_PhysicalMemory | Select-Object -First 1
 $memSpeed = $mem.ConfiguredClockSpeed
 if (-not $memSpeed -or $memSpeed -le 0) { $memSpeed = $mem.Speed }
@@ -88,9 +94,12 @@ while ($true) {
     # vuelta para que el gate de frescura del lado Python lo cubra como al
     # resto -- si el sidecar muere, el valor deja de servirse en vez de quedar
     # congelado en pantalla.
-    if ($memSpeed -gt 0) {
+    if ($memSpeed -gt 0 -or $boardName) {
         $caps.smbios = $true
-        $out.smbios = [ordered]@{ 'mem.speed' = [int]$memSpeed }
+        $sm = [ordered]@{}
+        if ($memSpeed -gt 0) { $sm.'mem.speed' = [int]$memSpeed }
+        if ($boardName)      { $sm.'mb.name'   = $boardName }
+        $out.smbios = $sm
     }
 
     if ($gsa) {

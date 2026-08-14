@@ -56,6 +56,7 @@ METRICS: dict[str, MetricSpec] = {m.id: m for m in [
     _n("cpu.vrm_temp", "VRM temperature", "°C", 0.0, 120.0),
     _n("cpu.power", "CPU power", "W", 0.0, 300.0),
     _n("cpu.fan", "CPU fan", "RPM", 0.0, 3000.0),
+    _t("mb.name", "Motherboard model"),
     _t("gpu.name", "GPU model"),
     _n("gpu.load", "GPU load", "%", 0.0, 100.0),
     _n("gpu.temp", "GPU temperature", "°C", 0.0, 110.0),

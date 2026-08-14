@@ -3,9 +3,11 @@
 Contributions are welcome. This explains how the project is put together, what is expected of
 a change, and what **not** to touch.
 
-> The code comments, the app's messages and the test names are still in Spanish. Translating
-> them is in progress. Until a file has been translated, follow the language of the file you
-> are editing.
+> The project is in English: documentation, command line, tray menu, editor, messages, code
+> comments and test names. Two files still carry Spanish comments -- `vmaxpanel/sensors.ps1`
+> and a handful of lines elsewhere -- and some internal identifiers are Spanish, since renaming
+> those is a refactor rather than a translation. Write new code in English; when editing one of
+> those files, follow the language already in it.
 
 ## Contributor agreement (CLA)
 
@@ -31,7 +33,7 @@ git clone https://github.com/knupson/solarmax-cm-b600l-panel
 cd solarmax-cm-b600l-panel
 pip install -r requirements.txt
 pip install pytest
-python -m pytest                        # 594 tests, about 85 s
+python -m pytest                        # 639 tests, a few minutes
 python -m vmaxpanel --diagnose          # what is missing on this machine
 python -m vmaxpanel --save preview.png  # renders without touching the panel
 ```
