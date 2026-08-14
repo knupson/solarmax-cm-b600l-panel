@@ -178,6 +178,10 @@ The editor saves atomically and the engine picks the change up live. There is no
 the two processes: **the file is the protocol**. The editor never saves an invalid layout,
 because the engine would reject it and the user would have "saved" something the panel ignores.
 
+<p align="center">
+  <img src="docs/img/editor.png" alt="The layout editor, editing the Apex profile" width="820">
+</p>
+
 The preview is a real working surface, not a thumbnail. Click a widget to select it, drag it
 to move it, and:
 
