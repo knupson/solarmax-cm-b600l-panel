@@ -122,7 +122,7 @@ def _detectar_panel(port=None):
         link.close()
 
 
-def diagnosticar(profile_path, port=None) -> list:
+def diagnosticar(profile_path, port=None, registro=None) -> list:
     """Everything the panel needs in order to work, as a list."""
     checks = [
         Chequeo("python", sys.version_info >= (3, 11),
@@ -149,6 +149,7 @@ def diagnosticar(profile_path, port=None) -> list:
                           ffmpeg or f"only for video backgrounds. {video.COMO_INSTALAR}"))
 
     ruta = Path(profile_path)
+    lay = None
     try:
         lay = loader.load(ruta)
         checks.append(Chequeo("profile", True,
@@ -157,6 +158,9 @@ def diagnosticar(profile_path, port=None) -> list:
         checks.append(Chequeo("profile", False, f"{ruta.name}: {'; '.join(e.errors)}"))
     except OSError as e:
         checks.append(Chequeo("profile", False, f"could not read {ruta}: {e}"))
+
+    if lay is not None:
+        checks.append(_chequeo_metricas(lay, registro))
 
     try:
         checks.append(Chequeo("panel", True, _detectar_panel(port)))
@@ -171,6 +175,47 @@ def diagnosticar(profile_path, port=None) -> list:
 
 
 # --- tarea programada ---
+
+
+def _chequeo_metricas(lay, registro=None) -> Chequeo:
+    """Which of the profile's metrics no provider on THIS machine can serve.
+
+    A layout is written against the hardware of whoever wrote it. Apex binds a
+    third of its readings to six cores, three volumes, three SSDs and an Ethernet
+    adapter, so on a smaller machine a third of the panel comes up blank -- and
+    the diagnostic used to report "116 widgets" and call it fine.
+
+    Optional, never blocking: a profile with blanks still runs, and the answer is
+    to choose another profile or edit this one.
+    """
+    from .providers.setup import build_registry
+
+    pedidas = sorted({w.metric for w in lay.widgets if getattr(w, "metric", None)})
+    if not pedidas:
+        return Chequeo("metrics", True, "the profile reads no metrics")
+    try:
+        reg, cliente = (registro or (lambda: build_registry(warmup=10.0)))()
+    except Exception as e:
+        return Chequeo("metrics", None, f"could not be checked: {e}")
+    try:
+        disponibles = set(reg.catalog())
+    finally:
+        for c in (reg, cliente):
+            try:
+                if c is not None:
+                    c.close()
+            except Exception:
+                pass
+
+    faltan = [m for m in pedidas if m not in disponibles]
+    if not faltan:
+        return Chequeo("metrics", True,
+                       f"the {len(pedidas)} metrics of this profile all resolve")
+    muestra = ", ".join(faltan[:8]) + ("..." if len(faltan) > 8 else "")
+    return Chequeo("metrics", None,
+                   f"{len(faltan)} of {len(pedidas)} metrics have no source on this "
+                   f"machine and will show as '--': {muestra}. "
+                   f"Try another profile, or edit this one in the editor")
 
 
 def _pythonw() -> Path:

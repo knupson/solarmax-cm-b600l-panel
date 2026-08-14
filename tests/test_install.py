@@ -481,3 +481,69 @@ def test_a_delete_that_fails_for_a_real_reason_still_reports_failure():
 
     code, lineas = install.desinstalar(runner=runner)
     assert code != 0, lineas
+
+
+def test_the_diagnostic_names_the_metrics_this_machine_cannot_serve(tmp_path):
+    """Apex binds 22 of its 60 metric widgets to this author's hardware: six cores,
+    three volumes, three SSDs, an Ethernet adapter. On a machine with one disk and
+    four cores a third of the panel comes up blank, and nothing said why -- the
+    diagnostic reported "116 widgets" and called it fine.
+
+    Optional and never blocking: a profile with blanks still runs, and the answer
+    is to pick another profile or edit this one, not to refuse to install.
+    """
+    perfil = tmp_path / "p.json"
+    perfil.write_text(json.dumps({
+        "version": 1, "name": "Test",
+        "designed_for": {"width": 320, "height": 1480},
+        "panel": {"rotate": 180, "brightness": 100, "fps": 1,
+                  "jpeg_quality": 82},
+        "background": {"type": "solid", "color": "#000000"},
+        "fonts": {"f": {"family": "Consolas", "size": 12}},
+        "widgets": [
+            {"id": "a", "type": "text", "metric": "cpu.load", "x": 0, "y": 0,
+             "font": "f", "color": "#FFFFFF", "format": "{:.0f}"},
+            {"id": "b", "type": "text", "metric": "vol.Z.used", "x": 0, "y": 20,
+             "font": "f", "color": "#FFFFFF", "format": "{:.0f}"},
+            {"id": "c", "type": "text", "metric": "core.9.temp", "x": 0, "y": 40,
+             "font": "f", "color": "#FFFFFF", "format": "{:.0f}"},
+        ]}), encoding="utf-8")
+
+    class RegistroFalso:
+        def catalog(self):
+            return {"cpu.load": object()}
+        def close(self):
+            pass
+
+    checks = install.diagnosticar(perfil, port="NONE",
+                                  registro=lambda: (RegistroFalso(), None))
+    m = [c for c in checks if c.nombre == "metrics"]
+    assert m, "the diagnostic says nothing about metrics"
+    assert m[0].ok is None, "it must not block the install"
+    assert "vol.Z.used" in m[0].detalle and "core.9.temp" in m[0].detalle
+    assert "cpu.load" not in m[0].detalle
+
+
+def test_the_diagnostic_is_quiet_when_every_metric_resolves(tmp_path):
+    perfil = tmp_path / "p.json"
+    perfil.write_text(json.dumps({
+        "version": 1, "name": "Test",
+        "designed_for": {"width": 320, "height": 1480},
+        "panel": {"rotate": 180, "brightness": 100, "fps": 1,
+                  "jpeg_quality": 82},
+        "background": {"type": "solid", "color": "#000000"},
+        "fonts": {"f": {"family": "Consolas", "size": 12}},
+        "widgets": [{"id": "a", "type": "text", "metric": "cpu.load", "x": 0,
+                     "y": 0, "font": "f", "color": "#FFFFFF", "format": "{:.0f}"}],
+    }), encoding="utf-8")
+
+    class RegistroFalso:
+        def catalog(self):
+            return {"cpu.load": object()}
+        def close(self):
+            pass
+
+    checks = install.diagnosticar(perfil, port="NONE",
+                                  registro=lambda: (RegistroFalso(), None))
+    m = [c for c in checks if c.nombre == "metrics"][0]
+    assert m.ok is True, m.detalle

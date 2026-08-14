@@ -155,6 +155,22 @@ written. `radius` is clamped to half the shorter side.
 A widget names its reading by id. Ids not served on this machine draw dashes and are listed as
 metrics with no data.
 
+**A profile is shaped by the machine it was written on.** Volumes, network adapters, CPU cores
+and disks are per-device: `vol.D.used` exists only where there is a D: drive, `core.6.temp`
+only on a CPU with six cores. Of the four shipped profiles, **Embers reads nothing
+device-specific and Vitals almost nothing**, while **Apex binds 22 of its 60 readings to three
+volumes, three disks, six cores and an Ethernet adapter** — on a smaller machine that part of
+the panel comes up blank.
+
+To see where a profile stands on your machine before installing it:
+
+```powershell
+python -m vmaxpanel --profile <file> --diagnose
+```
+
+The `metrics` line names every id with no source here. It never blocks anything: a profile with
+blanks still runs. Swap the widgets for ids your machine does serve, or start from Embers.
+
 | Id | Reading | Unit |
 |---|---|---|
 | `cpu.name`, `cpu.name_short` | CPU model, full and trimmed | text |
