@@ -55,6 +55,14 @@ class Chequeo:
         return {True: "ok", False: "MISSING", None: "optional"}[self.ok]
 
 
+# Loaded now, so it survives closing the panel: WinRing0 registers its service on
+# open and removes it on close, and a sidecar that is killed never closes.
+_COMO_SACAR_RING0 = (
+    "loaded RIGHT NOW: {vivos}. It survives stopping the panel. From an "
+    "administrator console: sc.exe stop <name> && sc.exe delete <name>, then delete "
+    "the .sys file")
+
+
 def bloquea(checks) -> bool:
     """Something prevents operation. The optional ones (ok None) do not count."""
     return any(c.ok is False for c in checks)
@@ -159,6 +167,8 @@ def diagnosticar(profile_path, port=None, registro=None) -> list:
     except OSError as e:
         checks.append(Chequeo("profile", False, f"could not read {ruta}: {e}"))
 
+    checks.append(_chequeo_ring0())
+
     if lay is not None:
         checks.append(_chequeo_metricas(lay, registro))
 
@@ -175,6 +185,80 @@ def diagnosticar(profile_path, port=None, registro=None) -> list:
 
 
 # --- tarea programada ---
+
+
+def _servicios_ring0():
+    """Loaded drivers whose service name looks like WinRing0's. -> [(name, state, path)].
+
+    WinRing0 names its service after the HOST process rather than after itself: from
+    the PowerShell sidecar it is `R0powershell`, written as `powershell.sys` beside
+    the host executable. Looking for a service called "WinRing0" finds nothing and
+    reports a false all-clear -- which is exactly what this project did for weeks.
+    """
+    ps = ("Get-CimInstance Win32_SystemDriver | "
+          "Where-Object { $_.Name -match '^R0' } | "
+          "ForEach-Object { \"$($_.Name)|$($_.State)|$($_.PathName)\" }")
+    try:
+        p = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive",
+                            "-ExecutionPolicy", "Bypass", "-Command", ps],
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=20, creationflags=0x08000000)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    filas = []
+    for linea in (p.stdout or "").splitlines():
+        partes = linea.strip().split("|")
+        if len(partes) == 3 and partes[0]:
+            filas.append(tuple(partes))
+    return filas
+
+
+def _chequeo_ring0(dll=DLL_SENSORES, servicios=None) -> Chequeo:
+    """Which kernel driver the supplied sensor DLL would load for MSR access.
+
+    Builds up to 0.9.3 use WinRing0, on the Windows vulnerable-driver blocklist:
+    arbitrary kernel read/write for any local process that can open it, signed with
+    a certificate that expired in 2008. Newer builds use PawnIO, which is signed
+    and runs verified modules instead.
+
+    A warning and never a block. Refusing to install unloads nothing, and a check
+    with no way forward just teaches people to skip the diagnostic.
+    """
+    dll = Path(dll)
+    cargados = (servicios or _servicios_ring0)()
+    vivos = [f"{n} ({e}) {ruta}" for n, e, ruta in cargados]
+
+    if not dll.exists():
+        if vivos:
+            return Chequeo("ring0", None, _COMO_SACAR_RING0.format(vivos="; ".join(vivos)))
+        return Chequeo("ring0", True, "no sensor DLL, so no kernel driver is loaded")
+
+    try:
+        crudo = dll.read_bytes()
+    except OSError as e:
+        return Chequeo("ring0", None, f"could not be read: {e}")
+    # UTF-16 and ASCII: .NET string literals are UTF-16 inside the assembly.
+    texto = crudo.decode("utf-16-le", "ignore") + crudo.decode("latin-1", "ignore")
+    pawnio = "PawnIO" in texto
+    winring = "WinRing0" in texto
+
+    if pawnio and not winring:
+        detalle = "the sensor DLL uses PawnIO (signed, verified modules)"
+        if vivos:
+            return Chequeo("ring0", None, detalle + ". But a WinRing0 service is "
+                           + _COMO_SACAR_RING0.format(vivos="; ".join(vivos)))
+        return Chequeo("ring0", True, detalle)
+
+    if winring:
+        aviso = ("the sensor DLL loads WinRing0 for MSR access. It is on the Windows "
+                 "vulnerable-driver blocklist -- arbitrary kernel read/write for any "
+                 "local process, certificate expired in 2008. Use a "
+                 "LibreHardwareMonitor build that uses PawnIO instead")
+        if vivos:
+            aviso += ". " + _COMO_SACAR_RING0.format(vivos="; ".join(vivos))
+        return Chequeo("ring0", None, aviso)
+
+    return Chequeo("ring0", True, "the sensor DLL names no known kernel driver")
 
 
 def _chequeo_metricas(lay, registro=None) -> Chequeo:

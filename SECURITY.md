@@ -27,10 +27,40 @@ that can talk to WMI on an elevated session.
 that introduces a write to GSA1 will not be merged without a precise account of which register
 it targets and why. If you are unsure whether a method writes, treat it as if it does.
 
-The same reasoning is why **WinRing0 is not used**. It is the ring0 driver
-LibreHardwareMonitor loads for MSR access; Windows blocks it as a known-vulnerable driver, and
-this project does not work around that block. Every reading it ships comes from a driverless
-interface.
+### 1b. The optional sensor DLL can load a vulnerable kernel driver
+
+**This section previously claimed the opposite. It was wrong, and the correction matters more
+than the original claim did.**
+
+LibreHardwareMonitor reads CPU package power and per-core figures through **MSRs**, and to
+reach those it loads a kernel driver. In builds up to and including **0.9.3** that driver is
+**WinRing0**, which is on Microsoft's vulnerable-driver blocklist: it exposes arbitrary kernel
+memory read/write to any local process that can open its device, which is the standard
+bring-your-own-vulnerable-driver privilege-escalation primitive. Its signing certificate
+expired in 2008.
+
+Two details make this easy to miss, and they are why this project got it wrong for weeks:
+
+- **The service is named after the host process, not after the driver.** Loaded from
+  `powershell.exe` it registers as `R0powershell` and writes itself as `powershell.sys` beside
+  the host executable. Looking for a service called `WinRing0` finds nothing and reports a
+  false all-clear.
+- **Windows blocking a load attempt is not the same as the driver never loading.** Defender can
+  report blocked attempts while an earlier load is still resident.
+
+To check a machine:
+
+```powershell
+Get-CimInstance Win32_SystemDriver | Where-Object { $_.Name -match '^R0' } |
+    Select-Object Name, State, PathName
+```
+
+**Use a LibreHardwareMonitor build that uses PawnIO instead.** PawnIO is a signed, sandboxed
+driver whose modules are verified, and it replaces WinRing0 for MSR access. `python -m
+vmaxpanel --diagnose` inspects the DLL you supplied and says which of the two it uses.
+
+Nothing here is redistributed by this repository, so which build is installed is the user's
+choice -- which is exactly why the diagnostic reports it rather than assuming.
 
 ### 2. It runs elevated
 

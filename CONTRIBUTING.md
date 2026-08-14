@@ -123,8 +123,13 @@ orphan process behind on every profile save.
   there, you do not.
 - **`daemon/stop.ps1` does not work for the new engine** and is not fixed, for the reason
   above. To bring the panel down: `python -m vmaxpanel --stop`.
-- **WinRing0 and any ring0 driver.** It is on the Windows vulnerable-driver blocklist and it is
-  not going to be enabled. If a metric needs MSR access, it does not get read.
+- **WinRing0.** It is on the Windows vulnerable-driver blocklist -- arbitrary kernel
+  read/write for any local process, signed with a certificate that expired in 2008 -- and no
+  change may add a dependency on it. Note this is not hypothetical: `IsCpuEnabled` on
+  LibreHardwareMonitor 0.9.3 loads it, and the project asserted otherwise for weeks because the
+  service is named after the HOST process (`R0powershell`, `powershell.sys`), so looking for a
+  service called "WinRing0" gave a false all-clear. Use a build that uses PawnIO;
+  `--diagnose` reports which one the installed DLL is.
 - **GSA1 writes.** Gigabyte's WMI interface exposes `PIOWrite`, `MEMWrite` and `PCIWrite`:
   arbitrary writes to I/O ports, physical memory and PCI space. This project uses **read
   methods only** and it stays that way.

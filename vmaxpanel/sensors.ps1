@@ -65,15 +65,36 @@ try {
     $comp = New-Object LibreHardwareMonitor.Hardware.Computer
     $comp.IsGpuEnabled = $true
     $comp.IsStorageEnabled = $true
-    # CPU y placa: estaban APAGADOS, y por eso el proyecto tenia documentado
-    # que package power y fan de CPU "no se pueden leer". Se pueden: esta
-    # version de LibreHardwareMonitor (0.9.3.0) lee RAPL sin cargar ningun
-    # driver ring0 -- verificado con la lista de servicios abierta, no hay
-    # WinRing0 -- y los fans salen del SuperIO ITE IT8689E.
+    # CPU y placa: estaban APAGADOS, y por eso el proyecto tenia documentado que
+    # package power y fan de CPU "no se pueden leer". Se pueden, pero NO gratis.
+    #
+    # Aca decia que 0.9.3.0 lee RAPL "sin cargar ningun driver ring0, verificado
+    # con la lista de servicios abierta, no hay WinRing0". Era FALSO. WinRing0
+    # nombra su servicio segun el proceso ANFITRION: desde este sidecar queda como
+    # `R0powershell`, escrito como `powershell.sys` al lado de powershell.exe.
+    # Buscar un servicio llamado "WinRing0" no devuelve nada y da un visto bueno
+    # falso. IsCpuEnabled es lo que dispara esa carga.
+    #
+    # WinRing0 esta en la lista de drivers vulnerables de Windows: lectura y
+    # escritura arbitraria de kernel para cualquier proceso local. La salida es una
+    # build de LibreHardwareMonitor que use PawnIO. `--diagnose` mira el DLL y dice
+    # cual de los dos usa.
     $comp.IsCpuEnabled = $true
     $comp.IsMotherboardEnabled = $true
     $comp.Open()
 } catch { $comp = $null }
+
+# Cerrar el objeto quita el servicio del driver; no cerrarlo lo deja cargado
+# despues de que el panel se baja. Solo cubre las salidas ordenadas: sidecar.py
+# mata con terminate(), que en Windows no corre nada de esto. Por eso `--diagnose`
+# ademas REPORTA el servicio que haya quedado vivo, en vez de confiar en esto.
+trap {
+    if ($null -ne $comp) { try { $comp.Close() } catch { } }
+    break
+}
+Register-EngineEvent PowerShell.Exiting -Action {
+    if ($null -ne $comp) { try { $comp.Close() } catch { } }
+} | Out-Null
 
 function Gsa-Temp([byte]$id) {
     (Invoke-CimMethod -InputObject $gsa -MethodName ZFCGetCurrentTemp -Arguments @{ id = $id }).value

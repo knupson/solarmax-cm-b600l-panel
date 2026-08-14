@@ -547,3 +547,50 @@ def test_the_diagnostic_is_quiet_when_every_metric_resolves(tmp_path):
                                   registro=lambda: (RegistroFalso(), None))
     m = [c for c in checks if c.nombre == "metrics"][0]
     assert m.ok is True, m.detalle
+
+
+def _dll_falso(tmp_path, marcador: bytes):
+    d = tmp_path / "LibreHardwareMonitorLib.dll"
+    d.write_bytes(b"\x00" * 64 + marcador + b"\x00" * 64)
+    return d
+
+
+def test_the_diagnostic_reports_a_dll_that_would_load_winring0(tmp_path):
+    """LibreHardwareMonitor reaches MSRs through a kernel driver. Up to 0.9.3 that
+    driver is WinRing0, which is on the Windows vulnerable-driver blocklist: it
+    hands arbitrary kernel read/write to any local process that can open it, and
+    its certificate expired in 2008.
+
+    This project asserted for weeks that no ring0 driver was involved. It was
+    wrong, and the check that produced the false all-clear looked for a service
+    called "WinRing0" -- but WinRing0 names its service after the HOST process, so
+    from the PowerShell sidecar it is `R0powershell`, loaded from `powershell.sys`.
+    """
+    dll = _dll_falso(tmp_path, b"W\x00i\x00n\x00R\x00i\x00n\x00g\x000\x00")
+    c = install._chequeo_ring0(dll, servicios=lambda: [])
+    assert c.ok is None, "a warning, not a block: refusing to install unloads nothing"
+    assert "winring0" in c.detalle.lower()
+    assert "pawnio" in c.detalle.lower(), "it has to name the way out"
+
+
+def test_the_diagnostic_is_happy_with_a_pawnio_build(tmp_path):
+    dll = _dll_falso(tmp_path, b"P\x00a\x00w\x00n\x00I\x00O\x00")
+    c = install._chequeo_ring0(dll, servicios=lambda: [])
+    assert c.ok is True, c.detalle
+
+
+def test_the_diagnostic_notices_the_driver_is_loaded_right_now(tmp_path):
+    """A blocked load attempt is not the same as the driver never loading: it can
+    be resident from an earlier one. The service name is the evidence."""
+    dll = _dll_falso(tmp_path, b"P\x00a\x00w\x00n\x00I\x00O\x00")
+    c = install._chequeo_ring0(
+        dll, servicios=lambda: [("R0powershell", "Running",
+                                 r"\??\C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.sys")])
+    assert c.ok is None
+    assert "R0powershell" in c.detalle
+    assert "sc.exe delete" in c.detalle, "it has to say how to get rid of it"
+
+
+def test_no_sensor_dll_means_no_ring0_question(tmp_path):
+    c = install._chequeo_ring0(tmp_path / "no-esta.dll", servicios=lambda: [])
+    assert c.ok is True
