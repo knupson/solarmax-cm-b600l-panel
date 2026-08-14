@@ -919,3 +919,36 @@ def test_clicking_while_scrolled_selects_the_right_widget(ventana):
     ventana.canvas.event_generate("<Button-1>", x=px, y=py)
     ventana.root.update()
     assert ventana._selected() == "gpu-load"
+
+
+def test_the_group_row_ids_carry_no_control_characters():
+    """They started with a NUL byte. A Tcl string is not binary-safe the way a
+    Python one is: the Tk shipped with Python 3.11 truncates at the NUL, so every
+    group row ended up with the SAME empty id and the second insert died with
+    `TclError: Item  already exists` -- taking the whole editor window with it.
+    Python 3.13's newer Tk tolerated it, which is why the suite was green here and
+    red on the minimum version the project promises.
+    """
+    from vmaxpanel.editor import EditorWindow
+    assert EditorWindow.GRUPO, "there has to be a prefix"
+    assert all(c.isprintable() for c in EditorWindow.GRUPO), repr(EditorWindow.GRUPO)
+
+
+def test_a_widget_whose_id_looks_like_a_group_is_still_selectable(ventana):
+    """Selection was decided by startswith() on that prefix, so a widget whose id
+    began with it would have been read as a group row and become unselectable --
+    and its iid would have collided with the group's, making insert() raise. The
+    prefix is a convention; the ids actually inserted as groups are the fact.
+    """
+    from vmaxpanel.editor import EditorWindow
+    impostor = EditorWindow.GRUPO + "impostor"
+    ventana._add("text")
+    nuevo = ventana._selected()
+    # Straight into the state: the properties panel has no id field, and
+    # what is under test is the tree, not how the id got there.
+    for w in ventana.state.raw["widgets"]:
+        if w["id"] == nuevo:
+            w["id"] = impostor
+    ventana._refresh()
+    seleccionar(ventana, impostor)
+    assert ventana._selected() == impostor

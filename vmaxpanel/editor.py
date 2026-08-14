@@ -960,6 +960,7 @@ class EditorWindow:
         self._zoom = None
         self._sel_rect = None
         self._doc = (1, 1)          # scrollregion, for the zoom anchoring
+        self._grupos = set()        # the iids inserted as group rows
         self._fields = {}
         self._pickers = {}
         self._metric_por_etiqueta = {}
@@ -1659,7 +1660,14 @@ class EditorWindow:
     # Prefix for the group nodes' iids. A widget id could collide with a group
     # name, and then selecting a section would edit a widget: the prefix keeps
     # the two namespaces apart, and `_selected()` uses it to tell them apart.
-    GRUPO = "\x00grp:"
+    # PRINTABLE. It used to start with a NUL byte, and a Tcl string is not
+    # binary-safe the way a Python one is: the Tk shipped with Python 3.11
+    # truncates at the NUL, so
+    # every group row got the same empty iid and the second insert died with
+    # "Item  already exists", taking the editor window down with it. Python 3.13's
+    # newer Tk tolerated it, which is why the suite was green here and red on the
+    # minimum version the project promises.
+    GRUPO = "::group::"
 
     def _seleccionar_en_arbol(self, wid):
         """Selects `wid`, opening its group and scrolling to it.
@@ -1683,7 +1691,10 @@ class EditorWindow:
         before. Group nodes carry a prefixed iid and read as no selection.
         """
         sel = self.lista.selection()
-        if not sel or sel[0].startswith(self.GRUPO):
+        # Membership, not startswith(): the prefix is a convention and a widget may
+        # be called anything, so the ids actually inserted as group rows are what
+        # tells the two apart.
+        if not sel or sel[0] in self._grupos:
             return None
         return sel[0]
 
@@ -1724,8 +1735,15 @@ class EditorWindow:
                     if not self.lista.item(g, "open")}
         self.lista.delete(*self.lista.get_children(""))
         ids = self.state.widget_ids()
+        self._grupos = set()
         for grupo, filas in self.state.widget_tree():
             gid = self.GRUPO + grupo
+            # A widget calling itself "::group::CPU" would collide with the iid Tk
+            # keys on and insert() would raise. Suffixing until it is free costs
+            # nothing and cannot fail.
+            while gid in ids or gid in self._grupos:
+                gid += "_"
+            self._grupos.add(gid)
             self.lista.insert("", "end", iid=gid, text=grupo,
                               open=gid not in plegados)
             for wid, etiqueta in filas:
