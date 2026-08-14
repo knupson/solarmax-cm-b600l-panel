@@ -57,6 +57,18 @@ def test_muted_text_is_still_legible(dark):
     assert c >= 3.0, f"muted is {c:.1f}:1 ({'dark' if dark else 'light'})"
 
 
+@pytest.mark.parametrize("dark", [False, True])
+def test_the_primary_button_is_readable(dark):
+    """Save is filled in `accent`, so its label sits on `accent` and not on the
+    window. The obvious choice -- white -- is wrong for the dark palette, whose
+    accent has to be LIGHT to read against a dark window: white on it is 2.6:1.
+    That is why `accent_text` exists as its own role instead of reusing
+    `selection_text`."""
+    p = theme.palette(dark)
+    c = _contrast(p["accent_text"], p["accent"])
+    assert c >= 4.5, f"accent_text is {c:.1f}:1 ({'dark' if dark else 'light'})"
+
+
 def test_the_selection_is_readable_too():
     """A selected row that turns unreadable is worse than no highlight: it hides
     exactly the row the user is working on."""
@@ -86,12 +98,19 @@ def test_an_unreadable_preference_falls_back_to_light():
     assert theme.is_dark(leer=explota) is False
 
 
+@pytest.mark.parametrize("fondo", ["bg", "surface"])
 @pytest.mark.parametrize("dark", [False, True])
 @pytest.mark.parametrize("role", ["ok", "warn", "error"])
-def test_status_colours_are_readable_on_the_window(dark, role):
+def test_status_colours_are_readable_on_the_window(dark, role, fondo):
     """The status bar said "no errors" in a dark green that was hardcoded for a
     light window. On a dark one it was nearly invisible -- and the status bar is
-    where the editor answers "did that work?"."""
+    where the editor answers "did that work?".
+
+    Against `surface` too, and not only the window: the destructive button names
+    itself in `error` while keeping the ordinary button surface, so that pair is
+    on screen as well.
+    """
     p = theme.palette(dark)
-    c = _contrast(p[role], p["bg"])
-    assert c >= 4.5, f"{role} is {c:.1f}:1 ({'dark' if dark else 'light'})"
+    c = _contrast(p[role], p[fondo])
+    assert c >= 4.5, (f"{role} on {fondo} is {c:.1f}:1 "
+                      f"({'dark' if dark else 'light'})")

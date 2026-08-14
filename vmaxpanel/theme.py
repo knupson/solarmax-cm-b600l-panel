@@ -18,8 +18,8 @@ import sys
 
 # Every role a widget can need. Kept explicit so a palette missing one fails a
 # test instead of silently leaving some control painted by whatever ttk had.
-ROLES = ("bg", "surface", "field", "text", "muted", "accent", "border",
-         "selection", "selection_text", "ok", "warn", "error")
+ROLES = ("bg", "surface", "field", "text", "muted", "accent", "accent_text",
+         "border", "selection", "selection_text", "ok", "warn", "error")
 
 _LIGHT = {
     "bg": "#F3F3F3",          # the window
@@ -28,6 +28,10 @@ _LIGHT = {
     "text": "#1A1A1A",
     "muted": "#5C5C5C",       # hints and secondary labels
     "accent": "#0F62C4",      # focus, selection, the active tab
+    # Text ON accent -- the primary button. It is NOT `text`: the dark palette's
+    # accent has to be light enough to read against a dark window, and light text
+    # on a light accent is unreadable. So the pair is declared, and tested.
+    "accent_text": "#FFFFFF",
     "border": "#C8C8C8",
     "selection": "#0F62C4",
     "selection_text": "#FFFFFF",
@@ -46,6 +50,7 @@ _DARK = {
     "text": "#E8E8EA",
     "muted": "#A8ADB6",
     "accent": "#4C9DF5",
+    "accent_text": "#10141A",   # dark ON the light accent, not white: see _LIGHT
     "border": "#3A3D44",
     "selection": "#2F5D96",
     "selection_text": "#FFFFFF",
@@ -142,14 +147,41 @@ def apply(root, ttk, dark=None) -> dict:
                      bordercolor=p["border"], padding=(10, 5), relief="flat")
     estilo.map("TButton",
                background=[("pressed", p["accent"]), ("active", p["field"])],
-               foreground=[("pressed", p["selection_text"])],
+               foreground=[("pressed", p["accent_text"])],
                bordercolor=[("focus", p["accent"])])
 
+    # Three buttons that look the same is three buttons with no hierarchy: Save
+    # and Delete were as loud as "Import…". Primary is filled, destructive is
+    # named in `error` and keeps the normal surface -- a solid red bar in a tool
+    # somebody keeps open all day is shouting, and the point is only that the eye
+    # does not confuse it with the button beside it.
+    estilo.configure("Accent.TButton", background=p["accent"],
+                     foreground=p["accent_text"], bordercolor=p["accent"])
+    estilo.map("Accent.TButton",
+               background=[("pressed", p["selection"]), ("active", p["selection"])],
+               foreground=[("pressed", p["selection_text"]),
+                           ("active", p["selection_text"])],
+               bordercolor=[("focus", p["text"])])
+    estilo.configure("Danger.TButton", foreground=p["error"],
+                     background=p["surface"], bordercolor=p["border"])
+    estilo.map("Danger.TButton",
+               background=[("pressed", p["error"]), ("active", p["field"])],
+               foreground=[("pressed", p["selection_text"]),
+                           ("active", p["error"])],
+               bordercolor=[("active", p["error"]), ("focus", p["error"])])
+
     for clase in ("TEntry", "TCombobox", "TSpinbox"):
+        # `background` matters for the Combobox and the Spinbox: their arrow
+        # button is a separate element that does NOT read fieldbackground, so
+        # without this it is painted in the window colour and every combo in the
+        # editor reads as two controls glued together.
         estilo.configure(clase, fieldbackground=p["field"], foreground=p["text"],
-                         bordercolor=p["border"], arrowcolor=p["text"],
-                         insertcolor=p["text"], padding=4)
+                         background=p["field"], bordercolor=p["border"],
+                         arrowcolor=p["text"], lightcolor=p["border"],
+                         darkcolor=p["border"], insertcolor=p["text"], padding=4)
         estilo.map(clase, bordercolor=[("focus", p["accent"])],
+                   background=[("readonly", p["field"]), ("active", p["field"])],
+                   arrowcolor=[("active", p["accent"])],
                    fieldbackground=[("readonly", p["field"])],
                    foreground=[("readonly", p["text"])])
     # The Combobox's drop-down list is a classic Tk listbox behind the scenes and
@@ -173,10 +205,31 @@ def apply(root, ttk, dark=None) -> dict:
     estilo.map("Treeview",
                background=[("selected", p["selection"])],
                foreground=[("selected", p["selection_text"])])
-    estilo.configure("TCheckbutton", background=p["bg"], foreground=p["text"])
-    estilo.map("TCheckbutton", background=[("active", p["bg"])])
+    # The indicator is NOT covered by `background`: clam hardcodes it to #ffffff,
+    # so on a dark window the seven "bold" boxes on the Fonts tab were the
+    # brightest thing on screen -- a row of white patches, all of them unticked.
+    # The tick itself goes in `accent` so a ticked box reads at a glance.
+    estilo.configure("TCheckbutton", background=p["bg"], foreground=p["text"],
+                     indicatorbackground=p["field"], indicatorforeground=p["accent"],
+                     upperbordercolor=p["border"], lowerbordercolor=p["border"],
+                     padding=2)
+    estilo.map("TCheckbutton", background=[("active", p["bg"])],
+               indicatorbackground=[("disabled", p["bg"]),
+                                    ("pressed", p["border"]),
+                                    ("selected", p["field"])],
+               indicatorforeground=[("selected", p["accent"])],
+               upperbordercolor=[("focus", p["accent"])],
+               lowerbordercolor=[("focus", p["accent"])])
+    estilo.configure("TRadiobutton", background=p["bg"], foreground=p["text"],
+                     indicatorbackground=p["field"], indicatorforeground=p["accent"],
+                     upperbordercolor=p["border"], lowerbordercolor=p["border"])
     estilo.configure("TScrollbar", background=p["surface"], troughcolor=p["bg"],
                      bordercolor=p["border"], arrowcolor=p["muted"])
+    estilo.configure("TSeparator", background=p["border"])
+    # Secondary text. It was being passed inline as foreground=palette["muted"] at
+    # nine call sites; a style means a new hint is muted by default instead of by
+    # somebody remembering.
+    estilo.configure("Hint.TLabel", background=p["bg"], foreground=p["muted"])
 
     if dark:
         _barra_de_titulo_oscura(root)

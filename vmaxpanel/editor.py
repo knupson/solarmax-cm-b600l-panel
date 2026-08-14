@@ -973,7 +973,8 @@ class EditorWindow:
 
         izq = ttk.Frame(tab_widgets)
         izq.pack(side="left", fill="y")
-        ttk.Label(izq, text="Widgets").pack(anchor="w")
+        ttk.Label(izq, text="Widgets", style="Hint.TLabel").pack(anchor="w",
+                                                                 pady=(0, 4))
         # A Treeview and not a Listbox: the groups are real parent nodes that
         # fold, the row keeps the widget id in its iid instead of hiding it in the
         # text, and it is a ttk widget -- so the theme reaches it. A classic
@@ -990,11 +991,17 @@ class EditorWindow:
         self.lista.bind("<<TreeviewSelect>>", lambda e: self._on_select())
 
         botones = ttk.Frame(izq)
-        botones.pack(fill="x", pady=(4, 0))
+        botones.pack(fill="x", pady=(6, 0))
         for tipo in ("text", "label", "bar", "rect"):
+            # padx, or the four butt-join into one long bar and stop reading as
+            # four separate buttons.
             ttk.Button(botones, text=f"+{tipo}", width=6,
-                       command=lambda t=tipo: self._add(t)).pack(side="left")
-        ttk.Button(izq, text="Delete", command=self._remove).pack(fill="x")
+                       command=lambda t=tipo: self._add(t)).pack(side="left",
+                                                                 padx=(0, 3))
+        # Destructive, and one click away from the four that create: it is named in
+        # `error` so the eye does not land on it by accident.
+        ttk.Button(izq, text="Delete", style="Danger.TButton",
+                   command=self._remove).pack(fill="x", pady=(6, 0))
 
         centro = ttk.Frame(tab_widgets, padding=(12, 0))
         centro.pack(side="left", fill="both", expand=True)
@@ -1003,13 +1010,17 @@ class EditorWindow:
 
         flechas = ttk.Frame(centro)
         flechas.pack(fill="x", pady=6)
-        ttk.Label(flechas, text="Move:").pack(side="left")
-        for texto, (dx, dy) in (("←", (-1, 0)), ("→", (1, 0)),
-                                ("↑", (0, -1)), ("↓", (0, 1)),
-                                ("←10", (-10, 0)), ("→10", (10, 0)),
-                                ("↑10", (0, -10)), ("↓10", (0, 10))):
+        ttk.Label(flechas, text="Move", style="Hint.TLabel").pack(side="left",
+                                                                  padx=(0, 8))
+        # A gap after the 1 px group, so "by one" and "by ten" read as two groups
+        # instead of eight identical buttons in a row.
+        for i, (texto, (dx, dy)) in enumerate((("←", (-1, 0)), ("→", (1, 0)),
+                                               ("↑", (0, -1)), ("↓", (0, 1)),
+                                               ("←10", (-10, 0)), ("→10", (10, 0)),
+                                               ("↑10", (0, -10)), ("↓10", (0, 10)))):
             ttk.Button(flechas, text=texto, width=4,
-                       command=lambda a=dx, b=dy: self._move(a, b)).pack(side="left")
+                       command=lambda a=dx, b=dy: self._move(a, b)).pack(
+                           side="left", padx=(12 if i == 4 else 0, 3))
 
         # The action bar and the status bar live in the FOOTER, outside the Notebook.
         # They used to be inside the Widgets tab, and from the Background tab there
@@ -1017,19 +1028,31 @@ class EditorWindow:
         # background, could not find where to apply it, restarted the engine -- which
         # re-reads the file, where the change never arrived -- and the change was
         # lost. Reported verbatim: "there is no apply button and it does not save".
-        self._acciones = ttk.Frame(self._pie, padding=(8, 0, 8, 8))
-        self._acciones.pack(side="bottom", fill="x")
-        ttk.Button(self._acciones, text="Save",
-                   command=self._save).pack(side="left")
-        ttk.Button(self._acciones, text="Discard changes",
-                   command=self._discard).pack(side="left", padx=4)
-        ttk.Button(self._acciones, text="Export…",
-                   command=self._pedir_exportar).pack(side="left")
-        ttk.Button(self._acciones, text="Import…",
-                   command=self._pedir_importar).pack(side="left", padx=4)
+        # Bottom-up, because `side="bottom"` stacks in call order: the status line
+        # is packed FIRST so it ends up at the very bottom edge, under the buttons.
+        # It used to sit above them, jammed against the notebook's border, where it
+        # read as a stray caption of the tab rather than as the window's answer to
+        # "did that work?".
         self.estado = ttk.Label(self._pie, text="", wraplength=900,
-                                justify="left", padding=(8, 0))
+                                justify="left", padding=(10, 6))
         self.estado.pack(side="bottom", fill="x")
+        self._acciones = ttk.Frame(self._pie, padding=(10, 8, 10, 4))
+        self._acciones.pack(side="bottom", fill="x")
+        # A rule between the tabs and the footer: without it the action bar floats
+        # on the same flat colour as the tab it belongs to none of.
+        ttk.Separator(self._pie, orient="horizontal").pack(side="bottom", fill="x")
+
+        # Save is the primary action and is filled; the other three are ordinary.
+        # Equal padx on every button, so the gaps do not depend on which neighbour
+        # happened to declare one.
+        ttk.Button(self._acciones, text="Save", style="Accent.TButton",
+                   command=self._save).pack(side="left", padx=(0, 6))
+        ttk.Button(self._acciones, text="Discard changes",
+                   command=self._discard).pack(side="left", padx=(0, 6))
+        ttk.Button(self._acciones, text="Export…",
+                   command=self._pedir_exportar).pack(side="left", padx=(0, 6))
+        ttk.Button(self._acciones, text="Import…",
+                   command=self._pedir_importar).pack(side="left")
 
         self._build_fondo()
         self._build_fuentes()
@@ -1037,7 +1060,8 @@ class EditorWindow:
 
         self.der = ttk.Frame(raiz)
         self.der.pack(side="left", fill="both", expand=True)
-        ttk.Label(self.der, text="Preview").pack(anchor="w")
+        ttk.Label(self.der, text="Preview", style="Hint.TLabel").pack(
+            anchor="w", pady=(0, 4))
         # A classic tk.Label and not a ttk one, because ttk.Label cannot hold an
         # image that changes size cleanly. Classic widgets are outside the ttk
         # theme, so its colours are handed over by hand -- otherwise the preview
@@ -1121,22 +1145,25 @@ class EditorWindow:
         ttk = self.ttk
         cab = ttk.Frame(self.tab_fondo)
         cab.pack(fill="x")
-        ttk.Label(cab, text="Type").pack(side="left")
+        ttk.Label(cab, text="Type", style="Hint.TLabel").pack(side="left",
+                                                              padx=(0, 8))
         self._bg_type = self.tk.StringVar()
         combo = ttk.Combobox(cab, textvariable=self._bg_type, width=16,
                              state="readonly", values=self.state.background_types())
-        combo.pack(side="left", padx=6)
+        combo.pack(side="left")
         combo.bind("<<ComboboxSelected>>", lambda e: self._on_pick_bg_type())
 
-        self._bg_hint = ttk.Label(self.tab_fondo, text="", wraplength=420,
-                                  justify="left", foreground=self.palette["muted"])
-        self._bg_hint.pack(fill="x", pady=(4, 0))
+        self._bg_hint = ttk.Label(self.tab_fondo, text="", wraplength=560,
+                                  justify="left", style="Hint.TLabel")
+        self._bg_hint.pack(fill="x", pady=(8, 0))
 
         self._bg_campos = ttk.Frame(self.tab_fondo)
-        self._bg_campos.pack(fill="x", pady=6)
+        self._bg_campos.pack(fill="x", pady=(10, 0))
 
+        # `fill="x"` and not `expand=True`: the stops belong under the fields they
+        # belong to, not pinned to the bottom of an empty tab.
         self._bg_stops = ttk.Frame(self.tab_fondo)
-        self._bg_stops.pack(fill="both", expand=True)
+        self._bg_stops.pack(fill="x")
 
         self._bg_fields = {}
         self._stop_rows = []
@@ -1157,7 +1184,8 @@ class EditorWindow:
             hijo.destroy()
         self._bg_fields = {}
         for fila, clave in enumerate(self.state.background_fields(tipo)):
-            ttk.Label(self._bg_campos, text=clave).grid(row=fila, column=0, sticky="w")
+            ttk.Label(self._bg_campos, text=clave, style="Hint.TLabel").grid(
+                row=fila, column=0, sticky="e", padx=(0, 8), pady=3)
             valor = fondo.get(clave, "")
             if clave == "name":
                 control = ttk.Combobox(self._bg_campos, width=14, state="readonly",
@@ -1179,14 +1207,14 @@ class EditorWindow:
                 control.bind("<Return>", lambda e, k=clave: self._apply_bg(k))
                 self._pendiente_al_tipear(var, "bg", clave)
                 self._bg_fields[clave] = var
-            control.grid(row=fila, column=1, sticky="w", padx=4)
+            control.grid(row=fila, column=1, sticky="w", pady=3)
             if clave == "src":
                 # Beside the field, not somewhere else: it is what most people will
                 # use instead of typing a path, and it has to be where the value it
                 # replaces is visible.
                 self._btn_asset = ttk.Button(self._bg_campos, text="Choose…",
                                              width=9, command=self._pedir_asset)
-                self._btn_asset.grid(row=fila, column=2, padx=(2, 0))
+                self._btn_asset.grid(row=fila, column=2, padx=(6, 0), pady=3)
 
         self._show_stops()
         self._bg_hint.config(text=pista_fondo(tipo))
@@ -1302,29 +1330,39 @@ class EditorWindow:
         self._stop_rows = []
         if not self.state.has_stops():
             return
-        ttk.Label(self._bg_stops, text="Gradient stops").grid(
-            row=0, column=0, columnspan=4, sticky="w", pady=(6, 2))
+        ttk.Label(self._bg_stops, text="GRADIENT STOPS", style="Hint.TLabel").grid(
+            row=0, column=0, columnspan=5, sticky="w", pady=(16, 6))
+        # A header, because "0.0" and "#101725" do not say what they are. Column 0
+        # holds the index and is padded so the boxes land on the same left rail as
+        # the fields above -- the two blocks used to start 25 px apart.
+        for col, texto in ((1, "at"), (2, "colour")):
+            ttk.Label(self._bg_stops, text=texto, style="Hint.TLabel").grid(
+                row=1, column=col, sticky="w", padx=(2, 0))
         for i, parada in enumerate(self.state.stops()):
-            fila = i + 1
-            ttk.Label(self._bg_stops, text=f"{i}").grid(row=fila, column=0)
+            fila = i + 2
+            ttk.Label(self._bg_stops, text=f"{i}", style="Hint.TLabel").grid(
+                row=fila, column=0, padx=(0, 8), pady=3)
             at = self.tk.StringVar(value=str(parada.get("at", 0)))
             color = self.tk.StringVar(value=str(parada.get("color", "#000000")))
             e1 = ttk.Entry(self._bg_stops, textvariable=at, width=8)
             e2 = ttk.Entry(self._bg_stops, textvariable=color, width=12)
-            e1.grid(row=fila, column=1, padx=2)
-            e2.grid(row=fila, column=2, padx=2)
+            e1.grid(row=fila, column=1, padx=(0, 4), pady=3)
+            e2.grid(row=fila, column=2, padx=(0, 4), pady=3)
             for control, clave in ((e1, "at"), (e2, "color")):
                 control.bind("<FocusOut>",
                              lambda e, j=i, k=clave: self._apply_stop(j, k))
                 control.bind("<Return>",
                              lambda e, j=i, k=clave: self._apply_stop(j, k))
+            # pady, or the three remove buttons stack edge to edge into one tall
+            # rectangle that reads as a panel rather than as three buttons.
             ttk.Button(self._bg_stops, text="−", width=3,
-                       command=lambda j=i: self._remove_stop(j)).grid(row=fila, column=3)
+                       command=lambda j=i: self._remove_stop(j)).grid(
+                           row=fila, column=3, pady=3)
             self._stop_rows.append({"at": at, "color": color})
         ttk.Button(self._bg_stops, text="+ stop",
-                   command=self._add_stop).grid(row=len(self._stop_rows) + 1,
-                                                column=0, columnspan=3,
-                                                sticky="w", pady=4)
+                   command=self._add_stop).grid(row=len(self._stop_rows) + 2,
+                                                column=1, columnspan=2,
+                                                sticky="w", pady=(6, 0))
 
     def _apply_stop(self, i, clave):
         if not 0 <= i < len(self._stop_rows):
@@ -1358,16 +1396,22 @@ class EditorWindow:
                        "A family that is not installed falls back to the "
                        "default font silently, which is why the combo\nonly "
                        "offers the ones present on this machine.",
-                  justify="left", foreground=self.palette["muted"]).pack(anchor="w",
-                                                             pady=(0, 8))
+                  justify="left", style="Hint.TLabel").pack(anchor="w",
+                                                            pady=(0, 12))
+        # `fill="x"` and not `expand=True`: expanding pinned the "add" row to the
+        # bottom of the tab, 500 px below the list it adds to -- while the Background
+        # tab puts "+ stop" right under its list. Same gesture, two places.
         self._font_grid = ttk.Frame(self.tab_fuentes)
-        self._font_grid.pack(fill="both", expand=True)
+        self._font_grid.pack(fill="x")
         agregar = ttk.Frame(self.tab_fuentes)
-        agregar.pack(fill="x", pady=6)
+        agregar.pack(fill="x", pady=(12, 0))
         self._font_nuevo = self.tk.StringVar()
+        # Labelled: an empty box beside "+ alias" does not say what goes in it.
+        ttk.Label(agregar, text="New alias", style="Hint.TLabel").pack(
+            side="left", padx=(0, 8))
         ttk.Entry(agregar, textvariable=self._font_nuevo, width=16).pack(side="left")
         ttk.Button(agregar, text="+ alias",
-                   command=self._add_font).pack(side="left", padx=4)
+                   command=self._add_font).pack(side="left", padx=(6, 0))
         self._font_rows = {}
         self._familias = None
 
@@ -1379,34 +1423,42 @@ class EditorWindow:
         if self._familias is None:
             # Once only: indexing the system fonts walks directories.
             self._familias = self.state.font_families()
-        for fila, alias in enumerate(self.state.fonts()):
+        # A header row: without it "60" and "14" are unlabelled numbers, and which
+        # column is the size is a guess.
+        for col, texto in ((0, "alias"), (1, "family"), (2, "size"), (4, "used by")):
+            ttk.Label(self._font_grid, text=texto, style="Hint.TLabel").grid(
+                row=0, column=col, sticky="w", padx=(0, 6), pady=(0, 4))
+        for i, alias in enumerate(self.state.fonts()):
+            fila = i + 1
             spec = self.state.raw["fonts"][alias]
-            ttk.Label(self._font_grid, text=alias, width=12).grid(row=fila, column=0,
-                                                                 sticky="w")
+            ttk.Label(self._font_grid, text=alias, width=12).grid(
+                row=fila, column=0, sticky="w", padx=(0, 6), pady=3)
             familia = ttk.Combobox(self._font_grid, width=26, state="readonly",
                                    values=self._familias)
             familia.set(str(spec.get("family", "")))
-            familia.grid(row=fila, column=1, padx=2)
+            familia.grid(row=fila, column=1, padx=(0, 6), pady=3)
             familia.bind("<<ComboboxSelected>>",
                          lambda e, a=alias: self._apply_font(a, "family"))
 
             size = self.tk.StringVar(value=str(spec.get("size", "")))
             entrada = ttk.Entry(self._font_grid, textvariable=size, width=6)
-            entrada.grid(row=fila, column=2, padx=2)
+            entrada.grid(row=fila, column=2, padx=(0, 6), pady=3)
             for evento in ("<FocusOut>", "<Return>"):
                 entrada.bind(evento, lambda e, a=alias: self._apply_font(a, "size"))
 
             bold = self.tk.BooleanVar(value=bool(spec.get("bold")))
             ttk.Checkbutton(self._font_grid, text="bold", variable=bold,
                             command=lambda a=alias: self._apply_font(a, "bold")
-                            ).grid(row=fila, column=3, padx=4)
+                            ).grid(row=fila, column=3, padx=(0, 12), pady=3)
 
             usuarios = len(self.state.font_users(alias))
-            ttk.Label(self._font_grid, text=f"{usuarios} widgets",
-                      foreground=self.palette["muted"]).grid(row=fila, column=4, padx=4)
+            # "1 widgets" was on screen seven rows at a time.
+            ttk.Label(self._font_grid, style="Hint.TLabel",
+                      text=f"{usuarios} widget" + ("" if usuarios == 1 else "s")
+                      ).grid(row=fila, column=4, sticky="w", padx=(0, 12), pady=3)
             ttk.Button(self._font_grid, text="−", width=3,
                        command=lambda a=alias: self._remove_font(a)
-                       ).grid(row=fila, column=5)
+                       ).grid(row=fila, column=5, pady=3)
             self._font_rows[alias] = {"family_combo": familia, "family": familia,
                                       "size": size, "bold": bold}
 
@@ -1448,16 +1500,26 @@ class EditorWindow:
                   text="The panel refreshes at 60 Hz: above that, frames are "
                        "discarded.\nMeasured cost: 1 fps ≈ 1% of one core, "
                        "30 ≈ 17%, 60 ≈ 37%.",
-                  justify="left", foreground=self.palette["muted"]).pack(anchor="w", pady=(0, 8))
+                  justify="left", style="Hint.TLabel").pack(anchor="w", pady=(0, 12))
         campos = ttk.Frame(self.tab_panel)
         campos.pack(fill="x")
+        # The range beside the name. Four bare numbers with no units left the user
+        # to find out from the validator that brightness is not 0-255 and that
+        # rotate is not free.
+        unidades = {"fps": "frames per second, 1-60",
+                    "brightness": "0-100 %", "rotate": "degrees: 0, 90, 180, 270",
+                    "jpeg_quality": "1-100; the panel is fed JPEG"}
         for fila, clave in enumerate(self.state.panel_fields()):
-            ttk.Label(campos, text=clave).grid(row=fila, column=0, sticky="w")
+            ttk.Label(campos, text=clave, style="Hint.TLabel").grid(
+                row=fila, column=0, sticky="e", padx=(0, 8), pady=3)
             var = self.tk.StringVar()
             entrada = ttk.Entry(campos, textvariable=var, width=12)
-            entrada.grid(row=fila, column=1, sticky="w", padx=4)
+            entrada.grid(row=fila, column=1, sticky="w", pady=3)
             entrada.bind("<FocusOut>", lambda e, k=clave: self._apply_panel(k))
             entrada.bind("<Return>", lambda e, k=clave: self._apply_panel(k))
+            ttk.Label(campos, text=unidades.get(clave, ""),
+                      style="Hint.TLabel").grid(row=fila, column=2, sticky="w",
+                                                padx=(10, 0), pady=3)
             self._pendiente_al_tipear(var, "panel", clave)
             self._panel_fields[clave] = var
 
@@ -1573,7 +1635,7 @@ class EditorWindow:
         Capped at 1.0: beyond that is blurry upscaling, and 1480 px of height does
         not fit on a 1080 screen anyway.
         """
-        alto = self.der.winfo_height() - 28          # the "Preview" label
+        alto = self.der.winfo_height() - 32          # the "Preview" label and its gap
         ancho = self.der.winfo_width() - 6           # the Label's border
         d = self.state.raw.get("designed_for") or {}
         pw = float(d.get("width") or 320) or 320
@@ -1622,8 +1684,13 @@ class EditorWindow:
         for fila, (clave, valor) in enumerate(w.items()):
             if clave in ("id", "type", "rules"):
                 continue
-            self.ttk.Label(self.props, text=clave).grid(row=fila, column=0,
-                                                        sticky="w")
+            # Labels right-aligned against their field, and every row given the
+            # same vertical air. Left-aligned in a column as wide as the longest
+            # name, "x" ended up 90 px from its box while "jpeg_quality" touched
+            # its own; and with no pady the entries butt-joined into one slab
+            # instead of reading as separate fields.
+            self.ttk.Label(self.props, text=clave, style="Hint.TLabel").grid(
+                row=fila, column=0, sticky="e", padx=(0, 8), pady=3)
             if clave == "metric":
                 self._metric_picker(fila, valor)
                 continue
@@ -1635,7 +1702,7 @@ class EditorWindow:
             # sticky="w", with no weight on the column: with the window maximised, a
             # field that expands leaves a 1500 px box for typing
             # "18".
-            entrada.grid(row=fila, column=1, sticky="w", padx=4)
+            entrada.grid(row=fila, column=1, sticky="w", pady=3)
             entrada.bind("<FocusOut>", lambda e, k=clave: self._apply(k))
             entrada.bind("<Return>", lambda e, k=clave: self._apply(k))
             self._pendiente_al_tipear(var, "widget", clave)
@@ -1665,28 +1732,29 @@ class EditorWindow:
         marco = ttk.Frame(self.props)
         marco.grid(row=fila_base, column=0, columnspan=3, sticky="w", pady=(10, 0))
         self._rules_frame = marco
-        ttk.Label(marco, text="COLOUR BY VALUE", foreground=self.palette["muted"]).grid(
-            row=0, column=0, columnspan=4, sticky="w")
+        ttk.Label(marco, text="COLOUR BY VALUE", style="Hint.TLabel").grid(
+            row=0, column=0, columnspan=4, sticky="w", pady=(0, 6))
         for i, regla in enumerate(self.state.rules(wid)):
             op = ttk.Combobox(marco, width=4, state="readonly",
                               values=self.state.rule_operators())
             op.set(regla["op"])
-            op.grid(row=i + 1, column=0, padx=(0, 2), pady=1)
+            op.grid(row=i + 1, column=0, padx=(0, 4), pady=3)
             op.bind("<<ComboboxSelected>>", lambda e, j=i: self._apply_rule(j, "op"))
 
             valor = self.tk.StringVar(value=regla["value"])
             color = self.tk.StringVar(value=regla["color"])
             e_valor = ttk.Entry(marco, textvariable=valor, width=8)
             e_color = ttk.Entry(marco, textvariable=color, width=10)
-            e_valor.grid(row=i + 1, column=1, padx=2)
-            e_color.grid(row=i + 1, column=2, padx=2)
+            e_valor.grid(row=i + 1, column=1, padx=(0, 4), pady=3)
+            e_color.grid(row=i + 1, column=2, padx=(0, 4), pady=3)
             for control, campo in ((e_valor, "value"), (e_color, "color")):
                 for evento in ("<FocusOut>", "<Return>"):
                     control.bind(evento,
                                  lambda e, j=i, c=campo: self._apply_rule(j, c))
             ttk.Button(marco, text="−", width=3,
                        command=lambda j=i: self._remove_rule(j)).grid(row=i + 1,
-                                                                     column=3)
+                                                                     column=3,
+                                                                     pady=3)
             self._rule_rows.append({"op": op, "value": valor, "color": color})
         ttk.Button(marco, text="+ rule", command=self._add_rule).grid(
             row=len(self._rule_rows) + 1, column=0, columnspan=3, sticky="w",
@@ -1754,7 +1822,7 @@ class EditorWindow:
         combo.set(actuales[0].strip() if actuales else (actual or ""))
         if actuales:
             combo.set(actuales[0])
-        combo.grid(row=fila, column=1, sticky="w", padx=4)
+        combo.grid(row=fila, column=1, sticky="w", pady=3)
         combo.bind("<<ComboboxSelected>>", lambda e: self._on_pick_metric())
         self._pickers["metric"] = combo
 
@@ -1782,7 +1850,7 @@ class EditorWindow:
         combo = self.ttk.Combobox(self.props, values=self.state.fonts(),
                                   width=20, state="readonly")
         combo.set(actual or "")
-        combo.grid(row=fila, column=1, sticky="w", padx=4)
+        combo.grid(row=fila, column=1, sticky="w", pady=3)
 
         def elegido(_e=None):
             wid = self._selected()
@@ -2005,7 +2073,7 @@ class EditorWindow:
                  if faltan else "")
         self.estado.config(
             text=f"imported as {info['profile'].name}, and opened.{aviso}",
-            foreground=self.palette["warn"] if faltan else "#006000")
+            foreground=self.palette["warn"] if faltan else self.palette["ok"])
 
     def run(self):
         self.root.mainloop()
