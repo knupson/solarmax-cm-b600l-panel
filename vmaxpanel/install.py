@@ -404,7 +404,7 @@ def parar(runner=None, matar=None, listar=None) -> tuple:
     code, salida = runner([_schtasks(), "/End", "/TN", TAREA])
     if code == 0:
         lineas.append(f"task {TAREA} stopped")
-    elif "cannot find" in salida.lower() or "no existe" in salida.lower():
+    elif not _tarea_existe(runner):
         lineas.append(f"task {TAREA} was not registered")
     else:
         # /End on a task that is registered but not running also returns != 0. That
@@ -449,13 +449,26 @@ def parar(runner=None, matar=None, listar=None) -> tuple:
     return 0, lineas
 
 
+def _tarea_existe(runner) -> bool:
+    """Whether the scheduled task is registered, without reading any message.
+
+    This used to be decided by looking for "cannot find" or "no existe" in
+    schtasks' output. On a Windows in any other language neither matched, so
+    removing a task that was not there reported a failure and exited non-zero --
+    breaking the idempotence the command documents. An exit code says the same
+    thing in every language.
+    """
+    code, _ = runner([_schtasks(), "/Query", "/TN", TAREA])
+    return code == 0
+
+
 def desinstalar(runner=None) -> tuple:
     """Deletes the task. Idempotent: its not existing is not a failure."""
     runner = runner or _correr
     code, salida = runner([_schtasks(), "/Delete", "/TN", TAREA, "/F"])
     if code == 0:
         return 0, [f"Task {TAREA} deleted. The panel no longer starts on its own."]
-    if "cannot find" in salida.lower() or "no existe" in salida.lower():
+    if not _tarea_existe(runner):
         # The final state is the one the user asked for, so it is not an error:
         # uninstalling twice has to exit 0 both times.
         return 0, [f"Task {TAREA} was not registered; there was nothing to delete."]

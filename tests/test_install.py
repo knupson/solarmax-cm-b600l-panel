@@ -445,3 +445,39 @@ def test_stop_recognises_its_own_process_by_either_spelling():
                       matar=lambda pid: (muertos.append(pid), True)[1],
                       listar=lambda: [(os.getpid(), f"python.exe -m vmaxpanel {grafia}")])
         assert os.getpid() not in muertos, grafia
+
+
+def test_uninstalling_a_task_that_is_not_there_is_idempotent_in_any_language():
+    """It decided "the task does not exist" by looking for "cannot find" or "no
+    existe" in schtasks' output. On a German, French or Japanese Windows neither
+    matches, so removing an unregistered task reported a failure and exited
+    non-zero -- breaking the idempotence the command documents, and any script
+    that runs uninstall before install.
+
+    The exit code of `schtasks /Query /TN` says the same thing in every language.
+    """
+    llamadas = []
+
+    def runner_aleman(cmd):
+        llamadas.append(cmd)
+        if "/Delete" in cmd:
+            return 1, "FEHLER: Der angegebene Task existiert nicht."
+        if "/Query" in cmd:
+            return 1, "FEHLER: Der angegebene Task existiert nicht."
+        return 0, ""
+
+    code, lineas = install.desinstalar(runner=runner_aleman)
+    assert code == 0, lineas
+    assert any("/Query" in c for c in llamadas), "it never asked whether it exists"
+
+
+def test_a_delete_that_fails_for_a_real_reason_still_reports_failure():
+    """The idempotence must not swallow a genuine error: if the task IS there and
+    deleting it fails, that is a failure."""
+    def runner(cmd):
+        if "/Delete" in cmd:
+            return 1, "ERROR: Access is denied."
+        return 0, ""            # /Query succeeds: the task exists
+
+    code, lineas = install.desinstalar(runner=runner)
+    assert code != 0, lineas
