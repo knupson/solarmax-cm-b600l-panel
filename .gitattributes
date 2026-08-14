@@ -1,0 +1,23 @@
+# Line endings. Without this the repo was mixed -- 63 tracked text files CRLF and
+# 29 LF -- and no editor setting was safe: a contributor whose editor is pinned to
+# LF saving vmaxpanel/editor.py produced a 2309-line diff for a one-line change,
+# and one pinned to CRLF did the same to vmaxpanel/cli.py. Either way the pull
+# request became unreviewable.
+#
+# CRLF and not LF because this project is Windows end to end: PowerShell scripts,
+# .cmd wrappers and Notepad are all in the normal path of someone using it.
+* text=auto eol=crlf
+
+# daemon/ is the byte-identical rollback path for the whole rewrite, and its files
+# are LF. `-text` freezes them exactly as stored: normalising them would change
+# their bytes and break the one invariant the directory exists to hold.
+daemon/** -text
+
+# Binary, so git never touches their contents looking for line endings.
+*.png  binary
+*.ico  binary
+*.jpg  binary
+*.mp4  binary
+*.ttf  binary
+*.dll  binary
+*.vmaxpanel binary

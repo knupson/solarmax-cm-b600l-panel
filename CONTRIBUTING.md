@@ -26,6 +26,10 @@ exclusivity and it takes nothing away from you.
 Code you contribute is covered by the [PolyForm Noncommercial 1.0.0](LICENSE) licence, like the
 rest of the project.
 
+> **Line endings.** The repo carries a `.gitattributes` (`* text=auto eol=crlf`), so your
+> editor's setting does not matter -- just do not fight it. One commit renormalised every
+> file; `git config blame.ignoreRevsFile .git-blame-ignore-revs` keeps it out of `git blame`.
+
 ## Getting started
 
 ```powershell
@@ -108,8 +112,14 @@ orphan process behind on every profile save.
 
 ## What not to touch
 
-- **`daemon/`** is the byte-identical rollback path for the previous version. A `git diff`
-  against its base commit has to stay empty. If you think you need to change something in
+- **`daemon/`** is the byte-identical rollback path for the previous version. Its base is the
+  `daemon-base` tag, and this has to stay empty:
+
+  ```powershell
+  git diff --exit-code daemon-base -- daemon/
+  ```
+
+  CI runs it on every push and pull request. If you think you need to change something in
   there, you do not.
 - **`daemon/stop.ps1` does not work for the new engine** and is not fixed, for the reason
   above. To bring the panel down: `python -m vmaxpanel --stop`.

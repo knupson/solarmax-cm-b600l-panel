@@ -1,0 +1,7 @@
+# Commits que sólo cambian formato. `git blame` los saltea con:
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (o pasando --ignore-revs-file). Sin esto, la renormalización de finales de línea
+# aparece como autora de las 20971 líneas que tocó.
+
+# chore: .gitattributes y una única renormalización de finales de línea
+3f698d4667a3b4c03bc6ecb5ea7fb8ae135d880d

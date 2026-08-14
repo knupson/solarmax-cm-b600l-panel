@@ -29,6 +29,15 @@ jobs:
         python-version: ['3.11', '3.13']
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # the daemon-base tag, for the check below
+
+      # daemon/ is the byte-identical rollback path for the whole rewrite. The rule
+      # was written in CONTRIBUTING against a commit hash that no longer exists --
+      # history was rewritten for publication -- so nobody could actually check it.
+      # The tag is the anchor and this step is the enforcement.
+      - name: daemon/ is unchanged
+        run: git diff --exit-code daemon-base -- daemon/
 
       - uses: actions/setup-python@v5
         with:
