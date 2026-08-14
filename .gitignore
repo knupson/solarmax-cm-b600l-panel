@@ -37,3 +37,9 @@ preview*.png
 
 # Permisos de Claude Code por maquina, no del proyecto
 .claude/settings.local.json
+
+# Internal design specs and implementation plans. They stay on disk -- CLAUDE.md
+# uses them as the index for picking the work back up -- but they are not published:
+# they are in Spanish, they describe phases that are already shipped, and the fase 1
+# plan is a work order addressed to AI agents rather than documentation.
+docs/superpowers/
