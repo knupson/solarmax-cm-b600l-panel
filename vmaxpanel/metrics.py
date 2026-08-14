@@ -157,7 +157,7 @@ _GRUPOS = {
 def group_for(mid) -> str:
     """The group a metric belongs to, by friendly name."""
     if not isinstance(mid, str) or not mid:
-        return "Otras"
+        return "Other"
     prefijo = mid.split(".", 1)[0]
     return _GRUPOS.get(prefijo, prefijo.upper())
 
@@ -247,7 +247,7 @@ def spec_for(mid) -> MetricSpec | None:
         # The label CARRIES the index. Without it every disk shares "Disk
         # temperature" and the editor's selector cannot tell them apart: picking
         # one writes another.
-        return MetricSpec(mid, f"Disco {m.group(1)} — temperatura",
+        return MetricSpec(mid, f"Disk {m.group(1)} — temperature",
                           DISK_TEMP_SPEC.unit, "number",
                           DISK_TEMP_SPEC.min, DISK_TEMP_SPEC.max)
     fam = _familia(mid)

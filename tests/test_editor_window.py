@@ -84,10 +84,14 @@ def metrica_mostrada(w):
 
 
 def seleccionar(w, wid):
-    ids = w.state.widget_ids()
-    w.lista.selection_clear(0, "end")
-    w.lista.selection_set(ids.index(wid))
-    w.lista.event_generate("<<ListboxSelect>>")
+    """Selects a widget the way the window itself does.
+
+    Through `_seleccionar_en_arbol` and not `Treeview.selection_set` directly: a
+    row inside a folded group cannot be selected by a click either, so opening
+    its group is part of what selecting means here.
+    """
+    w._seleccionar_en_arbol(wid)
+    w.lista.event_generate("<<TreeviewSelect>>")
     w.root.update()
 
 
@@ -147,21 +151,22 @@ def test_saving_from_the_window_persists(ventana):
 
 def test_a_real_mouse_click_on_the_list_selects_that_widget(ventana):
     """The user's path, with a real click instead of a
-    <<ListboxSelect>> sintetico.
+    synthetic <<TreeviewSelect>>.
 
     The difference matters: event_generate of a virtual event is NOT dispatched if
     the window is not mapped yet, so a test using only the synthetic event passes or
     not depending on when update() was called -- and a manual check with that method
     made it look as though the fix did not work when it did.
     """
-    ventana.lista.selection_clear(0, "end")
-    ventana.lista.see(0)
+    ventana.lista.selection_remove(*ventana.lista.selection())
     ventana.root.update()
 
-    fila = ventana.state.widget_ids().index("cpu-load")
-    ventana.lista.see(fila)
+    # The group has to be open for the row to have a box at all -- a folded row
+    # is not merely off-screen, it does not exist as a visible item.
+    ventana.lista.item(ventana.lista.parent("cpu-load"), open=True)
+    ventana.lista.see("cpu-load")
     ventana.root.update()
-    caja = ventana.lista.bbox(fila)
+    caja = ventana.lista.bbox("cpu-load")
     assert caja is not None, "the row is not visible; see() was not enough"
     x, y = caja[0] + 5, caja[1] + 2
     ventana.lista.event_generate("<Button-1>", x=x, y=y)

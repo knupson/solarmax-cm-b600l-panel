@@ -624,3 +624,68 @@ def test_a_static_background_has_no_hint():
     assert editor.pista_fondo("solid") == ""
     assert editor.pista_fondo("gradient") == ""
 
+
+
+# --- the widget tree: sections with friendly names ---
+
+
+def test_the_widget_tree_groups_widgets_by_what_they_measure(tmp_path):
+    """A flat list of 47 ids makes you remember what each one is. Grouped by
+    CPU/GPU/RAM, finding the one you want is reading, not recalling."""
+    st = state_for(tmp_path)
+    arbol = st.widget_tree()
+    grupos = [g for g, _ in arbol]
+    assert "CPU" in grupos and "GPU" in grupos
+    cpu = dict(arbol)["CPU"]
+    assert any(wid == "cpu-load" for wid, _ in cpu), cpu
+
+
+def test_a_row_shows_the_friendly_name_and_the_id(tmp_path):
+    """The id alone ("mem-load") says nothing to somebody who did not write the
+    profile; the label alone cannot be matched against the JSON. Both."""
+    st = state_for(tmp_path)
+    fila = next(etiqueta for g, filas in st.widget_tree()
+                for wid, etiqueta in filas if wid == "cpu-load")
+    assert "(cpu-load)" in fila
+    assert fila.split(" (")[0].strip(), "the row has no friendly name"
+    assert fila != "cpu-load"
+
+
+def test_widgets_without_a_metric_land_in_their_own_group(tmp_path):
+    """A label and a rect measure nothing, so no metric group is theirs. Left
+    ungrouped they would be scattered through the tree with no reason."""
+    st = state_for(tmp_path)
+    grupos = dict(st.widget_tree())
+    assert st.DECORATION in grupos
+    ids = [wid for wid, _ in grupos[st.DECORATION]]
+    assert any(st.widget(wid)["type"] in ("label", "rect") for wid in ids)
+
+
+def test_a_label_row_shows_the_text_it_draws(tmp_path):
+    """A label has no metric to name it, but it does have the text on screen --
+    which is how the user recognises it on the panel."""
+    st = state_for(tmp_path)
+    st.add_widget("label", "rotulo-sistema")
+    st.set_field("rotulo-sistema", "text", "SYSTEM")
+    fila = next(etiqueta for g, filas in st.widget_tree()
+                for wid, etiqueta in filas if wid == "rotulo-sistema")
+    assert "SYSTEM" in fila
+
+
+def test_the_tree_keeps_the_profile_order_inside_each_group(tmp_path):
+    """The order of the widgets list is the paint order. Grouping already gives
+    up the global view of it; scrambling it inside a group as well would leave
+    no way to reason about what covers what."""
+    st = state_for(tmp_path)
+    orden = st.widget_ids()
+    for _, filas in st.widget_tree():
+        ids = [wid for wid, _ in filas]
+        assert ids == sorted(ids, key=orden.index), ids
+
+
+def test_every_widget_appears_exactly_once(tmp_path):
+    """A widget missing from the tree cannot be selected at all -- it would be
+    invisible to the editor while still being drawn on the panel."""
+    st = state_for(tmp_path)
+    en_arbol = [wid for _, filas in st.widget_tree() for wid, _ in filas]
+    assert sorted(en_arbol) == sorted(st.widget_ids())

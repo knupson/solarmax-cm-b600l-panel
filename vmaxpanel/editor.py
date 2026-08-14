@@ -18,7 +18,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from . import bundle
+from . import bundle, theme
 from .layout import loader, model, schema
 from .metrics import METRICS, group_for, spec_for
 from .providers.setup import build_registry_without_sensors
@@ -175,8 +175,7 @@ class EditorState:
 
         The metrics the profile ALREADY uses are added too, even when the registry
         does not offer them. Otherwise, changing a widget's metric on a machine that
-        does not serve it would make it vanish from the selector with no way back
-        atras.
+        does not serve it would make it vanish from the selector with no way back.
         """
         catalogo, grupos = self._catalogo()
         usadas = {w.get("metric") for w in self.raw.get("widgets", [])
@@ -192,10 +191,69 @@ class EditorState:
             if base is None:
                 continue
             etiqueta = base.label or mid
-            salida.setdefault(grupos.get(mid, "Otras"), []).append((mid, etiqueta))
+            salida.setdefault(grupos.get(mid, "Other"), []).append((mid, etiqueta))
         for entradas in salida.values():
             entradas.sort(key=lambda par: par[1].lower())
         return dict(sorted(salida.items()))
+
+    # --- the widget tree, for the list on the left ---
+
+    DECORATION = "Decoration"
+
+    # What a widget with no metric is called. It has no reading to name it, so
+    # the type is the most informative thing left.
+    _SIN_METRICA = {"label": "Label", "rect": "Rectangle", "image": "Image"}
+
+    def widget_tree(self) -> list[tuple[str, list[tuple[str, str]]]]:
+        """[(group, [(widget id, row label), ...]), ...] for the editor's list.
+
+        Grouped because a flat list of 47 ids makes the user remember what each
+        one is; each row carries the friendly name AND the id because the name
+        alone cannot be matched against the JSON they also edit by hand.
+
+        The group comes from the same catalogue the metric selector uses, so it
+        is refined by the registry when there is one -- `vol.D.free` lands under
+        the disk's real name and not under "vol". Widgets that measure nothing
+        (a label, a rect) go to their own group: there is no metric group that is
+        theirs, and leaving them ungrouped would scatter them for no reason.
+
+        Inside each group the profile's order is preserved. Grouping already
+        gives up the global view of the paint order; scrambling it within a group
+        as well would leave no way to reason about what covers what.
+        """
+        etiquetas = {mid: etiqueta
+                     for filas in self.metric_groups().values()
+                     for mid, etiqueta in filas}
+        grupos_por_metrica = {mid: grupo
+                              for grupo, filas in self.metric_groups().items()
+                              for mid, _ in filas}
+
+        salida: dict[str, list[tuple[str, str]]] = {}
+        for w in self.raw.get("widgets", []):
+            wid = w.get("id")
+            if not isinstance(wid, str) or not wid:
+                continue
+            grupo, nombre = self._fila_de(w, etiquetas, grupos_por_metrica)
+            salida.setdefault(grupo, []).append((wid, f"{nombre} ({wid})"))
+
+        # Decoration last: it is the scaffolding, not what the panel is for.
+        orden = sorted(k for k in salida if k != self.DECORATION)
+        if self.DECORATION in salida:
+            orden.append(self.DECORATION)
+        return [(g, salida[g]) for g in orden]
+
+    def _fila_de(self, w, etiquetas, grupos_por_metrica) -> tuple[str, str]:
+        mid = w.get("metric")
+        if isinstance(mid, str) and mid:
+            return (grupos_por_metrica.get(mid) or group_for(mid),
+                    etiquetas.get(mid) or mid)
+        tipo = w.get("type", "widget")
+        texto = w.get("text")
+        # A label is recognised on the panel by the text it draws, so that is a
+        # better name than "Label" repeated fifteen times.
+        if tipo == "label" and isinstance(texto, str) and texto.strip():
+            return self.DECORATION, texto.strip()
+        return self.DECORATION, self._SIN_METRICA.get(tipo, tipo.capitalize())
 
     def _catalogo(self):
         """(catalogue, groups) from the registry, or from METRICS with no backend."""
@@ -853,6 +911,10 @@ class EditorWindow:
         # (type, key) of every field with something typed and unconfirmed. See
         # _aplicar_pendientes().
         self._pendientes = set()
+        # Before _build(): the theme swaps the base ttk theme, and doing that
+        # after the controls exist leaves some of them drawn by the previous one.
+        # It follows the Windows setting; see theme.py for why `clam`.
+        self.palette = theme.apply(self.root, self.ttk)
         self._build()
         # The initial size is requested explicitly: without this Tkinter gives it the
         # minimum the controls need, the widget list and the properties eat the
@@ -912,9 +974,20 @@ class EditorWindow:
         izq = ttk.Frame(tab_widgets)
         izq.pack(side="left", fill="y")
         ttk.Label(izq, text="Widgets").pack(anchor="w")
-        self.lista = tk.Listbox(izq, width=24, height=28, exportselection=False)
-        self.lista.pack(fill="y", expand=True)
-        self.lista.bind("<<ListboxSelect>>", lambda e: self._on_select())
+        # A Treeview and not a Listbox: the groups are real parent nodes that
+        # fold, the row keeps the widget id in its iid instead of hiding it in the
+        # text, and it is a ttk widget -- so the theme reaches it. A classic
+        # Listbox stays white on a dark window no matter what.
+        marco = ttk.Frame(izq)
+        marco.pack(fill="both", expand=True)
+        self.lista = ttk.Treeview(marco, show="tree", selectmode="browse",
+                                  height=26)
+        barra = ttk.Scrollbar(marco, orient="vertical", command=self.lista.yview)
+        self.lista.configure(yscrollcommand=barra.set)
+        self.lista.column("#0", width=232, stretch=True)
+        self.lista.pack(side="left", fill="both", expand=True)
+        barra.pack(side="right", fill="y")
+        self.lista.bind("<<TreeviewSelect>>", lambda e: self._on_select())
 
         botones = ttk.Frame(izq)
         botones.pack(fill="x", pady=(4, 0))
@@ -965,8 +1038,16 @@ class EditorWindow:
         self.der = ttk.Frame(raiz)
         self.der.pack(side="left", fill="both", expand=True)
         ttk.Label(self.der, text="Preview").pack(anchor="w")
-        self.canvas = tk.Label(self.der, borderwidth=1, relief="solid",
-                               anchor="n")
+        # A classic tk.Label and not a ttk one, because ttk.Label cannot hold an
+        # image that changes size cleanly. Classic widgets are outside the ttk
+        # theme, so its colours are handed over by hand -- otherwise the preview
+        # sits in a white box on a dark window, which is exactly how the old
+        # Listbox looked.
+        self.canvas = tk.Label(self.der, borderwidth=1, relief="flat",
+                               anchor="n",
+                               background=self.palette["surface"],
+                               highlightthickness=1,
+                               highlightbackground=self.palette["border"])
         self.canvas.pack(fill="both", expand=True)
         # The <Configure> is listened for on the CONTAINER, not on the Label:
         # changing the image changes the Label size and that would fire another
@@ -1018,10 +1099,7 @@ class EditorWindow:
             # A click on empty space does NOT deselect: the properties panel would
             # empty out and the user would lose what they were editing.
             return
-        ids = self.state.widget_ids()
-        self.lista.selection_clear(0, "end")
-        self.lista.selection_set(ids.index(wid))
-        self.lista.see(ids.index(wid))
+        self._seleccionar_en_arbol(wid)
         self._show_props()
         self._show_errors()
         self.state.begin_drag(wid, x, y)
@@ -1051,7 +1129,7 @@ class EditorWindow:
         combo.bind("<<ComboboxSelected>>", lambda e: self._on_pick_bg_type())
 
         self._bg_hint = ttk.Label(self.tab_fondo, text="", wraplength=420,
-                                  justify="left", foreground="#606060")
+                                  justify="left", foreground=self.palette["muted"])
         self._bg_hint.pack(fill="x", pady=(4, 0))
 
         self._bg_campos = ttk.Frame(self.tab_fondo)
@@ -1148,7 +1226,7 @@ class EditorWindow:
         origen = Path(origen)
         destino_raiz = Path(assets_dir) if assets_dir else self._carpetas()[1]
         if not origen.exists():
-            self.estado.config(text=f"{origen.name} does not exist", foreground="#A00000")
+            self.estado.config(text=f"{origen.name} does not exist", foreground=self.palette["error"])
             return None
         try:
             destino_raiz.mkdir(parents=True, exist_ok=True)
@@ -1159,7 +1237,7 @@ class EditorWindow:
                 nombre = self._copiar_asset(origen, destino_raiz, shutil)
         except OSError as e:
             self.estado.config(text=f"could not copy {origen.name}: {e}",
-                               foreground="#A00000")
+                               foreground=self.palette["error"])
             return None
 
         self.state.set_background_field("src", nombre)
@@ -1168,7 +1246,7 @@ class EditorWindow:
         self._pendientes.discard(("bg", "src"))
         self._draw_preview()
         self._show_errors()
-        self.estado.config(text=f"background: {nombre}", foreground="#006000")
+        self.estado.config(text=f"background: {nombre}", foreground=self.palette["ok"])
         return nombre
 
     @staticmethod
@@ -1266,7 +1344,7 @@ class EditorWindow:
         self._show_stops()
         self._draw_preview()
         if errores:
-            self.estado.config(text=" / ".join(errores), foreground="#B00000")
+            self.estado.config(text=" / ".join(errores), foreground=self.palette["error"])
         else:
             self._show_errors()
 
@@ -1280,7 +1358,7 @@ class EditorWindow:
                        "A family that is not installed falls back to the "
                        "default font silently, which is why the combo\nonly "
                        "offers the ones present on this machine.",
-                  justify="left", foreground="#606060").pack(anchor="w",
+                  justify="left", foreground=self.palette["muted"]).pack(anchor="w",
                                                              pady=(0, 8))
         self._font_grid = ttk.Frame(self.tab_fuentes)
         self._font_grid.pack(fill="both", expand=True)
@@ -1325,7 +1403,7 @@ class EditorWindow:
 
             usuarios = len(self.state.font_users(alias))
             ttk.Label(self._font_grid, text=f"{usuarios} widgets",
-                      foreground="#606060").grid(row=fila, column=4, padx=4)
+                      foreground=self.palette["muted"]).grid(row=fila, column=4, padx=4)
             ttk.Button(self._font_grid, text="−", width=3,
                        command=lambda a=alias: self._remove_font(a)
                        ).grid(row=fila, column=5)
@@ -1348,7 +1426,7 @@ class EditorWindow:
         self._show_fonts()
         self._draw_preview()
         if errores:
-            self.estado.config(text=" / ".join(errores), foreground="#B00000")
+            self.estado.config(text=" / ".join(errores), foreground=self.palette["error"])
         else:
             self._show_errors()
 
@@ -1357,7 +1435,7 @@ class EditorWindow:
         self._show_fonts()
         self._draw_preview()
         if errores:
-            self.estado.config(text=" / ".join(errores), foreground="#B00000")
+            self.estado.config(text=" / ".join(errores), foreground=self.palette["error"])
         else:
             self._show_errors()
 
@@ -1370,7 +1448,7 @@ class EditorWindow:
                   text="The panel refreshes at 60 Hz: above that, frames are "
                        "discarded.\nMeasured cost: 1 fps ≈ 1% of one core, "
                        "30 ≈ 17%, 60 ≈ 37%.",
-                  justify="left", foreground="#606060").pack(anchor="w", pady=(0, 8))
+                  justify="left", foreground=self.palette["muted"]).pack(anchor="w", pady=(0, 8))
         campos = ttk.Frame(self.tab_panel)
         campos.pack(fill="x")
         for fila, clave in enumerate(self.state.panel_fields()):
@@ -1395,9 +1473,36 @@ class EditorWindow:
 
     # --- refresco ---
 
+    # Prefix for the group nodes' iids. A widget id could collide with a group
+    # name, and then selecting a section would edit a widget: the prefix keeps
+    # the two namespaces apart, and `_selected()` uses it to tell them apart.
+    GRUPO = "\x00grp:"
+
+    def _seleccionar_en_arbol(self, wid):
+        """Selects `wid`, opening its group and scrolling to it.
+
+        see() alone is not enough: a row inside a folded group is not visible at
+        all, so selecting it from the preview would look like nothing happened.
+        """
+        if not self.lista.exists(wid):
+            return
+        padre = self.lista.parent(wid)
+        if padre:
+            self.lista.item(padre, open=True)
+        self.lista.selection_set(wid)
+        self.lista.see(wid)
+
     def _selected(self):
-        sel = self.lista.curselection()
-        return self.lista.get(sel[0]) if sel else None
+        """The selected widget's id, or None on a group node.
+
+        The Treeview's iid IS the widget id, so nothing has to be parsed back out
+        of the row text -- which is what made showing a friendly name impossible
+        before. Group nodes carry a prefixed iid and read as no selection.
+        """
+        sel = self.lista.selection()
+        if not sel or sel[0].startswith(self.GRUPO):
+            return None
+        return sel[0]
 
     def _on_select(self):
         """Selection changed in the list.
@@ -1419,7 +1524,7 @@ class EditorWindow:
         """
         texto = f"internal error: {exc_type.__name__}: {exc}"
         try:
-            self.estado.config(text=texto, foreground="#B00000")
+            self.estado.config(text=texto, foreground=self.palette["error"])
         except Exception:
             pass
         print(texto, file=sys.stderr)
@@ -1428,13 +1533,21 @@ class EditorWindow:
 
     def _refresh(self, select_first=False, keep=None):
         keep = keep or self._selected()
-        self.lista.delete(0, "end")
-        for wid in self.state.widget_ids():
-            self.lista.insert("end", wid)
+        # Which groups the user had folded. Every edit triggers a refresh, so
+        # rebuilding them all open would undo a fold on the next keystroke.
+        plegados = {g for g in self.lista.get_children("")
+                    if not self.lista.item(g, "open")}
+        self.lista.delete(*self.lista.get_children(""))
         ids = self.state.widget_ids()
+        for grupo, filas in self.state.widget_tree():
+            gid = self.GRUPO + grupo
+            self.lista.insert("", "end", iid=gid, text=grupo,
+                              open=gid not in plegados)
+            for wid, etiqueta in filas:
+                self.lista.insert(gid, "end", iid=wid, text=etiqueta)
         objetivo = keep if keep in ids else (ids[0] if (select_first and ids) else None)
         if objetivo is not None:
-            self.lista.selection_set(ids.index(objetivo))
+            self._seleccionar_en_arbol(objetivo)
         self._show_props()
         self._show_background()
         self._show_fonts()
@@ -1446,9 +1559,9 @@ class EditorWindow:
         marca = "•" if self.state.dirty else ""
         if self.state.errors:
             self.estado.config(text=f"{marca} " + " / ".join(self.state.errors[:3]),
-                               foreground="#B00000")
+                               foreground=self.palette["error"])
         else:
-            self.estado.config(text=f"{marca} no errors", foreground="#006000")
+            self.estado.config(text=f"{marca} no errors", foreground=self.palette["ok"])
 
     def _escala_disponible(self) -> float:
         """The largest scale at which the whole frame fits in its slot.
@@ -1552,7 +1665,7 @@ class EditorWindow:
         marco = ttk.Frame(self.props)
         marco.grid(row=fila_base, column=0, columnspan=3, sticky="w", pady=(10, 0))
         self._rules_frame = marco
-        ttk.Label(marco, text="COLOUR BY VALUE", foreground="#606060").grid(
+        ttk.Label(marco, text="COLOUR BY VALUE", foreground=self.palette["muted"]).grid(
             row=0, column=0, columnspan=4, sticky="w")
         for i, regla in enumerate(self.state.rules(wid)):
             op = ttk.Combobox(marco, width=4, state="readonly",
@@ -1592,7 +1705,7 @@ class EditorWindow:
         self._show_props()
         self._draw_preview()
         if errores:
-            self.estado.config(text=" / ".join(errores), foreground="#B00000")
+            self.estado.config(text=" / ".join(errores), foreground=self.palette["error"])
         else:
             self._show_errors()
 
@@ -1732,7 +1845,7 @@ class EditorWindow:
         self._marcar_titulo()
         if not errores:
             self.estado.config(text="saved; the panel picks it up on its own",
-                               foreground="#006000")
+                               foreground=self.palette["ok"])
 
     def _pendiente_al_tipear(self, var, tipo, clave):
         """Marks (type, key) as unconfirmed as soon as the text changes.
@@ -1799,7 +1912,7 @@ class EditorWindow:
         repainting, the controls keep showing the undone value."""
         if not self.state.undo():
             self.estado.config(text="there is nothing to undo",
-                               foreground="#606060")
+                               foreground=self.palette["muted"])
             return
         self._refresh()
 
@@ -1844,24 +1957,24 @@ class EditorWindow:
             # the bundle would carry the old version, and that error is not noticed
             # until somebody else opens it.
             self.estado.config(text="there are unsaved changes: save first, then "
-                                    "export", foreground="#803000")
+                                    "export", foreground=self.palette["warn"])
             return
         if destino.exists():
             # asksaveasfilename already asks, but this method is also called
             # directly: overwriting a bundle the user may already have shared cannot
             # depend on the dialog having asked.
             self.estado.config(text=f"{destino.name} already exists: pick another name",
-                               foreground="#803000")
+                               foreground=self.palette["warn"])
             return
         try:
             info = bundle.export_profile(self.state.path, destino, self._carpetas()[1])
         except bundle.BundleError as e:
-            self.estado.config(text=str(e), foreground="#A00000")
+            self.estado.config(text=str(e), foreground=self.palette["error"])
             return
         assets = ", ".join(info["assets"]) or "no assets"
         self.estado.config(
             text=f"exported to {destino.name} ({assets}). Fonts do not travel: "
-                 f"they are requested by family.", foreground="#006000")
+                 f"they are requested by family.", foreground=self.palette["ok"])
 
     def _pedir_importar(self):
         from tkinter import filedialog
@@ -1882,7 +1995,7 @@ class EditorWindow:
             info = bundle.import_bundle(origen, profiles_dir or perfiles,
                                         assets_dir or assets, si_existe="renombrar")
         except bundle.BundleError as e:
-            self.estado.config(text=str(e), foreground="#A00000")
+            self.estado.config(text=str(e), foreground=self.palette["error"])
             return
         self.state = EditorState(info["profile"])
         self.state.reload()
@@ -1892,7 +2005,7 @@ class EditorWindow:
                  if faltan else "")
         self.estado.config(
             text=f"imported as {info['profile'].name}, and opened.{aviso}",
-            foreground="#803000" if faltan else "#006000")
+            foreground=self.palette["warn"] if faltan else "#006000")
 
     def run(self):
         self.root.mainloop()
