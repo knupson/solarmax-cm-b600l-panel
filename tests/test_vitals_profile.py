@@ -18,7 +18,7 @@ SAMPLE = {
     "gpu.name": "AMD RADEON RX 6800 XT", "gpu.load": 23.0, "gpu.temp": 51.0,
     "gpu.hotspot": 68.0, "gpu.clock": 1850.0, "gpu.power": 84.0, "gpu.vram": 37.0,
     "mem.load": 42.3, "mem.used": 13.5, "mem.total": 32.0, "mem.speed": 5600.0,
-    "net.down": 1258291.0, "net.up": 40960.0,
+    "net.down": 1258291.0, "net.up": 40960.0, "sys.uptime": 33098.0,
     "disk.temp.0": 34.0, "disk.temp.1": 40.0, "disk.temp.2": 41.0,
 }
 

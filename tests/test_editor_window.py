@@ -99,7 +99,11 @@ def test_selecting_a_widget_shows_its_own_properties(ventana):
     seleccionar(ventana, "ssd-2")
     assert ventana._selected() == "ssd-2"
     assert metrica_mostrada(ventana) == "disk.temp.2"
-    assert ventana._fields["x"].get() == "162"
+    # The x comes from the profile rather than a literal: what this test is about
+    # is that the panel shows the SELECTED widget's x and not the previous one's,
+    # and a hand-written 162 turned a layout edit into a failure here.
+    esperada = ventana.state.widget("ssd-2")["x"]
+    assert ventana._fields["x"].get() == str(esperada)
 
 
 def test_switching_selection_replaces_the_properties(ventana):

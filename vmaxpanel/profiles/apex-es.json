@@ -98,24 +98,6 @@
   },
   "widgets": [
     {
-      "id": "marco-izq",
-      "type": "rect",
-      "x": 6,
-      "y": 0,
-      "w": 1,
-      "h": 1480,
-      "fill": "#2A1D16"
-    },
-    {
-      "id": "marco-der",
-      "type": "rect",
-      "x": 313,
-      "y": 0,
-      "w": 1,
-      "h": 1480,
-      "fill": "#2A1D16"
-    },
-    {
       "id": "hora",
       "type": "text",
       "metric": "clock.time_hms",
@@ -220,11 +202,11 @@
       "align": "right",
       "rules": [
         {
-          "when": "> 85",
-          "color": "#FF4D00"
+          "when": "> 95",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 95",
+          "when": "> 85",
           "color": "#FFC400"
         }
       ]
@@ -275,11 +257,11 @@
       "align": "center",
       "rules": [
         {
-          "when": "> 80",
-          "color": "#FF4D00"
+          "when": "> 90",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 90",
+          "when": "> 80",
           "color": "#FFC400"
         }
       ]
@@ -369,11 +351,11 @@
       "align": "center",
       "rules": [
         {
-          "when": "> 80",
-          "color": "#FF4D00"
+          "when": "> 90",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 90",
+          "when": "> 80",
           "color": "#FFC400"
         }
       ]
@@ -443,11 +425,11 @@
       "align": "right",
       "rules": [
         {
-          "when": "> 80",
-          "color": "#FF4D00"
+          "when": "> 90",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 90",
+          "when": "> 80",
           "color": "#FFC400"
         }
       ]
@@ -486,11 +468,11 @@
       "align": "right",
       "rules": [
         {
-          "when": "> 80",
-          "color": "#FF4D00"
+          "when": "> 90",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 90",
+          "when": "> 80",
           "color": "#FFC400"
         }
       ]
@@ -529,11 +511,11 @@
       "align": "right",
       "rules": [
         {
-          "when": "> 80",
-          "color": "#FF4D00"
+          "when": "> 90",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 90",
+          "when": "> 80",
           "color": "#FFC400"
         }
       ]
@@ -572,11 +554,11 @@
       "align": "right",
       "rules": [
         {
-          "when": "> 80",
-          "color": "#FF4D00"
+          "when": "> 90",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 90",
+          "when": "> 80",
           "color": "#FFC400"
         }
       ]
@@ -615,11 +597,11 @@
       "align": "right",
       "rules": [
         {
-          "when": "> 80",
-          "color": "#FF4D00"
+          "when": "> 90",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 90",
+          "when": "> 80",
           "color": "#FFC400"
         }
       ]
@@ -658,11 +640,11 @@
       "align": "right",
       "rules": [
         {
-          "when": "> 80",
-          "color": "#FF4D00"
+          "when": "> 90",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 90",
+          "when": "> 80",
           "color": "#FFC400"
         }
       ]
@@ -718,11 +700,11 @@
       "align": "right",
       "rules": [
         {
-          "when": "> 85",
-          "color": "#FF4D00"
+          "when": "> 95",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 95",
+          "when": "> 85",
           "color": "#FFC400"
         }
       ]
@@ -773,11 +755,11 @@
       "align": "center",
       "rules": [
         {
-          "when": "> 80",
-          "color": "#FF4D00"
+          "when": "> 90",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 90",
+          "when": "> 80",
           "color": "#FFC400"
         }
       ]
@@ -804,11 +786,11 @@
       "align": "center",
       "rules": [
         {
-          "when": "> 95",
-          "color": "#FF4D00"
+          "when": "> 105",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 105",
+          "when": "> 95",
           "color": "#FFC400"
         }
       ]
@@ -877,11 +859,11 @@
       "align": "center",
       "rules": [
         {
-          "when": "> 85",
-          "color": "#FF4D00"
+          "when": "> 95",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 95",
+          "when": "> 85",
           "color": "#FFC400"
         }
       ]
@@ -970,11 +952,11 @@
       "align": "right",
       "rules": [
         {
-          "when": "> 85",
-          "color": "#FF4D00"
+          "when": "> 95",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 95",
+          "when": "> 85",
           "color": "#FFC400"
         }
       ]
@@ -1233,11 +1215,11 @@
       "align": "center",
       "rules": [
         {
-          "when": "> 60",
-          "color": "#FF4D00"
+          "when": "> 70",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 70",
+          "when": "> 60",
           "color": "#FFC400"
         }
       ]
@@ -1264,11 +1246,11 @@
       "align": "center",
       "rules": [
         {
-          "when": "> 60",
-          "color": "#FF4D00"
+          "when": "> 70",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 70",
+          "when": "> 60",
           "color": "#FFC400"
         }
       ]
@@ -1295,11 +1277,11 @@
       "align": "center",
       "rules": [
         {
-          "when": "> 60",
-          "color": "#FF4D00"
+          "when": "> 70",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 70",
+          "when": "> 60",
           "color": "#FFC400"
         }
       ]
@@ -1310,7 +1292,7 @@
       "x": 8,
       "y": 1170,
       "w": 304,
-      "h": 158,
+      "h": 192,
       "fill": "#150F0B"
     },
     {
@@ -1359,7 +1341,7 @@
       "x": 20,
       "y": 1230,
       "w": 280,
-      "h": 26,
+      "h": 40,
       "color": "#FF4D00",
       "samples": 180,
       "track": "#33190C",
@@ -1372,7 +1354,7 @@
       "x": 300,
       "y": 1198,
       "font": "mid",
-      "color": "#FF4D00",
+      "color": "#F6EEE8",
       "format": "{}",
       "align": "right",
       "humanize": "rate"
@@ -1382,7 +1364,7 @@
       "type": "label",
       "text": "SUBIDA",
       "x": 20,
-      "y": 1266,
+      "y": 1288,
       "font": "micro",
       "color": "#9A8578",
       "align": "left"
@@ -1392,9 +1374,9 @@
       "type": "graph",
       "metric": "net.ethernet.up",
       "x": 20,
-      "y": 1292,
+      "y": 1314,
       "w": 280,
-      "h": 26,
+      "h": 40,
       "color": "#FF4D00",
       "samples": 180,
       "track": "#33190C",
@@ -1405,9 +1387,9 @@
       "type": "text",
       "metric": "net.ethernet.up",
       "x": 300,
-      "y": 1260,
+      "y": 1282,
       "font": "mid",
-      "color": "#FF4D00",
+      "color": "#F6EEE8",
       "format": "{}",
       "align": "right",
       "humanize": "rate"
@@ -1416,16 +1398,16 @@
       "id": "mb-banda",
       "type": "rect",
       "x": 8,
-      "y": 1342,
+      "y": 1376,
       "w": 304,
-      "h": 124,
+      "h": 90,
       "fill": "#150F0B"
     },
     {
       "id": "mb-linea",
       "type": "rect",
       "x": 8,
-      "y": 1342,
+      "y": 1376,
       "w": 304,
       "h": 1,
       "fill": "#FF4D00"
@@ -1435,7 +1417,7 @@
       "type": "label",
       "text": "SISTEMA",
       "x": 20,
-      "y": 1350,
+      "y": 1384,
       "font": "eyebrow",
       "color": "#F6EEE8",
       "align": "left"
@@ -1445,7 +1427,7 @@
       "type": "label",
       "text": "B760M D3HP",
       "x": 300,
-      "y": 1354,
+      "y": 1388,
       "font": "micro",
       "color": "#7A6558",
       "align": "right"
@@ -1453,9 +1435,9 @@
     {
       "id": "sys-f1-r0",
       "type": "label",
-      "text": "PLACA",
+      "text": "TEMP 1",
       "x": 66,
-      "y": 1376,
+      "y": 1412,
       "font": "micro",
       "color": "#9A8578",
       "align": "center"
@@ -1465,18 +1447,18 @@
       "type": "text",
       "metric": "mb.temp.0",
       "x": 66,
-      "y": 1392,
+      "y": 1428,
       "font": "dato",
       "color": "#F6EEE8",
       "format": "{:.0f}°",
       "align": "center",
       "rules": [
         {
-          "when": "> 80",
-          "color": "#FF4D00"
+          "when": "> 90",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 90",
+          "when": "> 80",
           "color": "#FFC400"
         }
       ]
@@ -1484,9 +1466,9 @@
     {
       "id": "sys-f1-r1",
       "type": "label",
-      "text": "VRM",
+      "text": "TEMP 2",
       "x": 159,
-      "y": 1376,
+      "y": 1412,
       "font": "micro",
       "color": "#9A8578",
       "align": "center"
@@ -1496,18 +1478,18 @@
       "type": "text",
       "metric": "mb.temp.1",
       "x": 159,
-      "y": 1392,
+      "y": 1428,
       "font": "dato",
       "color": "#F6EEE8",
       "format": "{:.0f}°",
       "align": "center",
       "rules": [
         {
-          "when": "> 80",
-          "color": "#FF4D00"
+          "when": "> 90",
+          "color": "#FF1E00"
         },
         {
-          "when": "> 90",
+          "when": "> 80",
           "color": "#FFC400"
         }
       ]
@@ -1515,9 +1497,9 @@
     {
       "id": "sys-f1-r2",
       "type": "label",
-      "text": "FAN 1",
+      "text": "PROCESOS",
       "x": 252,
-      "y": 1376,
+      "y": 1412,
       "font": "micro",
       "color": "#9A8578",
       "align": "center"
@@ -1525,43 +1507,13 @@
     {
       "id": "sys-f1-v2",
       "type": "text",
-      "metric": "fan.1.rpm",
-      "x": 252,
-      "y": 1392,
-      "font": "dato",
-      "color": "#F6EEE8",
-      "format": "{:.0f}",
-      "align": "center"
-    },
-    {
-      "id": "sys-f2-r0",
-      "type": "label",
-      "text": "PROCESOS",
-      "x": 160,
-      "y": 1424,
-      "font": "micro",
-      "color": "#9A8578",
-      "align": "center"
-    },
-    {
-      "id": "sys-f2-v0",
-      "type": "text",
       "metric": "sys.procs",
-      "x": 160,
-      "y": 1440,
+      "x": 252,
+      "y": 1428,
       "font": "dato",
       "color": "#F6EEE8",
       "format": "{:.0f}",
       "align": "center"
-    },
-    {
-      "id": "cierre",
-      "type": "rect",
-      "x": 8,
-      "y": 1466,
-      "w": 304,
-      "h": 1,
-      "fill": "#2A1D16"
     }
   ]
 }
