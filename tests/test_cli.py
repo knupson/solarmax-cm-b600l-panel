@@ -73,3 +73,26 @@ def test_log_captures_a_traceback_from_an_unexpected_crash(tmp_path, monkeypatch
         cli.main(["--save", str(tmp_path / "o.png"), "--no-sensors", "--log", str(log)])
     text = log.read_text(encoding="utf-8")
     assert "Traceback" in text and "explosion de prueba" in text
+
+
+def test_help_offers_the_english_spellings_only(capsys):
+    """--help printed {fail,rename,overwrite,fallar,renombrar,pisar} in its usage
+    line: the Spanish aliases read as six different options instead of three.
+    They stay accepted, they just stop being advertised."""
+    import pytest
+
+    from vmaxpanel import cli
+
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    texto = capsys.readouterr().out
+    for castellano in ("fallar", "renombrar", "pisar"):
+        assert castellano not in texto, castellano
+    assert "overwrite" in texto
+
+
+def test_the_spanish_spellings_still_work():
+    from vmaxpanel import cli
+    for grafia, esperado in (("pisar", "pisar"), ("overwrite", "pisar"),
+                             ("renombrar", "renombrar"), ("rename", "renombrar")):
+        assert cli.SI_EXISTE[cli._si_existe(grafia)] == esperado, grafia

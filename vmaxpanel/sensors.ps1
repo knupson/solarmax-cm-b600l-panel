@@ -136,6 +136,16 @@ while ($true) {
                 'Cpu' {
                     # Package power: el dato que estaba dado por imposible.
                     $cpuh.'cpu.power' = Sensor $hw 'Power' 'CPU Package'
+                    # Temperatura del paquete. Sin esto cpu.temp lo servia SOLO la
+                    # via GSA1 de Gigabyte, asi que en cualquier otra placa el
+                    # numero principal del panel quedaba vacio aunque LHM anduviera.
+                    # Intel la llama 'CPU Package'; AMD 'Core (Tctl/Tdie)'.
+                    # La prioridad de providers ya pone gsa1 antes que cpulhm, asi
+                    # que en una Gigabyte sigue mandando el sensor de la placa.
+                    $t = Sensor $hw 'Temperature' 'CPU Package'
+                    if ($null -eq $t) { $t = Sensor $hw 'Temperature' 'Core (Tctl/Tdie)' }
+                    if ($null -eq $t) { $t = Sensor $hw 'Temperature' 'CPU Cores' }
+                    if ($null -ne $t) { $cpuh.'cpu.temp' = [math]::Round($t, 1) }
                     # Por nucleo, con la numeracion 1-based de LHM para que
                     # coincida con lo que muestran las otras herramientas.
                     foreach ($s in $hw.Sensors) {

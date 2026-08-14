@@ -21,6 +21,11 @@ TTL = 30.0
 # the queries themselves.
 _SCRIPT = r"""
 $ErrorActionPreference = 'Stop'
+# Volume labels are free text and routinely carry accents. Without this PowerShell
+# writes the OEM codepage to the pipe while Python reads the ANSI one, and the
+# labels come back as mojibake -- or, on a byte cp1252 leaves undefined, as a
+# UnicodeDecodeError that takes every disk metric with it.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $vol = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object {
   [pscustomobject]@{ letra = $_.DeviceID.TrimEnd(':'); etiqueta = [string]$_.VolumeName
                      libre = [math]::Round($_.FreeSpace / 1GB, 2)
@@ -42,6 +47,10 @@ def _consultar_cim() -> dict:
     p = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive",
                         "-ExecutionPolicy", "Bypass", "-Command", _SCRIPT],
                        capture_output=True, text=True, timeout=20,
+                       # Explicit, and matching the script above. errors="replace"
+                       # so one odd byte costs a character rather than every disk
+                       # reading on the panel.
+                       encoding="utf-8", errors="replace",
                        creationflags=0x08000000)
     if p.returncode != 0:
         raise OSError(f"CIM failed: {(p.stderr or '').strip()[:120]}")

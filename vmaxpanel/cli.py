@@ -29,6 +29,19 @@ HERE = Path(__file__).resolve().parent
 SI_EXISTE = {"fail": "fallar", "rename": "renombrar", "overwrite": "pisar",
              "fallar": "fallar", "renombrar": "renombrar", "pisar": "pisar"}
 
+# Only the English spellings are ADVERTISED. Passing choices=tuple(SI_EXISTE) put
+# all six in the usage line of every --help, where they read as six different
+# options rather than three with aliases. The Spanish ones keep working.
+SI_EXISTE_PUBLICAS = ("fail", "rename", "overwrite")
+
+
+def _si_existe(valor):
+    """argparse type= for --if-exists: accepts either spelling, shows three."""
+    if valor not in SI_EXISTE:
+        opciones = ", ".join(SI_EXISTE_PUBLICAS)
+        raise argparse.ArgumentTypeError(f"{valor!r}: expected one of {opciones}")
+    return valor
+
 
 def default_profile_path() -> Path:
     return HERE / "profiles" / "vitals.json"
@@ -55,7 +68,9 @@ def status_path() -> Path:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="vmaxpanel")
-    ap.add_argument("--profile", type=Path, default=default_profile_path())
+    ap.add_argument("--profile", type=Path, default=default_profile_path(),
+                    metavar="FILE",
+                    help="the layout to use (default: the Vitals profile)")
     ap.add_argument("--save", type=Path,
                     help="render a PNG and exit, without touching the panel")
     ap.add_argument("--port", help="the panel's COM port; autodetected by default")
@@ -90,7 +105,8 @@ def main(argv=None) -> int:
                     metavar="FILE",
                     help="install a profile exported with --export")
     ap.add_argument("--if-exists", "--si-existe", dest="si_existe",
-                    choices=tuple(SI_EXISTE), default="fail",
+                    type=_si_existe, default="fail",
+                    metavar="{%s}" % ",".join(SI_EXISTE_PUBLICAS),
                     help="what to do on import when a profile of that name already "
                          "exists (default: fail and change nothing)")
     a = ap.parse_args(argv)

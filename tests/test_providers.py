@@ -110,3 +110,42 @@ def test_an_explicit_date_format_still_wins():
     p = PsutilProvider(date_fmt="%Y-%m-%d")
     t = time.localtime()
     assert p._date(t) == time.strftime("%Y-%m-%d", t)
+
+
+def test_the_cim_query_decodes_as_utf8_and_not_the_ansi_codepage(monkeypatch):
+    """A volume labelled with an accent broke every disk metric, silently.
+
+    subprocess ran with text=True and no encoding=, so Python decoded with the
+    machine's ANSI codepage while PowerShell writes the OEM one. A label like
+    "Copias de seguridad" came back as mojibake, and bytes undefined in cp1252
+    raised UnicodeDecodeError inside subprocess's reader thread -- which read()
+    swallows in its bare except, leaving every vol.* metric plus sys.uptime and
+    sys.procs at "--" forever, with nothing in the log.
+    """
+    import subprocess as sp
+
+    from vmaxpanel.providers import wmi_provider
+
+    visto = {}
+
+    class Fake:
+        returncode = 0
+        stdout = '{"volumenes": [{"letra": "D", "etiqueta": "M\u00fasica", ' \
+                 '"libre": 1.0, "total": 2.0}], "uptime": 1, "procesos": 2}'
+        stderr = ""
+
+    def falso_run(argv, **kw):
+        visto.update(kw)
+        visto["argv"] = argv
+        return Fake()
+
+    monkeypatch.setattr(sp, "run", falso_run)
+    datos = wmi_provider._consultar_cim()
+
+    assert visto.get("encoding") == "utf-8", "decoded with the ANSI codepage"
+    assert visto.get("errors"), "a single odd byte must not lose the whole query"
+    # And the PowerShell side has to agree, or forcing it on the Python side alone
+    # just moves the mojibake.
+    guion = visto["argv"][-1]
+    assert "OutputEncoding" in guion and "UTF8" in guion
+    assert datos["volumenes"][0]["etiqueta"] == "M\u00fasica"

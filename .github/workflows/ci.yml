@@ -60,8 +60,27 @@ jobs:
         continue-on-error: true
         run: choco install ffmpeg -y --no-progress
 
+      # The failing test names are emitted as a workflow ERROR as well as printed.
+      # Downloading a job's log needs repository admin rights, so on a public repo
+      # a plain "Process completed with exit code 1" is all an outside contributor
+      # -- or the maintainer, from a script -- can see. An error annotation is
+      # public, so the failure is legible without opening the web UI.
       - name: Run the suite
-        run: python -m pytest -q
+        shell: pwsh
+        run: |
+          $salida = python -m pytest -q --tb=short 2>&1 | Out-String
+          Write-Host $salida
+          if ($LASTEXITCODE -ne 0) {
+            $fallos = ($salida -split "`n" |
+                       Select-String -Pattern '^(FAILED|ERROR)|^E ' |
+                       Select-Object -First 15 |
+                       ForEach-Object { $_.ToString().Trim() }) -join ' %0A '
+            if (-not $fallos) { $fallos = 'pytest failed with no FAILED line; see the log' }
+            Write-Host "::error title=pytest ($env:PYTHON_VERSION)::$fallos"
+            exit 1
+          }
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
 
       # conftest.py kills any test running longer than 60 s and writes every
       # thread's stack here. Without this, a hang in CI is a silent timeout.
