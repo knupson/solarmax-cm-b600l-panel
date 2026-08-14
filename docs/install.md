@@ -86,6 +86,25 @@ power. They are not in the repo. Download LibreHardwareMonitor from
 [its releases page](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases) and
 copy **both** `LibreHardwareMonitorLib.dll` and `HidSharp.dll` into `vmaxpanel/lib/`.
 
+**Which build you take matters.** LibreHardwareMonitor reads CPU and motherboard sensors
+through a kernel driver, and older builds — 0.9.3 and earlier — use **WinRing0**, which is on
+Microsoft's vulnerable-driver blocklist: it hands arbitrary kernel read/write to any local
+process, and its certificate expired in 2008. Newer builds use **PawnIO**, which is signed and
+runs verified modules. Take a recent release.
+
+Measured, not assumed: the driver loads on `Computer.Open()` **with every sensor category
+disabled**, so there is no setting that avoids it — only a different build does. Stopping the
+panel unloads it again.
+
+After copying the DLLs, check what you ended up with:
+
+```powershell
+python -m vmaxpanel --diagnose
+```
+
+The `ring0` line names which driver that DLL would load, and lists any such driver loaded right
+now with the commands to remove it.
+
 Without them the panel still draws: clock, CPU load, CPU and VRM temperature, VCore, RAM,
 disks with real sizes, uptime, process count and network.
 

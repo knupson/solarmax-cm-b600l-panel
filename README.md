@@ -32,8 +32,10 @@ edited in a graphical editor with a working preview.
   colour rules, save and see it on the panel.
 - **Four profiles** out of the box — Apex, Apex (castellano), Embers and Vitals.
 - **Backgrounds**: solid, gradient, image, procedural, image sequence and video.
-- **Sensors without any ring0 driver**: CPU, GPU, RAM, disks, network, fans, temperatures and
-  voltages, from WMI, PDH, Gigabyte's GSA1 ACPI-WMI interface and LibreHardwareMonitor.
+- **Sensors**: CPU, GPU, RAM, disks, network, fans, temperatures and voltages, from WMI, PDH
+  and Gigabyte's GSA1 ACPI-WMI interface — none of which needs a kernel driver. The readings
+  that come from the **optional** LibreHardwareMonitor DLL do need one; pick a build that uses
+  PawnIO and `--diagnose` will confirm it. See [Security](SECURITY.md).
 - **Export and import**: a profile and its assets travel as a single `.vmaxpanel` file.
 - **Autostart**: a scheduled task brings the tray up at every logon.
 - Panel geometry and COM port **autodetected** — nothing about the hardware is hardcoded, so it

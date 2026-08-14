@@ -107,6 +107,11 @@ To bring the whole thing down, including the task and the sensor sidecar:
 python -m vmaxpanel --stop
 ```
 
+If you supplied the optional LibreHardwareMonitor DLL, this also **unloads the kernel driver it
+uses** and deletes its file — the sidecar is asked to close rather than simply killed, and
+closing is what removes it. Closing the tray with **Exit** leaves the engine's own shutdown to
+do the same. See [Security](../SECURITY.md) for why that matters and how to check.
+
 To stop it starting at logon for good:
 
 ```powershell
