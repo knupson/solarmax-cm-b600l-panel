@@ -55,6 +55,16 @@ Get-CimInstance Win32_SystemDriver | Where-Object { $_.Name -match '^R0' } |
     Select-Object Name, State, PathName
 ```
 
+Two things were measured against this DLL rather than assumed, and both matter:
+
+- **`Computer.Open()` loads the driver with every subsystem disabled.** Turning off CPU or
+  motherboard readings does not avoid it — it only costs readings. With a DLL of this
+  generation, using LibreHardwareMonitor *is* loading WinRing0.
+- **`Close()` unloads it and removes the `.sys` file.** The driver used to stay resident after
+  the panel was stopped only because the sidecar was killed with `TerminateProcess`, which runs
+  no cleanup. The engine now asks the sidecar to close and waits before killing it, so stopping
+  the panel takes the driver with it. Exposure lasts while the panel runs, not forever.
+
 **Use a LibreHardwareMonitor build that uses PawnIO instead.** PawnIO is a signed, sandboxed
 driver whose modules are verified, and it replaces WinRing0 for MSR access. `python -m
 vmaxpanel --diagnose` inspects the DLL you supplied and says which of the two it uses.

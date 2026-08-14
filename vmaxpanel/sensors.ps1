@@ -79,6 +79,17 @@ try {
     # escritura arbitraria de kernel para cualquier proceso local. La salida es una
     # build de LibreHardwareMonitor que use PawnIO. `--diagnose` mira el DLL y dice
     # cual de los dos usa.
+    #
+    # Apagar IsCpuEnabled NO evita la carga, y se probo: con TODOS los subsistemas
+    # deshabilitados, Computer.Open() carga igual el driver. Medido en Windows
+    # PowerShell 5.1 contra este mismo DLL --
+    #     antes: False / tras Open() sin subsistemas: True / tras Close(): False
+    # -- asi que apagarlos solo costaba metricas a cambio de nada. Con un DLL de
+    # esta generacion, usar LibreHardwareMonitor ES cargar WinRing0. La unica
+    # salida real es una build que use PawnIO.
+    #
+    # Lo que ese experimento SI da es la mitigacion: Close() lo descarga. El driver
+    # quedaba residente para siempre solo porque nunca cerrabamos.
     $comp.IsCpuEnabled = $true
     $comp.IsMotherboardEnabled = $true
     $comp.Open()
@@ -88,13 +99,26 @@ try {
 # despues de que el panel se baja. Solo cubre las salidas ordenadas: sidecar.py
 # mata con terminate(), que en Windows no corre nada de esto. Por eso `--diagnose`
 # ademas REPORTA el servicio que haya quedado vivo, en vez de confiar en esto.
-trap {
-    if ($null -ne $comp) { try { $comp.Close() } catch { } }
-    break
+function Cerrar-LHM {
+    if ($null -ne $script:comp) {
+        try { $script:comp.Close() } catch { }
+        $script:comp = $null
+    }
 }
-Register-EngineEvent PowerShell.Exiting -Action {
-    if ($null -ne $comp) { try { $comp.Close() } catch { } }
-} | Out-Null
+trap { Cerrar-LHM; break }
+Register-EngineEvent PowerShell.Exiting -Action { Cerrar-LHM } | Out-Null
+
+# Apagado ordenado. Sin esto el padre mata con TerminateProcess, que en Windows no
+# corre trap ni handlers, y el servicio del driver queda cargado despues de bajar el
+# panel. El padre señaliza este evento y espera; matar sigue siendo el respaldo.
+$evento = $null
+if ($env:VMAXPANEL_STOP_EVENT) {
+    try {
+        $evento = New-Object System.Threading.EventWaitHandle(
+            $false, [System.Threading.EventResetMode]::ManualReset,
+            $env:VMAXPANEL_STOP_EVENT)
+    } catch { $evento = $null }
+}
 
 function Gsa-Temp([byte]$id) {
     (Invoke-CimMethod -InputObject $gsa -MethodName ZFCGetCurrentTemp -Arguments @{ id = $id }).value
@@ -281,4 +305,6 @@ while ($true) {
     ($out | ConvertTo-Json -Compress -Depth 4)
     [Console]::Out.Flush()
     Start-Sleep -Milliseconds 900
+    if ($null -ne $evento -and $evento.WaitOne(0)) { break }
 }
+Cerrar-LHM

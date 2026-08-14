@@ -20,14 +20,54 @@ BACKOFF = [1.0, 2.0, 5.0, 10.0]
 KILL_TIMEOUT = 5.0
 
 
+# The named event the sidecar watches so it can shut down in an orderly way. It is
+# per-process so two engines do not stop each other.
+NOMBRE_EVENTO = f"vmaxpanel-stop-{os.getpid()}"
+SALIDA_ORDENADA = 3.0
+
+
+def _pedir_salida(nombre=NOMBRE_EVENTO, espera=SALIDA_ORDENADA, proc=None) -> bool:
+    """Signals the sidecar to close by itself. -> whether it did.
+
+    This matters for more than tidiness. LibreHardwareMonitor loads a kernel driver
+    on Computer.Open() -- with a 0.9.3-class DLL that driver is WinRing0, on the
+    Windows vulnerable-driver blocklist -- and it is Close() that removes its
+    service. TerminateProcess runs no cleanup at all, so killing the sidecar left
+    the driver loaded on the machine after the panel was stopped, indefinitely.
+
+    Best effort: on any failure the caller kills as before.
+    """
+    if proc is None or proc.poll() is not None:
+        return True
+    try:
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        h = k32.OpenEventW(0x0002, False, nombre)      # EVENT_MODIFY_STATE
+        if not h:
+            return False
+        try:
+            k32.SetEvent(h)
+        finally:
+            k32.CloseHandle(h)
+    except Exception:
+        return False
+    try:
+        proc.wait(timeout=espera)
+        return True
+    except Exception:
+        return False
+
+
 def _kill(proc):
-    """terminate() + wait(): it asks for the shutdown and then waits for it.
+    """Asks the sidecar to close, then terminates it and reaps it.
 
     Reaping the process is what releases the handle and the DLL it had loaded. A
     wait() that overruns its timeout must not bring the caller down -- we are on
     the shutdown path precisely -- so it is swallowed.
     """
     if proc is None:
+        return
+    if _pedir_salida(proc=proc):
         return
     try:
         proc.terminate()
@@ -46,6 +86,7 @@ def _default_spawn(script):
              "-File", os.fspath(script)],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, encoding="utf-8", errors="replace",
+            env={**os.environ, "VMAXPANEL_STOP_EVENT": NOMBRE_EVENTO},
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return spawn
 
