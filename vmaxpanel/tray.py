@@ -394,7 +394,7 @@ class Tray:
             user32.DestroyMenu(sub)
         else:
             user32.AppendMenuW(menu, MF_STRING | MF_POPUP, sub,
-                               "Cuadros por segundo")
+                               "Frames per second")
         user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, MF_STRING, CMD_EDITOR, "Layout editor…")
         user32.AppendMenuW(menu, MF_STRING, CMD_PROFILE, "Open the profile (JSON)")

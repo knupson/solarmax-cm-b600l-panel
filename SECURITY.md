@@ -29,8 +29,8 @@ it targets and why. If you are unsure whether a method writes, treat it as if it
 
 The same reasoning is why **WinRing0 is not used**. It is the ring0 driver
 LibreHardwareMonitor loads for MSR access; Windows blocks it as a known-vulnerable driver, and
-this project does not work around that block. The cost is real — package power and CPU fan RPM
-cannot be read at all — and it is accepted rather than bypassed.
+this project does not work around that block. Every reading it ships comes from a driverless
+interface.
 
 ### 2. It runs elevated
 

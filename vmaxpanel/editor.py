@@ -1355,7 +1355,7 @@ class EditorWindow:
                        [("Imagen", "*.png *.jpg *.jpeg *.bmp *.gif")])
             elegido = filedialog.askopenfilename(
                 parent=self.root, title="Background file",
-                filetypes=filtros + [("Todos", "*.*")])
+                filetypes=filtros + [("All files", "*.*")])
         if elegido:
             self._usar_asset(Path(elegido))
 
@@ -2203,9 +2203,9 @@ class EditorWindow:
         from tkinter import filedialog
         sugerido = f"{self.state.path.stem}{bundle.EXT}"
         destino = filedialog.asksaveasfilename(
-            parent=self.root, title="Exportar perfil",
+            parent=self.root, title="Export profile",
             initialfile=sugerido, defaultextension=bundle.EXT,
-            filetypes=[("Perfil de VMax Panel", f"*{bundle.EXT}")])
+            filetypes=[("VMax Panel profile", f"*{bundle.EXT}")])
         if destino:
             self._exportar_a(Path(destino))
 
@@ -2238,9 +2238,9 @@ class EditorWindow:
     def _pedir_importar(self):
         from tkinter import filedialog
         origen = filedialog.askopenfilename(
-            parent=self.root, title="Importar perfil",
-            filetypes=[("Perfil de VMax Panel", f"*{bundle.EXT}"),
-                       ("Todos", "*.*")])
+            parent=self.root, title="Import profile",
+            filetypes=[("VMax Panel profile", f"*{bundle.EXT}"),
+                       ("All files", "*.*")])
         if origen:
             self._importar_de(Path(origen))
 

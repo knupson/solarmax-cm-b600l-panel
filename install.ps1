@@ -84,18 +84,18 @@ foreach ($candidato in @(
     } catch { continue }
     if ($LASTEXITCODE -ne 0 -or -not $v) { continue }
     $partes = "$v".Trim().Split(".")
-    if ([int]$partes[0] -eq 3 -and [int]$partes[1] -ge 10) {
+    if ([int]$partes[0] -eq 3 -and [int]$partes[1] -ge 11) {
         $pythonExe = $cmd.Source
         $pythonArgs = $candidato.args
         Ok "Python $("$v".Trim()) ($($cmd.Source))"
         break
     }
-    Aviso "Python $("$v".Trim()) found at $($cmd.Source): too old, 3.10 or newer is needed"
+    Aviso "Python $("$v".Trim()) found at $($cmd.Source): too old, 3.11 or newer is needed"
 }
 
 if (-not $pythonExe) {
     Write-Host ""
-    Write-Host "  Python 3.10 or newer is not installed." -ForegroundColor Red
+    Write-Host "  Python 3.11 or newer is not installed." -ForegroundColor Red
     Write-Host ""
     Write-Host "  Install it and run this script again:"
     Write-Host "      winget install Python.Python.3.13" -ForegroundColor White
