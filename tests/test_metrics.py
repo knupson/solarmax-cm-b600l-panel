@@ -37,6 +37,24 @@ def test_disk_metrics_are_positional():
     assert not is_metric("cpu.powr")
 
 
+def test_the_disk_name_is_a_text_metric_with_the_index_in_its_label():
+    """The profiles bind their SSD headings to disk.name.N. Two things have to
+    hold: the validator accepts the id (or the profile is rejected whole and the
+    panel keeps the previous layout), and spec_for carries the index into the
+    label -- without it every disk collapses into one entry in the editor's
+    selector and picking one writes another, which already happened with
+    disk.temp.0/1/2."""
+    assert is_metric("disk.name.0")
+    assert is_metric("disk.name.7")
+    assert not is_metric("disk.name.x")
+    assert not is_metric("disk.name.")
+    spec = metrics.spec_for("disk.name.2")
+    assert spec.kind == "text"          # a drive letter, not a number to format
+    assert "2" in spec.label
+    assert metrics.spec_for("disk.name.2").label != metrics.spec_for("disk.name.3").label
+    assert metrics.group_for("disk.name.0") == "Disks"
+
+
 def test_is_metric_rejects_a_non_string_instead_of_raising():
     """schema.validate() passes it whatever is in the JSON. With an integer,
     _DISK_RE.match tiraba TypeError y validate() reventaba en vez de

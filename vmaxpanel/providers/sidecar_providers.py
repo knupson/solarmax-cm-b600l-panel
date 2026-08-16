@@ -176,8 +176,8 @@ class LhmProvider(_SidecarProvider):
     Ordering hazard: `served` reads the first sample that arrived from the sidecar.
     `Registry` calls `metrics()` once, in its constructor. If the `Registry` is
     built before the sidecar delivers that first sample (`client.wait_ready()`
-    without waiting), the `disk.temp.N` ids are left out for that entire run: there
-    is no later revalidation.
+    without waiting), the per-disk ids (`disk.temp.N`, `disk.name.N`) are left out
+    for that entire run: there is no later revalidation.
     """
 
     id = "lhm"
@@ -189,7 +189,8 @@ class LhmProvider(_SidecarProvider):
 
     @property
     def served(self):
-        disks = {k for k in self._c.namespace("lhm") if k.startswith("disk.temp.")}
+        disks = {k for k in self._c.namespace("lhm")
+                 if k.startswith("disk.temp.") or k.startswith("disk.name.")}
         return self._FIXED | disks
 
     def metrics(self) -> set[str]:

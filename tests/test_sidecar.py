@@ -268,6 +268,26 @@ def test_the_set_of_disk_ids_does_not_depend_on_which_disks_answered():
     assert {"disk.temp.0", "disk.temp.1", "disk.temp.2"} <= LhmProvider(c).metrics()
 
 
+def test_the_disk_name_travels_beside_its_temperature():
+    """disk.name.N is what lets the panel say "C:" instead of "SSD 2". It is
+    discovered the same way as the temperature -- from the first sample -- so a
+    provider that served the temperatures but dropped the names would leave the
+    profile's headings unavailable while the numbers kept working."""
+    sample = {**SAMPLE, "lhm": {**SAMPLE["lhm"],
+                                "disk.temp.0": 34.0, "disk.name.0": "C:",
+                                "disk.temp.1": 40.0, "disk.name.1": "D:"}}
+    c, _ = client_for(sample)
+    r = Registry([LhmProvider(c)])
+    assert {"disk.name.0", "disk.name.1"} <= LhmProvider(c).metrics()
+    s = r.read()
+    # The pairing is what matters, and it survives the trip through the Registry:
+    # the heading and the temperature of one disk must not end up in different
+    # columns. Which drive lands on index 0 is the sidecar's business (it sorts
+    # them by name); here the point is only that the pair travels together.
+    assert (s["disk.name.0"], s["disk.temp.0"]) == ("C:", 34.0)
+    assert (s["disk.name.1"], s["disk.temp.1"]) == ("D:", 40.0)
+
+
 def test_close_does_not_leave_the_reader_thread_sleeping_out_the_backoff(monkeypatch):
     """The respawn slept with time.sleep, which does not notice _stop: after close()
     the reader thread stayed alive for up to 10 s (the longest backoff). It is a

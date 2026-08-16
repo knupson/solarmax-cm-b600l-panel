@@ -59,11 +59,11 @@
     {"id": "up", "type": "text", "metric": "net.up", "x": 296, "y": 1268, "font": "small", "color": "#86B6EF", "format": "{}", "humanize": "rate", "align": "right"},
     {"id": "uptime-tag", "type": "label", "text": "UPTIME", "x": 22, "y": 1326, "font": "tag", "color": "#898781"},
     {"id": "uptime", "type": "text", "metric": "sys.uptime", "x": 296, "y": 1320, "font": "small", "color": "#86B6EF", "format": "{}", "humanize": "duration", "align": "right"},
-    {"id": "ssd-tag-0", "type": "label", "text": "SSD 1", "x": 22, "y": 1372, "font": "tag", "color": "#898781"},
+    {"id": "ssd-tag-0", "type": "text", "metric": "disk.name.0", "format": "{}", "x": 22, "y": 1372, "font": "tag", "color": "#898781"},
     {"id": "ssd-0", "type": "text", "metric": "disk.temp.0", "x": 22, "y": 1392, "font": "small", "color": "#86B6EF", "format": "{:.0f}°", "rules": [{"when": "> 60", "color": "#FF5555"}]},
-    {"id": "ssd-tag-1", "type": "label", "text": "SSD 2", "x": 112, "y": 1372, "font": "tag", "color": "#898781"},
+    {"id": "ssd-tag-1", "type": "text", "metric": "disk.name.1", "format": "{}", "x": 112, "y": 1372, "font": "tag", "color": "#898781"},
     {"id": "ssd-1", "type": "text", "metric": "disk.temp.1", "x": 112, "y": 1392, "font": "small", "color": "#86B6EF", "format": "{:.0f}°", "rules": [{"when": "> 60", "color": "#FF5555"}]},
-    {"id": "ssd-tag-2", "type": "label", "text": "SSD 3", "x": 202, "y": 1372, "font": "tag", "color": "#898781"},
+    {"id": "ssd-tag-2", "type": "text", "metric": "disk.name.2", "format": "{}", "x": 202, "y": 1372, "font": "tag", "color": "#898781"},
     {"id": "ssd-2", "type": "text", "metric": "disk.temp.2", "x": 202, "y": 1392, "font": "small", "color": "#86B6EF", "format": "{:.0f}°", "rules": [{"when": "> 60", "color": "#FF5555"}]}
   ]
 }

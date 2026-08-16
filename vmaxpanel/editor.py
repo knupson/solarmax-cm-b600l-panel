@@ -90,9 +90,12 @@ def demo_sample() -> dict:
             lo = spec.min if spec.min is not None else 0.0
             hi = spec.max if spec.max is not None else lo + 100.0
             out[mid] = round(lo + (hi - lo) * 0.5, 2)
-    # disk.temp.N is not in METRICS (it is a pattern), but the profiles use them.
+    # disk.temp.N / disk.name.N are not in METRICS (they are patterns), but the
+    # profiles use them. The demo names are plausible drive letters rather than
+    # "DISK 0": what the preview shows is what the panel will show.
     for n in range(4):
         out[f"disk.temp.{n}"] = 34.0 + n
+        out[f"disk.name.{n}"] = f"{'CDEF'[n]}:"
     return out
 
 

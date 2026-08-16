@@ -20,6 +20,11 @@ SAMPLE = {
     "mem.load": 42.3, "mem.used": 13.5, "mem.total": 32.0, "mem.speed": 5600.0,
     "net.down": 1258291.0, "net.up": 40960.0, "sys.uptime": 33098.0,
     "disk.temp.0": 34.0, "disk.temp.1": 40.0, "disk.temp.2": 41.0,
+    # The headings above the three temperatures. They are read, not written into
+    # the profile. The sidecar numbers the disks sorted by name, so index 0 is
+    # whatever drive comes first alphabetically and not whatever
+    # LibreHardwareMonitor happened to enumerate first (which here is D:).
+    "disk.name.0": "C:", "disk.name.1": "D:", "disk.name.2": "E:",
 }
 
 

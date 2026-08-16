@@ -177,7 +177,7 @@ while ($true) {
         $l = [ordered]@{}
         $cpuh = [ordered]@{}
         $mobo = [ordered]@{}
-        $disk = 0
+        $discos = @()
         $lhmOk = $false
         foreach ($hw in $comp.Hardware) {
             $hw.Update()
@@ -259,19 +259,34 @@ while ($true) {
                     # se emite igual. Se prueban los dos nombres.
                     $t = Sensor $hw 'Temperature' 'Temperature'
                     if ($null -eq $t) { $t = Sensor $hw 'Temperature' 'Composite Temperature' }
-                    # El indice sale de la POSICION del disco en la enumeracion,
-                    # no de cuantos contestaron. Antes se incrementaba solo
-                    # cuando habia lectura, asi que un SSD que falla una vuelta
-                    # CORRIA el indice de todos los que venian despues: los tres
-                    # numeros del panel cambiaban de significado entre muestras
-                    # sin que nada avisara. La clave se emite siempre, con null
-                    # si esta vuelta no hubo temperatura, para que el conjunto de
-                    # ids sea estable -- LhmProvider.served los descubre de la
-                    # primera muestra y un disco ausente ahi no volvia a
-                    # aparecer nunca.
-                    $l."disk.temp.$disk" = $t
+                    # Como se llama ESTE disco, para que el panel no diga "SSD 1".
+                    # La enumeracion de LHM no es la de Windows: en esta maquina
+                    # su primer disco es el drive #2 y el segundo el #1. Etiquetar
+                    # a mano "SSD 1/2/3" en el perfil daba tres numeros que no
+                    # corresponden a nada -- y peor, el perfil se comparte, asi
+                    # que en otra maquina el orden es otro y la etiqueta miente
+                    # sin avisar (el mismo modo de falla que la RAM horneada en
+                    # 6000). La letra sale de Partitions del MISMO objeto que dio
+                    # la temperatura, no de una consulta aparte: asi no hay dos
+                    # enumeraciones que puedan desincronizarse.
+                    #
+                    # Varias letras en un disco se juntan ("C:/D:"). Un disco sin
+                    # ninguna letra montada -- un disco de datos sin asignar, el
+                    # de otro sistema operativo -- cae al numero de disco de
+                    # Windows ("#2"), que es corto y no se lo puede confundir con
+                    # un indice inventado.
+                    $letras = @()
+                    foreach ($p in $hw.Storage.Partitions) {
+                        if ($p.DriveLetter) { $letras += "$($p.DriveLetter):" }
+                    }
+                    if ($letras.Count -gt 0) {
+                        $nombreDisco = ($letras -join '/')
+                    } else {
+                        $nombreDisco = "#$($hw.Storage.DriveNumber)"
+                    }
+                    # Se junta y se numera despues del loop, ordenado por nombre.
+                    $discos += ,@{ temp = $t; name = $nombreDisco }
                     if ($null -ne $t) { $lhmOk = $true }
-                    $disk++
                 }
                 'Motherboard' {
                     # Los sensores de la placa viven en el SuperIO, que cuelga
@@ -302,6 +317,32 @@ while ($true) {
                     if ($mobo.Contains('fan.1.rpm')) { $mobo.'cpu.fan' = $mobo.'fan.1.rpm' }
                 }
             }
+        }
+        # Los discos se numeran ORDENADOS POR NOMBRE, no por la enumeracion de
+        # LibreHardwareMonitor, que no sigue ningun orden util: aca devuelve D:,
+        # C:, E: y el panel mostraba las tres columnas desordenadas. Ordenar aca
+        # y no en el perfil es lo que hace que el perfil siga sirviendo en otra
+        # maquina: si el orden lo arreglara el perfil (columna 0 -> disk.temp.1)
+        # seria otro valor horneado, y en cualquier otro equipo saldria mezclado.
+        #
+        # El indice sigue sin depender de cuantos discos CONTESTARON: las dos
+        # claves se emiten siempre para cada disco, con temp null si esta vuelta
+        # no hubo lectura. Antes el contador subia solo cuando habia temperatura,
+        # asi que un SSD que falla una vuelta CORRIA el indice de todos los que
+        # venian despues y los tres numeros del panel cambiaban de significado
+        # entre muestras sin que nada avisara -- y LhmProvider.served descubre los
+        # ids de la PRIMERA muestra, asi que un disco ausente ahi no volvia a
+        # aparecer nunca.
+        #
+        # Lo que si puede correr el indice es que cambien las letras (se monta un
+        # pendrive en D:). Eso ya no puede mentir: el nombre viaja en la MISMA
+        # muestra que la temperatura, asi que la columna se reetiqueta sola. Era
+        # justamente el rotulo escrito a mano lo que hacia silencioso el corrimiento.
+        $i = 0
+        foreach ($d in ($discos | Sort-Object { $_.name })) {
+            $l."disk.temp.$i" = $d.temp
+            $l."disk.name.$i" = $d.name
+            $i++
         }
         # caps.lhm refleja si ESTA vuelta realmente saco algun sensor de GPU o
         # disco, no si Computer.Open() funciono al arrancar.

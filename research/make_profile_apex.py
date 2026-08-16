@@ -212,8 +212,16 @@ def fila_datos(prefijo, y, columnas, alto_fila=46):
     paso = ANCHO_UTIL // n
     for i, col in enumerate(columnas):
         centro = IZQ + i * paso + paso // 2
-        rotulo(f"{prefijo}-r{i}", col["rotulo"], centro, y, font="micro",
-               color=LABEL, align="center")
+        if col.get("rotulo_metric"):
+            # El rotulo tambien sale de una metrica: la columna se nombra sola
+            # con lo que hay en ESTA maquina. Es lo que necesitan las temperaturas
+            # de SSD, donde un "SSD 1" escrito a mano nombra la posicion en la
+            # enumeracion de LibreHardwareMonitor y no la unidad.
+            valor(f"{prefijo}-r{i}", col["rotulo_metric"], centro, y, "{}",
+                  font="micro", color=LABEL, align="center")
+        else:
+            rotulo(f"{prefijo}-r{i}", col["rotulo"], centro, y, font="micro",
+                   color=LABEL, align="center")
         if col.get("metric"):
             valor(f"{prefijo}-v{i}", col["metric"], centro, y + 16, col["fmt"],
                   font=col.get("font", "dato"), align="center",
@@ -353,8 +361,8 @@ for i, (letra, nombre) in enumerate(VOLS):
 # tres numeros tirados.
 TEMP_SSD = [{"when": "> 60", "color": NARANJA}, {"when": "> 70", "color": AMBAR}]
 fila_datos("ssd", y + len(VOLS) * 38 + 8, [
-    {"rotulo": f"SSD {n + 1}", "metric": f"disk.temp.{n}", "fmt": "{:.0f}°",
-     "font": "dato-s", "rules": TEMP_SSD} for n in range(3)])
+    {"rotulo_metric": f"disk.name.{n}", "metric": f"disk.temp.{n}",
+     "fmt": "{:.0f}°", "font": "dato-s", "rules": TEMP_SSD} for n in range(3)])
 
 # ==========================================================================
 # RED: dos trazas, porque lo que importa es el pico, no el instante

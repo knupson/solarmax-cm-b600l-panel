@@ -81,8 +81,15 @@ METRICS: dict[str, MetricSpec] = {m.id: m for m in [
 ]}
 
 _DISK_RE = re.compile(r"^disk\.temp\.(\d+)$")
+_DISK_NAME_RE = re.compile(r"^disk\.name\.(\d+)$")
 
 DISK_TEMP_SPEC = _n("disk.temp.N", "Disk temperature", "°C", 0.0, 100.0)
+# Text, so it goes through _familia's number-only path: what identifies disk N on
+# THIS machine -- its drive letters ("C:", "C:/D:") or its Windows disk number
+# when it has none. It exists so the panel can label a temperature with the drive
+# it belongs to instead of a hand-written "SSD 1", which names the position in
+# LibreHardwareMonitor's enumeration and matches no drive in particular.
+DISK_NAME_SPEC = _t("disk.name.N", "Disk name")
 
 
 def slug(nombre) -> str:
@@ -235,7 +242,7 @@ def is_metric(mid) -> bool:
     if not isinstance(mid, str):
         return False
     return (mid in METRICS or bool(_DISK_RE.match(mid))
-            or _familia(mid) is not None)
+            or bool(_DISK_NAME_RE.match(mid)) or _familia(mid) is not None)
 
 
 def spec_for(mid) -> MetricSpec | None:
@@ -251,6 +258,11 @@ def spec_for(mid) -> MetricSpec | None:
         return MetricSpec(mid, f"Disk {m.group(1)} — temperature",
                           DISK_TEMP_SPEC.unit, "number",
                           DISK_TEMP_SPEC.min, DISK_TEMP_SPEC.max)
+    m = _DISK_NAME_RE.match(mid)
+    if m:
+        # Same reason as the temperature above: the index goes in the label, or
+        # every disk shares one entry in the editor's selector.
+        return MetricSpec(mid, f"Disk {m.group(1)} — name", "", "text")
     fam = _familia(mid)
     if fam is not None:
         label, unidad, lo, hi = fam
