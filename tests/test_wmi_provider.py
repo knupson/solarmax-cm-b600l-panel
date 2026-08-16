@@ -4,6 +4,9 @@ Tested with a fake CIM runner, without touching WMI: what matters is the mapping
 to metric ids, the catalogue of friendly names and the cache -- not
 PowerShell.
 """
+import threading
+import time
+
 import pytest
 
 from vmaxpanel.metrics import is_metric
@@ -79,7 +82,7 @@ def test_the_catalog_groups_by_device():
 
 
 def test_wmi_is_not_queried_on_every_read():
-    """Querying the four volumes costs ~300 ms. At 1 fps that is a third of the
+    """Querying the volumes costs ~550 ms measured. At 1 fps that is over half the
     frame budget for a value that changes every few minutes."""
     cim = FakeCim()
     p = WmiProvider(cim=cim, ttl=30.0)
@@ -96,3 +99,83 @@ def test_a_failing_query_does_not_break_the_read():
     assert p.probe() is False
     assert p.unavailable_reason
     assert p.read() == {}
+
+
+class CimQueSeCuelga:
+    """First call answers at once; every later one blocks until it is released.
+
+    It is the shape of the real failure: the query is fine until the disk is
+    saturated, and then it takes seconds.
+    """
+
+    def __init__(self):
+        self.llamadas = 0
+        self.entro = threading.Event()
+        self.soltar = threading.Event()
+
+    def __call__(self):
+        self.llamadas += 1
+        if self.llamadas > 1:
+            self.entro.set()
+            if not self.soltar.wait(10):
+                raise TimeoutError("nadie solto la consulta de fondo")
+        return {"volumenes": VOLUMENES, "uptime": 32040.0, "procesos": 193}
+
+
+def test_a_stale_cache_is_refreshed_off_the_calling_thread():
+    """The engine calls read() from inside _render_once(). A query that blocks
+    there stops frames from going out, and the panel resets itself after ~2-3 s
+    without data -- which is what made it restart over and over while the machine
+    was extracting a big archive. read() must come back at once and let the
+    refresh happen somewhere else.
+    """
+    cim = CimQueSeCuelga()
+    p = WmiProvider(cim=cim, ttl=0.0)        # everything is stale immediately
+    assert p.read()["vol.C.free"] == 270.0   # the first one IS synchronous: start-up
+
+    t0 = time.perf_counter()
+    m = p.read()
+    tardo = time.perf_counter() - t0
+
+    assert cim.entro.wait(5), "el refresco de fondo nunca arranco"
+    assert tardo < 0.5, (f"read() bloqueo {tardo:.2f} s: la consulta sigue "
+                         f"corriendo en el hilo del render")
+    assert m["vol.C.free"] == 270.0          # meanwhile it serves the last good one
+    cim.soltar.set()
+
+
+def test_a_failing_refresh_keeps_the_last_good_reading():
+    """One query that fails must not blank every disk on the panel: the reading it
+    replaces is seconds old, not wrong."""
+    estado = {"falla": False}
+
+    def cim():
+        if estado["falla"]:
+            raise OSError("WMI no responde")
+        return {"volumenes": VOLUMENES, "uptime": 32040.0, "procesos": 193}
+
+    p = WmiProvider(cim=cim, ttl=0.0)
+    assert p.read()["vol.C.free"] == 270.0
+    estado["falla"] = True
+    for _ in range(40):                      # let a background attempt run and fail
+        p.read()
+        if p.unavailable_reason:
+            break
+        time.sleep(0.05)
+    assert p.unavailable_reason, "el fallo tiene que quedar dicho en algun lado"
+    assert p.read()["vol.C.free"] == 270.0
+
+
+def test_a_refresh_that_never_comes_back_stops_serving_the_old_reading():
+    """Stale for a moment is the whole point of the background refresh. Stale
+    forever is the panel showing a number that stopped being true with nobody
+    finding out -- this project already has that scar (the RAM speed baked into a
+    profile). Past the ceiling the metrics go unavailable and the panel draws
+    dashes, which is the honest answer."""
+    cim = CimQueSeCuelga()
+    p = WmiProvider(cim=cim, ttl=0.0, max_stale=0.2)
+    assert p.read()["vol.C.free"] == 270.0
+    time.sleep(0.35)
+    assert p.read() == {}
+    assert p.unavailable_reason
+    cim.soltar.set()

@@ -4,18 +4,42 @@ Deliberately apart from the sidecar. The sidecar exists for what needs
 LibreHardwareMonitor or Gigabyte's GSA1 interface; this is plain CIM, queried
 without elevation and without third-party DLLs.
 
-**With its own cache.** Querying the volumes costs ~300 ms measured: at 1 fps
-that is a third of a frame's budget, and a disk's free space does not change
-between frames. The engine has a single sampling cadence for every provider, so
-the one that knows what its own reading costs is the provider.
+**With its own cache, refreshed OFF the render thread.** The engine calls
+`registry.read()` from inside `_render_once()`, so anything slow here stops
+frames from going out. Measured on the development machine, idle, this query
+costs **~550 ms** -- over half a frame's budget at 1 fps -- and its only ceiling
+is the 20 s subprocess timeout.
+
+That mattered for real. **The panel resets itself after ~2-3 s without data**
+(measured against the hardware: a 2 s gap survives, 5 s and 10 s reset it). While
+the machine was extracting a large archive, the two things this query needs --
+spawning a process and asking the storage stack about free space -- were exactly
+what the saturated disk made wait, so it blew past the watchdog and the panel
+restarted, once every TTL, for as long as the load lasted. Nothing showed up
+anywhere: the write never failed, so the engine logged no error, and it is the
+panel's display controller that resets and not its USB bridge, so Windows never
+saw a re-enumeration either.
+
+So the blocking call is gone from the caller's path: `read()` returns whatever
+was last fetched and a daemon thread refreshes in the background. The first
+fetch is still synchronous, because it happens once at start-up (`probe()`) and
+`metrics()` cannot report which volumes exist before it.
 """
 import subprocess
+import threading
 import time
 
 from ..metrics import MetricSpec, spec_for
 from .base import Provider
 
 TTL = 30.0
+
+# How stale the cache may get before the data stops being served at all. Serving
+# the last good reading through a hiccup is the point of the background refresh;
+# serving it forever is how a panel ends up showing a number that stopped being
+# true hours ago and nobody notices -- the RAM speed baked into a profile, again.
+# Beyond this the metrics go unavailable, which the panel draws as dashes.
+MAX_STALE = 10 * TTL
 
 # A single PowerShell for all three queries: starting the process costs more than
 # the queries themselves.
@@ -66,22 +90,74 @@ def _consultar_cim() -> dict:
 class WmiProvider(Provider):
     id = "wmi"
 
-    def __init__(self, cim=None, ttl=TTL):
+    def __init__(self, cim=None, ttl=TTL, max_stale=MAX_STALE):
         self._cim = cim or _consultar_cim
         self._ttl = ttl
+        self._max_stale = max_stale
         self._datos = None
         self._leido = 0.0
+        self._lock = threading.Lock()
+        self._refrescando = False
         self.unavailable_reason = None
 
     # --- cache ---
 
+    def _traer(self):
+        """The query itself, plus bookkeeping. Runs on whichever thread calls it."""
+        try:
+            datos = self._cim()
+        except Exception as e:
+            # The last good reading is kept: one failed query should not blank
+            # every disk on the panel. _actual() is what decides when it has
+            # gone too stale to keep showing.
+            with self._lock:
+                self._refrescando = False
+                self.unavailable_reason = f"could not query WMI: {e}"
+            raise
+        with self._lock:
+            self._datos = datos
+            self._leido = time.time()
+            self._refrescando = False
+            self.unavailable_reason = None
+        return datos
+
+    def _refrescar_en_fondo(self):
+        with self._lock:
+            if self._refrescando:
+                return              # one in flight is enough
+            self._refrescando = True
+        # daemon: a refresh in progress must never hold up interpreter shutdown,
+        # and the subprocess it is waiting on can take up to its 20 s timeout.
+        h = threading.Thread(target=self._intento_de_fondo, daemon=True,
+                             name="wmi-refresh")
+        h.start()
+
+    def _intento_de_fondo(self):
+        try:
+            self._traer()
+        except Exception:
+            pass                    # already recorded in unavailable_reason
+
     def _actual(self):
-        ahora = time.time()
-        if self._datos is not None and ahora - self._leido < self._ttl:
-            return self._datos
-        self._datos = self._cim()
-        self._leido = ahora
-        return self._datos
+        """The cached reading. NEVER blocks once there is one.
+
+        The first call is the exception: it is start-up, and returning None there
+        would leave metrics() unable to say which volumes exist -- Registry reads
+        that once, in its constructor, so a volume missing from it never appears
+        again for the whole run.
+        """
+        with self._lock:
+            datos, leido = self._datos, self._leido
+        if datos is None:
+            return self._traer()
+        edad = time.time() - leido
+        if edad >= self._ttl:
+            self._refrescar_en_fondo()
+        if edad > self._max_stale:
+            # Too old to keep passing off as current.
+            raise OSError(f"the WMI reading is {edad:.0f} s old and the refresh "
+                          f"is not coming back")
+        return datos
 
     def probe(self) -> bool:
         try:

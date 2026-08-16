@@ -117,6 +117,12 @@ def describe(estado, ahora=None, vivo=None) -> str:
                   f"panel {estado.get('panel') or '?'}, "
                   f"{estado.get('frames') or 0} frames, "
                   f"{_fps(estado.get('fps'))} fps")
+    # Only when there were any: a "0 reconnections" on every healthy run is noise,
+    # and the whole point of this output is that anything printed is worth reading.
+    reconexiones = estado.get("reconnects") or 0
+    if reconexiones:
+        lineas.append(f"{reconexiones} reconnection(s) since it started - the panel "
+                      f"re-does the handshake on each one, which looks like a restart")
     lineas.append(f"published {edad:.0f} s ago (pid {pid})")
     if edad > VIEJO and estado.get("running"):
         # A process can be alive and not publishing: an engine wedged in a write to

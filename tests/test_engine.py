@@ -195,6 +195,27 @@ def test_serial_failure_reconnects_with_backoff(tmp_path):
     assert eng.state()["panel"] == "disconnected"
 
 
+def test_state_publishes_the_reconnection_count(tmp_path):
+    """Each reconnection re-does the handshake, and the panel shows that as a
+    restart. The counter existed from the start but stayed inside stats, so when
+    the user reported "the panel restarted several times" there was no observable
+    to check it against -- the state file said nothing.
+
+    It is not a complete account of restarts, and it cannot be: the panel also
+    resets itself after ~2-3 s without data, and that path raises nothing, so it
+    leaves this at zero. Which is exactly what makes it worth reading -- a restart
+    with reconnects == 0 means the render loop stalled, not that the port failed.
+    """
+    eng, _, _ = engine(tmp_path, iterations=2)
+    eng.run()
+    assert eng.state()["reconnects"] == 0     # nothing failed: nothing to report
+
+    dead = FakeTransport(fail_on_write=OSError("puerto tomado"))
+    eng2, _, _ = engine(tmp_path, transports=[dead, FakeTransport()], iterations=2)
+    eng2.run()
+    assert eng2.state()["reconnects"] == 1
+
+
 def test_clean_exit_closes_the_link(tmp_path):
     eng, made, _ = engine(tmp_path, iterations=2)
     eng.run()

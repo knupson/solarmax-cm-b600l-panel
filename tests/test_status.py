@@ -105,6 +105,31 @@ def test_problems_are_listed(archivo):
     assert "profile rejected" in texto
 
 
+def test_reconnections_are_reported_because_the_panel_restarts_on_each_one(archivo):
+    """Every reconnection re-sends the handshake and the panel shows that as a
+    restart. The engine counted them from the start and never published the
+    number, so "the panel restarted several times" had no observable to check
+    against."""
+    archivo.write({"running": True, "frames": 300, "panel": "ok", "reconnects": 4})
+    texto = status.describe(archivo.read(), ahora=archivo._clock(),
+                            vivo=lambda p: True)
+    assert "4 reconnection" in texto
+
+
+def test_no_reconnections_says_nothing_at_all(archivo):
+    """A "0 reconnections" on every healthy run is noise, and this output is only
+    useful while everything printed in it is worth reading."""
+    archivo.write({"running": True, "frames": 300, "panel": "ok", "reconnects": 0})
+    texto = status.describe(archivo.read(), ahora=archivo._clock(),
+                            vivo=lambda p: True)
+    assert "reconnection" not in texto
+    # and the same with an old status file, written before the field existed
+    archivo.write({"running": True, "frames": 300, "panel": "ok"})
+    assert "reconnection" not in status.describe(archivo.read(),
+                                                 ahora=archivo._clock(),
+                                                 vivo=lambda p: True)
+
+
 def test_a_paused_panel_is_not_reported_as_drawing(archivo):
     """Paused releases the port, which is how the panel is lent to LCD Control.
     Confusing it with stopped sends the user to restart something that is fine."""

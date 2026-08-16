@@ -65,6 +65,17 @@ class Engine:
             "unavailable": self._sin_datos(layout),
             "warnings": (self._renderer.warnings() if self._renderer else []) + self.store.errors,
             "frames": self.stats["frames"],
+            # Published, and not only counted. Every reconnection re-sends the
+            # handshake, which the panel shows as a restart, so this is the one
+            # number that says "the panel blinked and here is how often". It was
+            # tracked from the start and kept to itself, so the only way to know
+            # was to read the counter in a debugger.
+            #
+            # It does NOT cover every restart: the panel also resets itself after
+            # ~2-3 s without data, and that path never raises, so it leaves this
+            # counter at zero. A restart with reconnects == 0 means the loop
+            # stalled; with reconnects > 0 it means the transport failed.
+            "reconnects": self.stats["reconnects"],
             "last_error": self._last_error,
         }
 
