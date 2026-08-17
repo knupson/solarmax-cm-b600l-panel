@@ -49,6 +49,7 @@ and for NVMe SMART, which is why the autostart task runs elevated.
 | CPU package power | LibreHardwareMonitor, Intel RAPL |
 | Per-core load, clock and temperature | LibreHardwareMonitor |
 | Fan RPM | LibreHardwareMonitor, motherboard SuperIO (ITE IT8689E) |
+| Motherboard temperatures | Same SuperIO. `mb.temp.N` is the chip's input N, and `mb.temp.name.N` is what that input is called — see below |
 | GPU load, temperature, hot spot, power, clock, fan | LibreHardwareMonitor |
 | VRAM used | `GPU Memory Used`/`Total` where the card serves them, otherwise `D3D Dedicated Memory Used` over the adapter's `HardwareInformation.qwMemorySize` |
 | SSD temperatures | LibreHardwareMonitor, NVMe SMART |
@@ -60,6 +61,38 @@ The readings that need PowerShell — GSA1, PDH and LibreHardwareMonitor — com
 process running `vmaxpanel/sensors.ps1`, which the engine starts and restarts on its own.
 
 VRAM is published only when the adapter's total is known, rather than computed against a guess.
+
+## Naming the motherboard temperatures
+
+The SuperIO has six temperature inputs, and which physical point is wired to each one is a
+board-layout decision: `mb.temp.1` means something different on a different board. So a profile
+should not label these by hand. `mb.temp.name.N` carries what the input is *called*, and the
+shipped profiles bind the column label to that metric — the panel then names the column with
+whatever the machine it is running on reports.
+
+The name comes from LibreHardwareMonitor, which has a board-specific mapping for the 332 boards it
+knows (`SuperIOHardware.GetBoardSpecificConfiguration`). On a board it does not know, every input
+arrives as `Temperature #N`, and `_NOMBRES_POR_PLACA` in `providers/sidecar_providers.py` fills it
+in — keyed by the SMBIOS board model, and only over that generic name, so a name the library
+supplied always wins.
+
+Adding a board to that table means establishing the mapping, not copying a list from somewhere.
+Nothing on the machine will tell you: the Gigabyte GSA1 interface exposes readings by numeric id
+and has no method returning a label for one, `Win32_TemperatureProbe` reports "LM78A" with an empty
+reading, and the ACPI thermal zones are unrelated. What does work is identifying them by how they
+behave, which needs nothing installed:
+
+| Load | The input that… | Is |
+|---|---|---|
+| CPU | follows package power within seconds, and drops the moment the load stops | the CPU socket |
+| CPU | rises slowly and decays slowly | the VRM |
+| GPU | rises clearly while the other flat ones only drift with the case air | the one at the PCIe slot |
+| either | stays flat | a system/ambient point |
+
+On the B760M D3HP that gives inputs 0–5 as System1, PCH, CPU, PCIEX16, VRM MOS and System2. The
+four identified by behaviour match the names HWiNFO shows, which is an independent source; the two
+ambient ones cannot be told apart from each other, so which is System1 and which is System2 rests
+on the order the chip reports them in.
 
 ### GSA1
 
