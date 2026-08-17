@@ -205,6 +205,7 @@ Some readings exist once per device, so their ids carry the instance:
 | `disk.temp.N` | `disk.temp.0` | Disk temperature |
 | `fan.N.rpm` | `fan.2.rpm` | Motherboard fan header |
 | `mb.temp.N` | `mb.temp.1` | Motherboard temperature |
+| `mb.temp.name.N` | `mb.temp.name.1` | What the board calls that sensor (text) |
 | `net.<adapter>.down` / `.up` | `net.wi-fi.down` | One adapter |
 
 The editor's metric selector lists what this machine actually serves, with the device's real

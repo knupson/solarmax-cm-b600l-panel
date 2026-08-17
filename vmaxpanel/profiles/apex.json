@@ -1438,8 +1438,9 @@
     },
     {
       "id": "sys-f1-r0",
-      "type": "label",
-      "text": "TEMP 1",
+      "type": "text",
+      "metric": "mb.temp.name.3",
+      "format": "{}",
       "x": 66,
       "y": 1412,
       "font": "micro",
@@ -1449,7 +1450,7 @@
     {
       "id": "sys-f1-v0",
       "type": "text",
-      "metric": "mb.temp.0",
+      "metric": "mb.temp.3",
       "x": 66,
       "y": 1428,
       "font": "dato",
@@ -1469,8 +1470,9 @@
     },
     {
       "id": "sys-f1-r1",
-      "type": "label",
-      "text": "TEMP 2",
+      "type": "text",
+      "metric": "mb.temp.name.1",
+      "format": "{}",
       "x": 159,
       "y": 1412,
       "font": "micro",

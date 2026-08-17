@@ -375,6 +375,52 @@ def test_mobo_provider_serves_fans_and_board_temps():
     assert p.read()["cpu.fan"] == 868
 
 
+def cliente_placa(placa, nombres):
+    """A client whose board reports `placa` and those six SuperIO sensor names."""
+    mobo = dict(MUESTRA_MOBO)
+    for i, n in enumerate(nombres):
+        mobo[f"mb.temp.name.{i}"] = n
+    return client_for({**SAMPLE, "mobo": mobo,
+                       "smbios": {"mb.name": placa, "mem.speed": 5600},
+                       "caps": {"gsa1": True, "pdh": True, "lhm": True,
+                                "cpulhm": True, "mobo": True,
+                                "smbios": True}})[0]
+
+
+_GENERICOS = [f"Temperature #{i}" for i in range(1, 7)]
+
+
+def test_the_board_table_names_the_sensors_lhm_left_generic():
+    """On a board LibreHardwareMonitor does not know, the six SuperIO inputs arrive
+    as "Temperature #N" and a profile can only label them by index -- which is what
+    makes a hand-written label go stale on somebody else's machine."""
+    p = MoboProvider(cliente_placa("B760M D3HP", _GENERICOS))
+    m = p.read()
+    assert m["mb.temp.name.1"] == "PCH"
+    assert m["mb.temp.name.3"] == "PCIEX16"
+    assert "mb.temp.name.3" in p.metrics()
+    assert p.catalog()["mb.temp.name.3"].kind == "text"
+
+
+def test_a_name_that_came_from_the_library_is_never_overridden():
+    """Being in the table must not make a board LHM already names worse: the
+    library's own mapping wins, and only "Temperature #N" is filled in."""
+    nombres = ["Chipset", "VRM", "CPU", "Temperature #4", "Temperature #5",
+               "Temperature #6"]
+    m = MoboProvider(cliente_placa("B760M D3HP", nombres)).read()
+    assert m["mb.temp.name.0"] == "Chipset"
+    assert m["mb.temp.name.1"] == "VRM"
+    assert m["mb.temp.name.3"] == "PCIEX16"
+
+
+def test_an_unknown_board_keeps_the_generic_names():
+    """The table is keyed by board model because the wiring is a board decision:
+    applying this board's names to another one would invent the mapping."""
+    m = MoboProvider(cliente_placa("Some Other B760", _GENERICOS)).read()
+    assert m["mb.temp.name.0"] == "Temperature #1"
+    assert m["mb.temp.name.3"] == "Temperature #4"
+
+
 def test_every_id_these_providers_serve_is_valid():
     """An id that does not validate makes Registry fall over in its constructor."""
     c = cliente_completo()

@@ -91,6 +91,29 @@ DISK_TEMP_SPEC = _n("disk.temp.N", "Disk temperature", "°C", 0.0, 100.0)
 # LibreHardwareMonitor's enumeration and matches no drive in particular.
 DISK_NAME_SPEC = _t("disk.name.N", "Disk name")
 
+_MB_TEMP_NAME_RE = re.compile(r"^mb\.temp\.name\.(\d+)$")
+
+# What the board calls its own SuperIO temperature input N, for the same reason
+# disk.name.N exists: so a column can be labelled with what the sensor IS instead
+# of a hand-written label naming a position in an enumeration.
+#
+# It matters more here than for the disks, because nothing else names these. The
+# chip has six temperature inputs and which physical point is wired to each one is
+# a board-layout decision, so "mb.temp.1" means a different thing on every board.
+# A profile that hard-codes "VRM" over an index is making a claim that is true on
+# the machine it was written on and false on the next one -- which already
+# happened in this repo: the Apex generator labelled mb.temp.1 "VRM" when the VRM
+# on that board is mb.temp.4.
+MB_TEMP_NAME_SPEC = _t("mb.temp.name.N", "Motherboard sensor name")
+
+
+def mb_temp_name_index(mid):
+    """N for a `mb.temp.name.N` id, or None if `mid` is not one."""
+    if not isinstance(mid, str):
+        return None
+    m = _MB_TEMP_NAME_RE.match(mid)
+    return int(m.group(1)) if m else None
+
 
 def slug(nombre) -> str:
     """"Wi-Fi 2" -> "wi-fi-2": a device name fit for an id.
@@ -242,7 +265,8 @@ def is_metric(mid) -> bool:
     if not isinstance(mid, str):
         return False
     return (mid in METRICS or bool(_DISK_RE.match(mid))
-            or bool(_DISK_NAME_RE.match(mid)) or _familia(mid) is not None)
+            or bool(_DISK_NAME_RE.match(mid))
+            or bool(_MB_TEMP_NAME_RE.match(mid)) or _familia(mid) is not None)
 
 
 def spec_for(mid) -> MetricSpec | None:
@@ -263,6 +287,12 @@ def spec_for(mid) -> MetricSpec | None:
         # Same reason as the temperature above: the index goes in the label, or
         # every disk shares one entry in the editor's selector.
         return MetricSpec(mid, f"Disk {m.group(1)} — name", "", "text")
+    m = _MB_TEMP_NAME_RE.match(mid)
+    if m:
+        # The index goes in the label for the same reason as the disks: otherwise
+        # the six board sensors collapse into one entry in the editor's selector.
+        return MetricSpec(mid, f"Motherboard — sensor {m.group(1)} name",
+                          "", "text")
     fam = _familia(mid)
     if fam is not None:
         label, unidad, lo, hi = fam

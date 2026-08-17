@@ -394,10 +394,30 @@ y = seccion("mb", "SISTEMA", 90, sufijo="B760M D3HP")
 # Los ventiladores VACIOS no entran. Cuatro columnas con tres ceros no informan
 # nada: dicen que hay conectores libres, que no es un dato de monitoreo. Cuales
 # giran no se adivina, se lee de la maquina al generar (ver FANS_ACTIVOS).
+# Que es cada mb.temp.N en ESTA placa (B760M D3HP, SuperIO ITE IT8689E). El
+# mapeo es por MODELO DE PLACA, no por chip: cual punto fisico va a cada una de
+# las 6 entradas del ITE lo decide el ruteo, asi que esto no vale en otra placa.
+# LibreHardwareMonitor no conoce esta placa -- las sirve como "Temperature #N"--
+# y GSA1 no expone rotulos, asi que los nombres se establecieron midiendo:
+#
+#   mb.temp.0  Sistema1   ambiente; plano bajo CPU, +2 con el gabinete caliente
+#   mb.temp.1  PCH        el mas caliente en reposo (39); unico valor distinto
+#   mb.temp.2  CPU        sigue al package (32->58) y cae al cortar la carga
+#   mb.temp.3  PCIEX16    insensible al CPU, +4 con la GPU a 160 W sostenidos
+#   mb.temp.4  VRM MOS    sube lento y decae lento con la potencia del CPU
+#   mb.temp.5  Sistema2   ambiente, igual que el 0
+#
+# Los 4 identificados por comportamiento coinciden con los nombres de HWiNFO,
+# que es una fuente independiente. Antes esta fila decia PLACA/VRM sobre las
+# temp.0 y temp.1: lo de "VRM" era falso -- el VRM real es la temp.4.
+# El rotulo sale de mb.temp.name.N, no escrito a mano: cada maquina nombra estas
+# columnas con lo que reporte SU placa. Lo escrito a mano seria falso en cualquier
+# otro equipo -- que es como esta fila llego a decir "VRM" sobre la temp.1.
 columnas = [
-    {"rotulo": "PLACA", "metric": "mb.temp.0", "fmt": "{:.0f}°",
+    {"rotulo_metric": "mb.temp.name.3", "metric": "mb.temp.3", "fmt": "{:.0f}°",
      "rules": CALIENTE},
-    {"rotulo": "VRM", "metric": "mb.temp.1", "fmt": "{:.0f}°", "rules": CALIENTE},
+    {"rotulo_metric": "mb.temp.name.1", "metric": "mb.temp.1", "fmt": "{:.0f}°",
+     "rules": CALIENTE},
 ]
 columnas += [{"rotulo": f"FAN {n}", "metric": f"fan.{n}.rpm", "fmt": "{:.0f}"}
              for n in FANS_ACTIVOS]

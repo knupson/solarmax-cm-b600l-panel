@@ -96,6 +96,11 @@ def demo_sample() -> dict:
     for n in range(4):
         out[f"disk.temp.{n}"] = 34.0 + n
         out[f"disk.name.{n}"] = f"{'CDEF'[n]}:"
+    # mb.temp.name.N is a pattern too. The demo uses the GENERIC form on purpose:
+    # it is what a board LibreHardwareMonitor does not know sends, and it is the
+    # widest, so a layout judged against it does not overflow on a real machine.
+    for n in range(6):
+        out[f"mb.temp.name.{n}"] = f"Temperature #{n + 1}"
     return out
 
 

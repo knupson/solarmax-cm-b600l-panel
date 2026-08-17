@@ -135,6 +135,22 @@ def test_fan_and_motherboard_metrics_are_valid():
     assert metrics.spec_for("mb.temp.2").unit == "°C"
 
 
+def test_motherboard_sensor_names_are_text_metrics():
+    """So a column can be labelled with what the sensor IS. Which physical point is
+    wired to each SuperIO input is a board decision, so a hand-written label over an
+    index is true on one machine and false on the next."""
+    assert is_metric("mb.temp.name.0")
+    spec = metrics.spec_for("mb.temp.name.3")
+    assert spec.kind == "text" and "3" in spec.label
+    assert metrics.group_for("mb.temp.name.0") == "Motherboard"
+    assert metrics.mb_temp_name_index("mb.temp.name.4") == 4
+    # it must not be swallowed by the numeric mb.temp.N family
+    assert metrics.spec_for("mb.temp.3").kind == "number"
+    for malo in ("mb.temp.name", "mb.temp.name.x", "mb.temp.name.", 7, None):
+        assert not is_metric(malo), malo
+        assert metrics.mb_temp_name_index(malo) is None
+
+
 def test_network_metrics_per_adapter_accept_a_slug():
     assert is_metric("net.ethernet.down")
     assert is_metric("net.wi-fi-2.up")

@@ -304,6 +304,15 @@ while ($true) {
                                 }
                                 'Temperature' {
                                     $mobo."mb.temp.$tmp" = [math]::Round($s.Value, 1)
+                                    # El NOMBRE viaja junto al valor. En las placas
+                                    # que LibreHardwareMonitor conoce -- 332 modelos,
+                                    # ver SuperIOHardware.GetBoardSpecificConfiguration
+                                    # -- esto ya viene como "VRM" o "Chipset", y hasta
+                                    # ahora se descartaba: el panel sabia el numero de
+                                    # entrada del chip y no que era. En el resto llega
+                                    # como "Temperature #N" y el lado Python lo puede
+                                    # completar si conoce el modelo de placa.
+                                    $mobo."mb.temp.name.$tmp" = "$($s.Name)"
                                     $tmp++
                                 }
                             }

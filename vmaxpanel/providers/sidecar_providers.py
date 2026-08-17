@@ -1,7 +1,33 @@
 """Providers reading from the same SidecarClient, each its own namespace."""
-from ..metrics import MetricSpec, group_for, short_cpu_name, spec_for
+import re
+
+from ..metrics import (MetricSpec, group_for, mb_temp_name_index,
+                       short_cpu_name, spec_for)
 from .base import Provider
 from .sidecar import STALE_AFTER
+
+# LibreHardwareMonitor's own name for an input it has no board-specific mapping
+# for. Matching it is what keeps the table below from ever overriding a real name.
+_NOMBRE_GENERICO = re.compile(r"^Temperature #\d+$")
+
+# Names for the SuperIO temperature inputs on boards LibreHardwareMonitor does not
+# know, keyed by the SMBIOS board model.
+#
+# Keyed by MODEL and not by chip on purpose: the chip only provides six inputs,
+# and which physical point is wired to each one is decided by the board layout. Two
+# boards with the same SuperIO can wire them differently, so an entry here must
+# never be applied to a board it was not established on.
+#
+# B760M D3HP (ITE IT8689E), established by measurement rather than by copying a
+# list: under CPU load index 2 tracked the package (32 -> 58 C, dropping instantly
+# when the load stopped) and index 4 rose and decayed slowly, which is VRM thermal
+# mass. Under a sustained 160 W GPU load index 3 rose 4 C while every other flat
+# sensor rose 2 C with the case air, so index 3 is the one at the PCIe slot. That
+# leaves 0 and 5 as the two ambient points. The four identified by behaviour match
+# the names HWiNFO gives, which is an independent source.
+_NOMBRES_POR_PLACA = {
+    "B760M D3HP": ("System1", "PCH", "CPU", "PCIEX16", "VRM MOS", "System2"),
+}
 
 
 class _SidecarProvider(Provider):
@@ -158,6 +184,25 @@ class MoboProvider(_DinamicoPorInstancia):
     id = "mobo"
     namespace = "mobo"
     reason = "could not read the board SuperIO"
+
+    def read(self):
+        """Fills in the sensor names LibreHardwareMonitor left generic.
+
+        Only for a board in _NOMBRES_POR_PLACA, and only over a name that is still
+        LHM's own "Temperature #N": a board-specific name that arrived from the
+        library always wins, so being in the table cannot make a known board worse.
+        """
+        muestra = super().read()
+        placa = (self._c.namespace("smbios").get("mb.name") or "").strip()
+        nombres = _NOMBRES_POR_PLACA.get(placa)
+        if not nombres:
+            return muestra
+        for mid, valor in list(muestra.items()):
+            n = mb_temp_name_index(mid)
+            if (n is not None and n < len(nombres)
+                    and isinstance(valor, str) and _NOMBRE_GENERICO.match(valor)):
+                muestra[mid] = nombres[n]
+        return muestra
 
     def catalog(self) -> dict:
         cat = super().catalog()
